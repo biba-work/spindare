@@ -3,7 +3,7 @@ import { Pressable, Text, View, StyleSheet, Animated } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Path, Polygon } from 'react-native-svg';
 
-type ReactionType = 'felt' | 'thought' | 'intrigued';
+type ReactionType = 'send' | 'do' | 'save' | 'felt' | 'thought' | 'intrigued';
 
 interface ReactionButtonProps {
     type: ReactionType;
@@ -14,6 +14,32 @@ interface ReactionButtonProps {
 
 const Shape = ({ type, color }: { type: ReactionType; color: string }) => {
     switch (type) {
+        case 'send':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24">
+                    <Polygon
+                        points="19,5 5,12 19,19"
+                        fill={color}
+                        opacity={0.8}
+                    />
+                </Svg>
+            );
+        case 'do':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24">
+                    <Polygon points="5,3 19,12 5,21" fill={color} opacity={0.8} />
+                </Svg>
+            );
+        case 'save':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24">
+                    <Path
+                        d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"
+                        fill={color}
+                        opacity={0.8}
+                    />
+                </Svg>
+            );
         case 'felt':
             return (
                 <Svg width="20" height="20" viewBox="0 0 24 24">
@@ -40,9 +66,9 @@ export const ReactionButton = ({ type, label, onPress, selected }: ReactionButto
 
     useEffect(() => {
         Animated.spring(scaleAnim, {
-            toValue: selected ? 1.2 : 1,
+            toValue: selected ? 1.1 : 1, // Slightly reduced scale for cleaner look
             useNativeDriver: true,
-            friction: 4,
+            friction: 6,
             tension: 40,
         }).start();
     }, [selected]);
@@ -54,11 +80,11 @@ export const ReactionButton = ({ type, label, onPress, selected }: ReactionButto
 
     return (
         <Pressable onPress={handlePress} style={styles.button}>
-            <View style={styles.container}>
+            <View style={styles.container} renderToHardwareTextureAndroid={true}>
                 <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-                    <Shape type={type} color={selected ? '#FFFFFF' : '#52525b'} />
+                    <Shape type={type} color={selected ? '#FFFFFF' : '#3f3f46'} />
                 </Animated.View>
-                <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={1}>
+                <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={2}>
                     {label}
                 </Text>
             </View>
@@ -85,6 +111,7 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 1.5,
         fontFamily: 'Inter_400Regular',
+        textAlign: 'center',
     },
     labelSelected: {
         color: '#FFFFFF',
