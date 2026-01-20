@@ -108,7 +108,6 @@ export const ProfileScreen = ({ onBack }: { onBack: () => void }) => {
                                 options={CHALLENGES}
                                 onSpinEnd={handleSpinEnd}
                                 canSpin={true}
-                                userAvatar="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
                             />
                         </View>
 
@@ -133,7 +132,23 @@ export const ProfileScreen = ({ onBack }: { onBack: () => void }) => {
             </SafeAreaView>
 
             {isMediaSelecting && <View style={styles.fullOverlay}><MediaSelectionScreen challenge={challenge || ''} onClose={() => setIsMediaSelecting(false)} onSelect={(t, uri) => { setSelectedImage(uri || null); setIsMediaSelecting(false); setTimeout(() => setIsPosting(true), 400); }} /></View>}
-            {isPosting && <View style={styles.fullOverlay}><PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={() => setIsPosting(false)} onPost={handlePostSubmit} /></View>}
+            {isPosting && (
+                <View style={styles.fullOverlay}>
+                    <PostCreationScreen
+                        challenge={challenge || ''}
+                        imageUri={selectedImage}
+                        onClose={() => setIsPosting(false)}
+                        onPost={(c, img, target) => {
+                            setIsPosting(false);
+                            if (target === 'friend') {
+                                setTimeout(() => setIsSharing(true), 400);
+                            } else {
+                                handlePostSubmit();
+                            }
+                        }}
+                    />
+                </View>
+            )}
             {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
         </View>
     );

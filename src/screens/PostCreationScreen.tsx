@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, Dimensions, TouchableWithoutFeedback, Keyboard, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, Dimensions, TouchableWithoutFeedback, Keyboard, Image, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -11,8 +11,14 @@ interface PostCreationScreenProps {
     challenge: string;
     imageUri?: string | null;
     onClose: () => void;
-    onPost: (content: string, imageUri?: string | null) => void;
+    onPost: (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => void;
 }
+
+const SendIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+    </Svg>
+);
 
 export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost }: PostCreationScreenProps) => {
     const [content, setContent] = useState('');
@@ -22,23 +28,15 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
     useEffect(() => {
         Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 500,
-                useNativeDriver: true,
-            }),
-            Animated.timing(slideAnim, {
-                toValue: 0,
-                duration: 500,
-                useNativeDriver: true,
-            }),
+            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
         ]).start();
     }, []);
 
-    const handlePost = () => {
+    const handleAction = (target: 'feed' | 'friend') => {
         if (content.trim() || imageUri) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onPost(content, imageUri);
+            onPost(content, imageUri, target);
         }
     };
 
@@ -47,60 +45,46 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
         setImageUri(null);
     };
 
+    const isReady = content.trim() || imageUri;
+
     return (
         <View style={styles.fullScreen}>
             {Platform.OS === 'ios' ? (
-                <BlurView
-                    intensity={80}
-                    tint="dark"
-                    style={StyleSheet.absoluteFill}
-                />
+                <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
             ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(12, 12, 14, 0.98)' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
             )}
 
             <SafeAreaView style={styles.safeArea}>
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={styles.keyboardView}
-                    >
-                        <Animated.View style={[
-                            styles.container,
-                            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-                        ]}>
-                            <View style={styles.header}>
-                                <Pressable onPress={onClose} style={styles.closeButton}>
-                                    <View style={styles.closeIcon}>
-                                        <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <Path d="M18 6L6 18M6 6l12 12" />
-                                        </Svg>
-                                    </View>
-                                </Pressable>
-                                <Text style={styles.headerTitle}>Daily Reflection</Text>
-                                <Pressable
-                                    onPress={handlePost}
-                                    disabled={!content.trim() && !imageUri}
-                                    style={({ pressed }) => [
-                                        styles.postButton,
-                                        (!content.trim() && !imageUri || pressed) && { opacity: 0.5 }
-                                    ]}
-                                >
-                                    <Text style={styles.postButtonText}>SHRP</Text>
-                                </Pressable>
-                            </View>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
+                    <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
-                            <View style={styles.challengeBox}>
-                                <Text style={styles.challengeLabel}>CHALLENGE</Text>
+                        <View style={styles.header}>
+                            <Pressable onPress={onClose} hitSlop={20}>
+                                <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <Path d="M19 12H5M12 19l-7-7 7-7" />
+                                </Svg>
+                            </Pressable>
+                            <Text style={styles.headerTitle}>COMPLETED CHALLENGE</Text>
+                            <View style={{ width: 24 }} />
+                        </View>
+
+                        <ScrollView
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.scrollContent}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <View style={styles.challengeCard}>
+                                <Text style={styles.challengeLabel}>THE DARE</Text>
                                 <Text style={styles.challengeText}>{challenge}</Text>
                             </View>
 
                             {imageUri && (
-                                <View style={styles.imagePreviewContainer}>
-                                    <Image source={{ uri: imageUri }} style={styles.imagePreview} />
-                                    <Pressable style={styles.removeImageButton} onPress={removeImage}>
-                                        <View style={styles.removeIconWrapper}>
-                                            <Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <View style={styles.imageWrapper}>
+                                    <Image source={{ uri: imageUri }} style={styles.image} />
+                                    <Pressable style={styles.removeBtn} onPress={removeImage}>
+                                        <View style={styles.removeCircle}>
+                                            <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                                 <Path d="M18 6L6 18M6 6l12 12" />
                                             </Svg>
                                         </View>
@@ -110,149 +94,63 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
                             <TextInput
                                 style={styles.input}
-                                placeholder="Share your experience..."
-                                placeholderTextColor="rgba(255,255,255,0.3)"
+                                placeholder="Add a caption or thoughts..."
+                                placeholderTextColor="rgba(255,255,255,0.2)"
                                 multiline
                                 value={content}
                                 onChangeText={setContent}
                                 maxLength={300}
-                                returnKeyType="done"
-                                blurOnSubmit={true}
-                                onSubmitEditing={Keyboard.dismiss}
+                                autoFocus={!imageUri}
                             />
+                        </ScrollView>
 
-                            <View style={styles.footer}>
-                                <Text style={styles.charCount}>{content.length}/300</Text>
-                            </View>
-                        </Animated.View>
-                    </KeyboardAvoidingView>
-                </TouchableWithoutFeedback>
+                        <View style={styles.actionFooter}>
+                            <Pressable
+                                onPress={() => handleAction('friend')}
+                                style={[styles.actionBtn, styles.secondaryBtn, !isReady && styles.disabledBtn]}
+                                disabled={!isReady}
+                            >
+                                <SendIcon color={isReady ? "#FFF" : "rgba(255,255,255,0.2)"} />
+                                <Text style={[styles.actionText, !isReady && styles.disabledText]}>SEND TO FRIEND</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => handleAction('feed')}
+                                style={[styles.actionBtn, styles.primaryBtn, !isReady && styles.disabledBtn]}
+                                disabled={!isReady}
+                            >
+                                <Text style={styles.primaryText}>POST TO FEED</Text>
+                            </Pressable>
+                        </View>
+                    </Animated.View>
+                </KeyboardAvoidingView>
             </SafeAreaView>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    fullScreen: {
-        flex: 1,
-        backgroundColor: 'transparent',
-    },
-    safeArea: {
-        flex: 1,
-    },
-    keyboardView: {
-        flex: 1,
-    },
-    container: {
-        flex: 1,
-        paddingHorizontal: 24,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 20,
-    },
-    headerTitle: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 4,
-        fontFamily: 'Inter_400Regular',
-    },
-    closeButton: {
-        padding: 8,
-    },
-    closeText: {
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: 12,
-        fontFamily: 'Inter_400Regular',
-    },
-    postButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: '#FFFFFF',
-    },
-    postButtonText: {
-        color: '#000000',
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 1,
-    },
-    challengeBox: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    challengeLabel: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 10,
-        fontWeight: '600',
-        letterSpacing: 2,
-        marginBottom: 8,
-    },
-    challengeText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontFamily: 'Montserrat_400Regular',
-        lineHeight: 20,
-    },
-    input: {
-        flex: 1,
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontFamily: 'Montserrat_400Regular',
-        lineHeight: 28,
-        textAlignVertical: 'top',
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        paddingTop: 12,
-    },
-    charCount: {
-        color: 'rgba(255,255,255,0.3)',
-        fontSize: 12,
-        fontFamily: 'Inter_400Regular',
-    },
-    imagePreviewContainer: {
-        width: '100%',
-        aspectRatio: 1,
-        borderRadius: 20,
-        overflow: 'hidden',
-        marginBottom: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-        position: 'relative',
-    },
-    imagePreview: {
-        width: '100%',
-        height: '100%',
-    },
-    removeImageButton: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        zIndex: 10,
-    },
-    removeIconWrapper: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-    },
-    closeIcon: {
-        padding: 4,
-    },
+    fullScreen: { flex: 1, backgroundColor: 'transparent' },
+    safeArea: { flex: 1 },
+    keyboardView: { flex: 1 },
+    container: { flex: 1, paddingHorizontal: 20 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 60, marginBottom: 10 },
+    headerTitle: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 3, opacity: 0.5 },
+    scrollContent: { paddingBottom: 40 },
+    challengeCard: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 24, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    challengeLabel: { color: '#FF3B30', fontSize: 8, fontWeight: '900', letterSpacing: 2, marginBottom: 8 },
+    challengeText: { color: '#FFF', fontSize: 15, fontWeight: '500', lineHeight: 22 },
+    imageWrapper: { width: '100%', aspectRatio: 1, borderRadius: 24, overflow: 'hidden', marginBottom: 24, backgroundColor: '#111' },
+    image: { width: '100%', height: '100%' },
+    removeBtn: { position: 'absolute', top: 12, right: 12 },
+    removeCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+    input: { color: '#FFF', fontSize: 17, minHeight: 100, textAlignVertical: 'top', paddingTop: 0 },
+    actionFooter: { flexDirection: 'row', gap: 12, paddingVertical: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+    actionBtn: { flex: 1, height: 56, borderRadius: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    primaryBtn: { backgroundColor: '#FFF' },
+    secondaryBtn: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    disabledBtn: { opacity: 0.3 },
+    primaryText: { color: '#000', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+    actionText: { color: '#FFF', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+    disabledText: { color: 'rgba(255,255,255,0.5)' },
 });

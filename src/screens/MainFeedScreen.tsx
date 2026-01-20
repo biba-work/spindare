@@ -7,10 +7,12 @@ import { MediaSelectionScreen } from './MediaSelectionScreen';
 import { PostCreationScreen } from './PostCreationScreen';
 import { FriendsListScreen } from './FriendsListScreen';
 import { OnboardingScreen } from './OnboardingScreen';
+import { ProfileScreen } from './ProfileScreen';
 import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
-import { AIService, UserProfile, PersonalityType, InterestType } from '../services/AIService';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import { AIService, UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
+import { AuthService } from '../services/AuthService';
+import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
@@ -58,15 +60,23 @@ const LockIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const UserIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <Circle cx="12" cy="7" r="4" />
+    </Svg>
+);
+
 export const MainFeedScreen = () => {
     const insets = useSafeAreaInsets();
     // ... rest of the code stays the same ...
     // State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [userProfile, setUserProfile] = useState<UserProfile>({
-        username: "Bibovic",
-        personality: [],
-        interests: [],
+        username: "example",
+        hobbies: [],
+        studyFields: [],
         xp: 0,
         level: 1
     });
@@ -79,6 +89,7 @@ export const MainFeedScreen = () => {
     const [isPosting, setIsPosting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
+    const [isProfileVisible, setIsProfileVisible] = useState(false);
     const [overlayType, setOverlayType] = useState<'saved' | 'notifications' | null>(null);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -87,6 +98,16 @@ export const MainFeedScreen = () => {
     const searchExpandAnim = useRef(new Animated.Value(0)).current;
     const overlayAnim = useRef(new Animated.Value(height)).current;
     const badgeScale = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        AuthService.getSession().then(({ isAuthenticated: authed, userProfile: profile }) => {
+            if (authed && profile) {
+                setUserProfile(profile);
+                setIsAuthenticated(true);
+            }
+            setIsLoading(false);
+        });
+    }, []);
 
     useEffect(() => {
         if (savedChallenges.length > 0) {
@@ -118,6 +139,12 @@ export const MainFeedScreen = () => {
 
     const hideOverlay = () => {
         Animated.timing(overlayAnim, { toValue: height, duration: 300, useNativeDriver: true }).start(() => setOverlayType(null));
+    };
+
+    const handleLogout = async () => {
+        await AuthService.logout();
+        setIsAuthenticated(false);
+        setIsProfileVisible(false);
     };
 
     const toggleSearch = (show: boolean) => {
@@ -153,7 +180,6 @@ export const MainFeedScreen = () => {
                     options={["DARE", "QUEST", "TRUTH", "RISK"]}
                     onSpinEnd={handleSpinEnd}
                     canSpin={spinsLeft > 0}
-                    userAvatar="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80"
                 />
             </View>
 
@@ -189,7 +215,18 @@ export const MainFeedScreen = () => {
         </View>
     ), [userProfile.username, spinsLeft, challenge, handleSpinEnd, handleSaveLater]);
 
-    if (!isAuthenticated) return <OnboardingScreen onComplete={(p, i) => { setUserProfile(prev => ({ ...prev, personality: p, interests: i })); setIsAuthenticated(true); }} />;
+    if (isLoading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><Text style={{ color: '#FFF' }}>LOADING...</Text></View>;
+
+    if (!isAuthenticated) return (
+        <OnboardingScreen
+            onComplete={async (h, s) => {
+                const newProfile = { ...userProfile, hobbies: h, studyFields: s };
+                await AuthService.login(newProfile);
+                setUserProfile(newProfile);
+                setIsAuthenticated(true);
+            }}
+        />
+    );
 
     return (
         <View style={styles.container}>
@@ -221,6 +258,7 @@ export const MainFeedScreen = () => {
                                 <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#FFF" /></AppButton>
                             )}
                         </Animated.View>
+                        {!isSearching && <AppButton type="icon" onPress={() => setIsProfileVisible(true)} style={styles.navBtn}><UserIcon color="#FFF" /></AppButton>}
                         {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#FFF" /></AppButton>}
                     </View>
                 </View>
@@ -233,13 +271,7 @@ export const MainFeedScreen = () => {
                     <ScrollView contentContainerStyle={[styles.lockedContainer, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
                         {renderHeader}
                         <View style={styles.lockedSection}>
-                            <View style={styles.lockedCard}>
-                                <View style={styles.lockCircle}>
-                                    <LockIcon color="#FF3B30" />
-                                </View>
-                                <Text style={styles.lockedTitle}>CONTENT GATED</Text>
-                                <Text style={styles.lockedSubtitle}>Post your daily spin to unlock the community feed and see reactions.</Text>
-                            </View>
+                            <Text style={styles.lockedSmallText}>POST TO UNLOCK COMMUNITY FEED AND REACTIONS</Text>
                         </View>
                     </ScrollView>
                 )}
@@ -259,8 +291,33 @@ export const MainFeedScreen = () => {
             />
 
             {isMediaSelecting && <View style={styles.fullOverlay}><MediaSelectionScreen challenge={challenge || ''} onClose={() => setIsMediaSelecting(false)} onSelect={(t, uri) => { setSelectedImage(uri || null); setIsMediaSelecting(false); setTimeout(() => setIsPosting(true), 400); }} /></View>}
-            {isPosting && <View style={styles.fullOverlay}><PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={() => setIsPosting(false)} onPost={() => { setIsPosting(false); setChallenge(null); setHasPostedToday(true); }} /></View>}
-            {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
+            {isPosting && (
+                <View style={styles.fullOverlay}>
+                    <PostCreationScreen
+                        challenge={challenge || ''}
+                        imageUri={selectedImage}
+                        onClose={() => setIsPosting(false)}
+                        onPost={(c, img, target) => {
+                            setIsPosting(false);
+                            if (target === 'friend') {
+                                setTimeout(() => setIsSharing(true), 400);
+                            } else {
+                                setChallenge(null);
+                                setHasPostedToday(true);
+                            }
+                        }}
+                    />
+                </View>
+            )}
+            {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(true)} /></View>}
+            {isProfileVisible && (
+                <View style={styles.fullOverlay}>
+                    <ProfileScreen
+                        onBack={() => setIsProfileVisible(false)}
+                        onLogout={handleLogout}
+                    />
+                </View>
+            )}
         </View>
     );
 };
@@ -281,24 +338,17 @@ const styles = StyleSheet.create({
     cancelText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
     content: { flex: 1 },
     lockedContainer: { flexGrow: 1 },
-    lockedSection: { paddingHorizontal: 16, paddingBottom: 40 },
-    lockedCard: { backgroundColor: '#0A0A0A', padding: 32, borderRadius: 32, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-    lockedTitle: { color: '#FFF', fontSize: 13, fontWeight: '900', letterSpacing: 4, marginBottom: 8 },
-    lockedSubtitle: { color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', lineHeight: 22 },
-    lockCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: 'rgba(255,59,48,0.1)',
-        justifyContent: 'center',
+    lockedSection: {
+        marginTop: 60,
         alignItems: 'center',
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,59,48,0.2)',
-        shadowColor: '#FF3B30',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
+        paddingHorizontal: 40,
+    },
+    lockedSmallText: {
+        color: 'rgba(255,255,255,0.2)',
+        fontSize: 10,
+        fontWeight: '900',
+        letterSpacing: 2,
+        textAlign: 'center',
     },
     revealWrapper: {
         width: '100%',
