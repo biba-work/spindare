@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
 import { ReactionButton } from '../components/atoms/ReactionButton';
+import { AIService, UserProfile } from '../services/AIService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +30,17 @@ export const ChallengeScreen = () => {
     const [isSharing, setIsSharing] = useState(false);
     const [isMediaSelecting, setIsMediaSelecting] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // Mock user profile for now
+    const userProfile: UserProfile = {
+        username: "bibovic",
+        hobbies: ["Photography", "Gaming", "Art"],
+        studyFields: ["Computer Science"],
+        xp: 248,
+        level: 3
+    };
+
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
@@ -223,10 +235,18 @@ export const ChallengeScreen = () => {
         }
     }, [challenge]);
 
-    const handleSpinEnd = () => {
-        const randomChallenge = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
-        setChallenge(randomChallenge);
-        setReaction(null);
+    const handleSpinEnd = async () => {
+        setIsGenerating(true);
+        try {
+            const newChallenge = await AIService.generateChallenge(userProfile);
+            setChallenge(newChallenge);
+            setReaction(null);
+        } catch (error) {
+            console.error("Spin Error:", error);
+            setChallenge("Take a photo of something that reminds you of silence.");
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     return (
@@ -247,10 +267,12 @@ export const ChallengeScreen = () => {
                     <View style={styles.centerSection}>
                         {!challenge ? (
                             <View style={styles.wheelWrapper}>
-                                <SpinWheel options={CHALLENGES} onSpinEnd={handleSpinEnd} canSpin={true} />
+                                <SpinWheel options={CHALLENGES} onSpinEnd={handleSpinEnd} canSpin={!isGenerating} />
                                 <View style={styles.instructionContainer}>
                                     <View style={styles.swipeIndicator} />
-                                    <Text style={styles.instructionText}>Spin the wheel</Text>
+                                    <Text style={styles.instructionText}>
+                                        {isGenerating ? "Consulting the AI..." : "Spin the wheel"}
+                                    </Text>
                                     <Text style={styles.instructionSubtext}>or swipe up for feed</Text>
                                 </View>
                             </View>

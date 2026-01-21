@@ -7,6 +7,7 @@ import { PostCreationScreen } from './PostCreationScreen';
 import { FriendsListScreen } from './FriendsListScreen';
 import { AppButton } from '../components/atoms/AppButton';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { AIService, UserProfile } from '../services/AIService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,6 +52,17 @@ export const ProfileScreen = ({ onBack, onLogout }: { onBack: () => void; onLogo
     const [isPosting, setIsPosting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    // Mock user profile
+    const userProfile: UserProfile = {
+        username: "bibovic",
+        hobbies: ["Photography", "Gaming", "Art"],
+        studyFields: ["Computer Science"],
+        xp: 248,
+        level: 3
+    };
+
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -62,13 +74,22 @@ export const ProfileScreen = ({ onBack, onLogout }: { onBack: () => void; onLogo
         }).start();
     }, []);
 
-    const handleSpinEnd = useCallback((result: string) => {
-        setChallenge(result);
-        Animated.sequence([
-            Animated.timing(fadeAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
-            Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true })
-        ]).start();
-    }, []);
+    const handleSpinEnd = useCallback(async (result: string) => {
+        setIsGenerating(true);
+        try {
+            const newChallenge = await AIService.generateChallenge(userProfile);
+            setChallenge(newChallenge);
+            Animated.sequence([
+                Animated.timing(fadeAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+                Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true })
+            ]).start();
+        } catch (error) {
+            console.error("Profile Spin Error:", error);
+            setChallenge("Take a photo of something that reminds you of silence.");
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [fadeAnim]);
 
     const handlePostSubmit = () => {
         setIsPosting(false);
@@ -117,13 +138,15 @@ export const ProfileScreen = ({ onBack, onLogout }: { onBack: () => void; onLogo
                             <SpinWheel
                                 options={CHALLENGES}
                                 onSpinEnd={handleSpinEnd}
-                                canSpin={true}
+                                canSpin={!isGenerating}
                             />
                         </View>
 
                         {challenge && (
                             <Animated.View style={[styles.challengeCard, { opacity: fadeAnim }]}>
-                                <Text style={styles.cardLabel}>PRACTICE MODE</Text>
+                                <Text style={styles.cardLabel}>
+                                    {isGenerating ? "GENERATING..." : "PRACTICE MODE"}
+                                </Text>
                                 <Text style={styles.cardText}>{challenge}</Text>
                                 <View style={styles.cardActions}>
                                     <AppButton type="secondary" onPress={() => setIsSharing(true)} style={styles.actionBtn}>
