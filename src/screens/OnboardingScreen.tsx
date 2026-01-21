@@ -10,7 +10,14 @@ const HOBBIES: HobbyType[] = ["Reading", "Gaming", "Fitness", "Cooking", "Art", 
 const FIELDS: StudyFieldType[] = ["Computer Science", "Business", "Engineering", "Medicine", "Arts", "Law", "Physics", "Design"];
 
 interface OnboardingProps {
-    onComplete: (hobbies: HobbyType[], studyFields: StudyFieldType[]) => void;
+    onComplete: (
+        email: string,
+        pass: string,
+        username: string,
+        hobbies: HobbyType[],
+        studyFields: StudyFieldType[],
+        isSignup: boolean
+    ) => Promise<void>;
 }
 
 export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
@@ -19,8 +26,11 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
     const [selectedFields, setSelectedFields] = useState<StudyFieldType[]>([]);
 
     // Auth State
+    const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const toggleHobby = (hobby: HobbyType) => {
         setSelectedHobbies(prev => prev.includes(hobby) ? prev.filter(t => t !== hobby) : [...prev, hobby]);
@@ -59,14 +69,16 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                 </AppButton>
                 <View style={styles.contentPadding}>
                     <Text style={styles.formTitle}>LOG IN</Text>
+                    {error && <Text style={styles.errorText}>{error}</Text>}
                     <View style={styles.inputStack}>
                         <TextInput
-                            placeholder="Username"
+                            placeholder="Email Address"
                             placeholderTextColor="rgba(255,255,255,0.3)"
                             style={styles.input}
                             autoCapitalize="none"
-                            value={username}
-                            onChangeText={setUsername}
+                            keyboardType="email-address"
+                            value={email}
+                            onChangeText={(t) => { setEmail(t); setError(null); }}
                         />
                         <TextInput
                             placeholder="Password"
@@ -74,10 +86,14 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                             style={styles.input}
                             secureTextEntry
                             value={password}
-                            onChangeText={setPassword}
+                            onChangeText={(t) => { setPassword(t); setError(null); }}
                         />
                     </View>
-                    <AppButton onPress={() => setView('traits')} style={(!username || !password) && styles.btnDisabled}>
+                    <AppButton
+                        onPress={() => setView('traits')}
+                        style={(!email || !password) && styles.btnDisabled}
+                        disabled={!email || !password}
+                    >
                         <Text style={styles.btnTextBlack}>CONTINUE</Text>
                     </AppButton>
                 </View>
@@ -93,14 +109,24 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                 </AppButton>
                 <View style={styles.contentPadding}>
                     <Text style={styles.formTitle}>SIGN UP</Text>
+                    {error && <Text style={styles.errorText}>{error}</Text>}
                     <View style={styles.inputStack}>
                         <TextInput
-                            placeholder="Username"
+                            placeholder="Email Address"
+                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            style={styles.input}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                            value={email}
+                            onChangeText={(t) => { setEmail(t); setError(null); }}
+                        />
+                        <TextInput
+                            placeholder="Pick a Username"
                             placeholderTextColor="rgba(255,255,255,0.3)"
                             style={styles.input}
                             autoCapitalize="none"
                             value={username}
-                            onChangeText={setUsername}
+                            onChangeText={(t) => { setUsername(t); setError(null); }}
                         />
                         <TextInput
                             placeholder="Password"
@@ -108,10 +134,14 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                             style={styles.input}
                             secureTextEntry
                             value={password}
-                            onChangeText={setPassword}
+                            onChangeText={(t) => { setPassword(t); setError(null); }}
                         />
                     </View>
-                    <AppButton onPress={() => setView('traits')} style={(!username || !password) && styles.btnDisabled}>
+                    <AppButton
+                        onPress={() => setView('traits')}
+                        style={(!email || !username || !password) && styles.btnDisabled}
+                        disabled={!email || !username || !password}
+                    >
                         <Text style={styles.btnTextBlack}>CREATE ACCOUNT</Text>
                     </AppButton>
                 </View>
@@ -155,10 +185,25 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
 
                 <View style={{ marginTop: 40, paddingBottom: 60 }}>
                     <AppButton
-                        onPress={() => onComplete(selectedHobbies, selectedFields)}
-                        style={!(selectedHobbies.length > 0 && selectedFields.length > 0) && styles.btnDisabled}
+                        onPress={async () => {
+                            try {
+                                setIsSubmitting(true);
+                                setError(null);
+                                // This is now handled in the parent component via onComplete
+                                // but we pass all the auth info now
+                                await onComplete(email, password, username, selectedHobbies, selectedFields, view === 'signup');
+                            } catch (err: any) {
+                                setError(err.message);
+                                // Go back to login/signup view if there's an auth error
+                                setView(view === 'signup' ? 'signup' : 'login');
+                            } finally {
+                                setIsSubmitting(false);
+                            }
+                        }}
+                        style={(!(selectedHobbies.length > 0 && selectedFields.length > 0) || isSubmitting) && styles.btnDisabled}
+                        disabled={!(selectedHobbies.length > 0 && selectedFields.length > 0) || isSubmitting}
                     >
-                        <Text style={styles.btnTextBlack}>START SPINNING</Text>
+                        <Text style={styles.btnTextBlack}>{isSubmitting ? 'PREPARING...' : 'START SPINNING'}</Text>
                     </AppButton>
                 </View>
             </ScrollView>
@@ -206,4 +251,5 @@ const styles = StyleSheet.create({
     pillActive: { backgroundColor: '#FFF', borderColor: '#FFF' },
     pillText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
     pillTextActive: { color: '#000' },
+    errorText: { color: '#FF3B30', fontSize: 12, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
 });

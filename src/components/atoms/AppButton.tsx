@@ -9,9 +9,10 @@ interface AppButtonProps {
     type?: 'primary' | 'secondary' | 'icon';
     haptic?: boolean;
     hitSlop?: Insets;
+    disabled?: boolean;
 }
 
-export const AppButton = ({ onPress, children, style, type = 'primary', haptic = true, hitSlop }: AppButtonProps) => {
+export const AppButton = ({ onPress, children, style, type = 'primary', haptic = true, hitSlop, disabled }: AppButtonProps) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
@@ -31,15 +32,17 @@ export const AppButton = ({ onPress, children, style, type = 'primary', haptic =
     };
 
     const handlePress = () => {
+        if (disabled) return;
         if (haptic) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
     };
 
     return (
         <Pressable
-            onPressIn={handlePressIn}
-            onPressOut={handlePressOut}
+            onPressIn={disabled ? undefined : handlePressIn}
+            onPressOut={disabled ? undefined : handlePressOut}
             onPress={handlePress}
+            disabled={disabled}
             hitSlop={hitSlop || { top: 10, bottom: 10, left: 10, right: 10 }}
             style={({ pressed }) => [
                 styles.base,

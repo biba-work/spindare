@@ -1,35 +1,102 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, db } from './firebaseConfig';
+import {
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    User
+} from 'firebase/auth';
+import {
+    doc,
+    getDoc,
+    setDoc,
+    updateDoc
+} from 'firebase/firestore';
 import { UserProfile } from './AIService';
 
-const STORAGE_KEY = 'spindare_auth_session';
-
 export const AuthService = {
+    // Check if user is logged in and return their profile from Firestore
     async getSession(): Promise<{ isAuthenticated: boolean; userProfile: UserProfile | null }> {
-        try {
-            const data = await AsyncStorage.getItem(STORAGE_KEY);
-            if (data) {
-                const session = JSON.parse(data);
-                return { isAuthenticated: true, userProfile: session.userProfile };
-            }
-        } catch (error) {
-            console.error('Error fetching session', error);
-        }
-        return { isAuthenticated: false, userProfile: null };
+        return new Promise((resolve) => {
+            const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                unsubscribe();
+                if (user) {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', user.uid));
+                        if (userDoc.exists()) {
+                            resolve({
+                                isAuthenticated: true,
+                                userProfile: userDoc.data() as UserProfile
+                            });
+                        } else {
+                            // User exists in Auth but not Firestore? 
+                            // This shouldn't happen with our sign-up flow but handle it
+                            resolve({ isAuthenticated: true, userProfile: null });
+                        }
+                    } catch (error) {
+                        console.error('Error fetching user profile:', error);
+                        resolve({ isAuthenticated: false, userProfile: null });
+                    }
+                } else {
+                    resolve({ isAuthenticated: false, userProfile: null });
+                }
+            });
+        });
     },
 
-    async login(userProfile: UserProfile) {
+    // Sign up new user and create Firestore record
+    async signUp(email: string, pass: string, profile: Omit<UserProfile, 'xp' | 'level'>): Promise<UserProfile> {
         try {
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ userProfile }));
-        } catch (error) {
-            console.error('Error saving session', error);
+            const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+            const user = userCredential.user;
+
+            const fullProfile: UserProfile = {
+                ...profile,
+                xp: 0,
+                level: 1,
+            };
+
+            // Save onboarding info to Firestore
+            await setDoc(doc(db, 'users', user.uid), fullProfile);
+
+            return fullProfile;
+        } catch (error: any) {
+            console.error('Signup Error:', error.message);
+            throw error;
+        }
+    },
+
+    // Existing login
+    async login(email: string, pass: string): Promise<UserProfile> {
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+            const user = userCredential.user;
+
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                return userDoc.data() as UserProfile;
+            } else {
+                throw new Error('User profile not found');
+            }
+        } catch (error: any) {
+            console.error('Login Error:', error.message);
+            throw error;
+        }
+    },
+
+    // Update level/XP in Firestore
+    async updateProgress(xp: number, level: number) {
+        const user = auth.currentUser;
+        if (user) {
+            await updateDoc(doc(db, 'users', user.uid), { xp, level });
         }
     },
 
     async logout() {
         try {
-            await AsyncStorage.removeItem(STORAGE_KEY);
+            await signOut(auth);
         } catch (error) {
-            console.error('Error removing session', error);
+            console.error('Error signing out:', error);
         }
     }
 };

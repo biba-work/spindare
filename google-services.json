@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "571702461891",
+    "project_id": "spindare-e5444",
+    "storage_bucket": "spindare-e5444.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:571702461891:android:b76f7dfc810faf7785e976",
+        "android_client_info": {
+          "package_name": "com.spindare.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCia-XKJyMXhHRMBJpaO9R_5LJ1vq5Tkyo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

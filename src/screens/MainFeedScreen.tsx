@@ -119,8 +119,8 @@ export const MainFeedScreen = () => {
     }, [savedChallenges.length]);
 
     // Handlers
-    const handleSpinEnd = useCallback(() => {
-        const result = AIService.generateChallenge(userProfile);
+    const handleSpinEnd = useCallback(async () => {
+        const result = await AIService.generateChallenge(userProfile);
         setChallenge(result);
         setSpinsLeft((prev) => Math.max(0, prev - 1));
     }, [userProfile]);
@@ -219,10 +219,18 @@ export const MainFeedScreen = () => {
 
     if (!isAuthenticated) return (
         <OnboardingScreen
-            onComplete={async (h, s) => {
-                const newProfile = { ...userProfile, hobbies: h, studyFields: s };
-                await AuthService.login(newProfile);
-                setUserProfile(newProfile);
+            onComplete={async (email: string, pass: string, username: string, h: HobbyType[], s: StudyFieldType[], isSignup: boolean) => {
+                if (isSignup) {
+                    const profile = await AuthService.signUp(email, pass, {
+                        username,
+                        hobbies: h,
+                        studyFields: s
+                    });
+                    setUserProfile(profile);
+                } else {
+                    const profile = await AuthService.login(email, pass);
+                    setUserProfile(profile);
+                }
                 setIsAuthenticated(true);
             }}
         />
