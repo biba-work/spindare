@@ -278,7 +278,7 @@ export const MainFeedScreen = () => {
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.25 (PRE-ALPHA TESTING)</Text>
+                <Text style={styles.versionText}>SPINDARE V0.37.1 (PRE-ALPHA TESTING)</Text>
             </View>
 
             <GenericOverlay
