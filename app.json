@@ -52,15 +52,6 @@
         }
       ]
     ],
-    "updates": {
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/a610c00b-88b8-4598-ae27-81aaf2f2e0d1"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "a610c00b-88b8-4598-ae27-81aaf2f2e0d1"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     }
