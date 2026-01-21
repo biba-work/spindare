@@ -29,6 +29,14 @@ const CameraIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const LogoutIcon = ({ color }: { color: string }) => (
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <Path d="M16 17l5-5-5-5" />
+        <Path d="M21 12H9" />
+    </Svg>
+);
+
 const CHALLENGES = [
     "Take a photo of something that reminds you of silence.",
     "Write down one thing you've never told anyone.",
@@ -37,7 +45,7 @@ const CHALLENGES = [
     "Draw how you feel right now using only circles.",
 ];
 
-export const ProfileScreen = ({ onBack }: { onBack: () => void }) => {
+export const ProfileScreen = ({ onBack, onLogout }: { onBack: () => void; onLogout: () => void }) => {
     const [challenge, setChallenge] = useState<string | null>(null);
     const [isMediaSelecting, setIsMediaSelecting] = useState(false);
     const [isPosting, setIsPosting] = useState(false);
@@ -76,7 +84,9 @@ export const ProfileScreen = ({ onBack }: { onBack: () => void }) => {
                         <BackIcon color="#FFF" />
                     </AppButton>
                     <Text style={styles.headerTitle}>PROFILE</Text>
-                    <View style={{ width: 48 }} />
+                    <AppButton type="icon" onPress={onLogout} style={styles.backBtn}>
+                        <LogoutIcon color="#FF3B30" />
+                    </AppButton>
                 </View>
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
