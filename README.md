@@ -1,13 +1,14 @@
----
 
 # Spindare 🌀 `v0.37.1-pre-alpha`
 
-**The Anti-Scroll Social Experiment.** Spindare is a reaction-algorithm-based platform designed to turn digital intent into physical action. Built by a tight-knit team of three, we are redefining social connection through the "Active Reveal" system.
+**The Anti-Scroll Social Experiment.** Spindare is a reaction-algorithm-based platform designed to turn digital intent
+into physical action. Built by a tight-knit team of three, we are redefining social connection
+through the "Active Reveal" system.
 
 > **Status:** Internal Pre-Alpha (Closed Testing).
 > **Transitioning:** Moving from Expo Go to Native Standalone Builds.
-
----
+>
+> ---
 
 ## 🧠 The Philosophy
 
