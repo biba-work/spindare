@@ -1,41 +1,41 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# --- Spindare Core ---
 node_modules/
-
-# Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# --- Native Build Artifacts ---
+# We ignore the build results, but keep the source code
+ios/build/
+android/build/
+android/.gradle/
+android/app/build/
 .kotlin/
-*.orig.*
+
+# --- SECRETS & KEYS (Crucial for the "Brains") ---
+# This protects your API keys and signing certificates
+.env
+.env*.local
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.pem
+secrets.json
 
-# Metro
+# --- Native Folders ---
+# If you are manually editing native code for your algorithm, 
+# make sure these are NOT ignored so they sync to GitHub.
+# /ios 
+# /android 
+
+# --- System & Debug ---
+.DS_Store
+*.orig.*
 .metro-health-check*
-
-# debug
 npm-debug.*
 yarn-debug.*
 yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
 *.tsbuildinfo
-
-# generated native folders
-/ios
-/android
