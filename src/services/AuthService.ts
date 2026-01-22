@@ -4,7 +4,9 @@ import {
     createUserWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    User
+    User,
+    GoogleAuthProvider,
+    OAuthProvider
 } from 'firebase/auth';
 import {
     doc,
@@ -81,6 +83,38 @@ export const AuthService = {
         } catch (error: any) {
             console.error('Login Error:', error.message);
             throw error;
+        }
+    },
+
+    async signInWithGoogle(): Promise<UserProfile> {
+        // NOTE: signInWithPopup is not available in React Native.
+        // For actual production, you'd use expo-auth-session or a similar library.
+        // For now, this is a placeholder to prevent crashes.
+        console.warn('Google Sign-in triggered. Full implementation requires native configuration.');
+        throw new Error('Google Sign-in not fully configured for native. Use Email login for testing.');
+    },
+
+    async signInWithApple(): Promise<UserProfile> {
+        console.warn('Apple Sign-in triggered. Full implementation requires native configuration.');
+        throw new Error('Apple Sign-in not fully configured for native. Use Email login for testing.');
+    },
+
+    async _handleSocialLogin(user: User): Promise<UserProfile> {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+            return userDoc.data() as UserProfile;
+        } else {
+            // New social user, create a minimal profile
+            const profile: UserProfile = {
+                username: user.displayName || user.email?.split('@')[0] || 'User',
+                email: user.email || '',
+                studyFields: [],
+                hobbies: [],
+                xp: 0,
+                level: 1,
+            };
+            await setDoc(doc(db, 'users', user.uid), profile);
+            return profile;
         }
     },
 

@@ -6,6 +6,7 @@ export type StudyFieldType = "Computer Science" | "Business" | "Engineering" | "
 
 export interface UserProfile {
     username: string;
+    email: string;
     hobbies: HobbyType[];
     studyFields: StudyFieldType[];
     xp: number;

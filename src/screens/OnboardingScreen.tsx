@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HobbyType, StudyFieldType } from '../services/AIService';
 import { AppButton } from '../components/atoms/AppButton';
+import { AuthService } from '../services/AuthService';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -50,12 +52,59 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                 <Text style={styles.subtitle}>Curated challenges. Personalized for you.</Text>
 
                 <View style={styles.btnStack}>
-                    <AppButton onPress={() => setView('signup')}>
-                        <Text style={styles.btnTextBlack}>CREATE ACCOUNT</Text>
+                    <AppButton
+                        onPress={async () => {
+                            try {
+                                setError(null);
+                                const profile = await AuthService.signInWithGoogle();
+                                if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
+                                    setEmail(profile.email);
+                                    setUsername(profile.username);
+                                    setView('traits');
+                                } else {
+                                    await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
+                                }
+                            } catch (err: any) {
+                                setError(err.message);
+                            }
+                        }}
+                        style={styles.googleBtn}
+                    >
+                        <Ionicons name="logo-google" size={20} color="#000" />
+                        <Text style={styles.btnTextBlack}>Continue with Google</Text>
                     </AppButton>
-                    <AppButton type="secondary" onPress={() => setView('login')}>
-                        <Text style={styles.btnTextWhite}>LOG IN</Text>
+
+                    <AppButton
+                        onPress={async () => {
+                            try {
+                                setError(null);
+                                const profile = await AuthService.signInWithApple();
+                                if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
+                                    setEmail(profile.email);
+                                    setUsername(profile.username);
+                                    setView('traits');
+                                } else {
+                                    await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
+                                }
+                            } catch (err: any) {
+                                setError(err.message);
+                            }
+                        }}
+                        style={styles.appleBtn}
+                    >
+                        <Ionicons name="logo-apple" size={20} color="#FFF" />
+                        <Text style={styles.btnTextWhite}>Continue with Apple</Text>
                     </AppButton>
+                </View>
+
+                <View style={styles.altAuthLinks}>
+                    <Pressable onPress={() => setView('login')}>
+                        <Text style={styles.altAuthText}>Login here via Email</Text>
+                    </Pressable>
+                    <Text style={styles.altAuthOr}>or</Text>
+                    <Pressable onPress={() => setView('signup')}>
+                        <Text style={styles.altAuthTextHighlight}>Sign Up now!</Text>
+                    </Pressable>
                 </View>
             </View>
         </SafeAreaView>
@@ -252,4 +301,31 @@ const styles = StyleSheet.create({
     pillText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
     pillTextActive: { color: '#000' },
     errorText: { color: '#FF3B30', fontSize: 12, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
+    googleBtn: { backgroundColor: '#FFF' },
+    appleBtn: {
+        backgroundColor: '#000',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)'
+    },
+    altAuthLinks: {
+        marginTop: 32,
+        alignItems: 'center',
+        gap: 4,
+    },
+    altAuthText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    altAuthOr: {
+        color: 'rgba(255,255,255,0.2)',
+        fontSize: 12,
+        marginVertical: 4,
+    },
+    altAuthTextHighlight: {
+        color: '#FFF',
+        fontSize: 15,
+        fontWeight: '800',
+        textDecorationLine: 'underline',
+    }
 });
