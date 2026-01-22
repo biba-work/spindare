@@ -14,9 +14,9 @@ const FeltIcon = ({ active }: { active: boolean }) => {
             Animated.loop(
                 Animated.timing(anim, {
                     toValue: 1,
-                    duration: 3000,
-                    easing: Easing.linear,
-                    useNativeDriver: false
+                    duration: 1500,
+                    easing: Easing.bezier(0.4, 0, 0.2, 1),
+                    useNativeDriver: true
                 })
             ).start();
         } else {
@@ -26,32 +26,37 @@ const FeltIcon = ({ active }: { active: boolean }) => {
 
     return (
         <View style={styles.iconCenterer}>
-            <Svg width="24" height="24" viewBox="0 0 24 24">
-                {[0, 1].map((i) => {
-                    const radius = anim.interpolate({
-                        inputRange: [0, 0.5, 1],
-                        outputRange: [2, 6, 2]
-                    });
-                    const rotate = anim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [i === 0 ? '0deg' : '180deg', i === 0 ? '360deg' : '540deg']
-                    });
+            {[0, 1, 2].map((i) => {
+                const rotation = anim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [`${i * 120}deg`, `${i * 120 + 360}deg`]
+                });
+                const radius = anim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [7, 2, 7]
+                });
 
-                    return (
-                        <G key={i} transform="translate(12, 12)">
-                            <Animated.View style={{ transform: [{ rotate }] }}>
-                                <AnimatedCircle
-                                    cx={0}
-                                    cy={radius}
-                                    r="2.5"
-                                    fill="#FF3B30"
-                                    opacity={active ? 1 : 0.5}
-                                />
-                            </Animated.View>
-                        </G>
-                    );
-                })}
-            </Svg>
+                return (
+                    <Animated.View
+                        key={i}
+                        style={{
+                            position: 'absolute',
+                            transform: [
+                                { rotate: rotation },
+                                { translateY: radius }
+                            ]
+                        }}
+                    >
+                        <View style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: '#007AFF',
+                            opacity: active ? 1 : 0.4
+                        }} />
+                    </Animated.View>
+                );
+            })}
         </View>
     );
 };
@@ -63,8 +68,8 @@ const ThoughtIcon = ({ active }: { active: boolean }) => {
         if (active) {
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
-                    Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: true })
+                    Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: false }),
+                    Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: false })
                 ])
             ).start();
         } else {

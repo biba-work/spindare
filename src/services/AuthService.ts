@@ -56,6 +56,8 @@ export const AuthService = {
                 ...profile,
                 xp: 0,
                 level: 1,
+                spinsLeft: 2,
+                lastSpinTimestamp: 0,
             };
 
             // Save onboarding info to Firestore
@@ -112,6 +114,8 @@ export const AuthService = {
                 hobbies: [],
                 xp: 0,
                 level: 1,
+                spinsLeft: 2,
+                lastSpinTimestamp: 0,
             };
             await setDoc(doc(db, 'users', user.uid), profile);
             return profile;
@@ -123,6 +127,13 @@ export const AuthService = {
         const user = auth.currentUser;
         if (user) {
             await updateDoc(doc(db, 'users', user.uid), { xp, level });
+        }
+    },
+
+    async updateSpinnerState(spinsLeft: number, lastSpinTimestamp: number) {
+        const user = auth.currentUser;
+        if (user) {
+            await updateDoc(doc(db, 'users', user.uid), { spinsLeft, lastSpinTimestamp });
         }
     },
 

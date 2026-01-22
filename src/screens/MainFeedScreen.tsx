@@ -12,9 +12,34 @@ import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
 import { AIService, UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
 import { AuthService } from '../services/AuthService';
-import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, G, Polygon } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
+
+const SwordIcon = ({ color }: { color: string }) => (
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M14.5 17.5L3 6V3h3l11.5 11.5" />
+        <Path d="M13 19l-2 2-3-3-2-2 2-2" />
+        <Path d="M9.5 12.5L21 21v-3h-3L6.5 6.5" />
+        <Path d="M11 5l2-2 3 3 2 2-2 2" />
+    </Svg>
+);
+
+const GridIcon = ({ color }: { color: string }) => (
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Rect x="3" y="3" width="7" height="7" />
+        <Rect x="14" y="3" width="7" height="7" />
+        <Rect x="14" y="14" width="7" height="7" />
+        <Rect x="3" y="14" width="7" height="7" />
+    </Svg>
+);
+
+const ChevronLeftIcon = ({ color }: { color: string }) => (
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M15 18l-6-6 6-6" />
+    </Svg>
+);
 
 // Optimized Icons
 const SavedIcon = ({ color }: { color: string }) => (
@@ -67,6 +92,9 @@ const UserIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+
+import * as Haptics from 'expo-haptics';
+
 export const MainFeedScreen = () => {
     const insets = useSafeAreaInsets();
     // ... rest of the code stays the same ...
@@ -74,6 +102,7 @@ export const MainFeedScreen = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [userProfile, setUserProfile] = useState<UserProfile>({
+        email: "example@spindare.com",
         username: "example",
         hobbies: [],
         studyFields: [],
@@ -99,15 +128,44 @@ export const MainFeedScreen = () => {
     const overlayAnim = useRef(new Animated.Value(height)).current;
     const badgeScale = useRef(new Animated.Value(0)).current;
 
+    const scrollY = useRef(new Animated.Value(0)).current;
+    const lastScrollY = useRef(0);
+    const headerVisible = useRef(new Animated.Value(1)).current;
+    const miniHeaderVisible = useRef(new Animated.Value(0)).current;
+    const isMiniHeaderHapticTriggered = useRef(false);
+
     useEffect(() => {
         AuthService.getSession().then(({ isAuthenticated: authed, userProfile: profile }) => {
             if (authed && profile) {
                 setUserProfile(profile);
                 setIsAuthenticated(true);
+
+                // Handle Spinner State from Firebase
+                const now = Date.now();
+                const lastTs = profile.lastSpinTimestamp || 0;
+                const hoursPassed = (now - lastTs) / (1000 * 60 * 60);
+
+                if (hoursPassed >= 24) {
+                    setSpinsLeft(2);
+                    AuthService.updateSpinnerState(2, profile.lastSpinTimestamp || 0);
+                } else if (profile.spinsLeft !== undefined) {
+                    setSpinsLeft(profile.spinsLeft);
+                }
             }
             setIsLoading(false);
         });
     }, []);
+
+    const updateSpins = async (newCount: number) => {
+        setSpinsLeft(newCount);
+        try {
+            const timestamp = userProfile.lastSpinTimestamp || Date.now();
+            await AuthService.updateSpinnerState(newCount, timestamp);
+            setUserProfile(prev => ({ ...prev, spinsLeft: newCount, lastSpinTimestamp: timestamp }));
+        } catch (e) {
+            console.error("Error saving spinner state to Firebase", e);
+        }
+    };
 
     useEffect(() => {
         if (savedChallenges.length > 0) {
@@ -164,24 +222,49 @@ export const MainFeedScreen = () => {
         else setIsMediaSelecting(true);
     };
 
+    const onScroll = (event: any) => {
+        const currentY = event.nativeEvent.contentOffset.y;
+        const diff = currentY - lastScrollY.current;
+
+        // Unified Visibility Logic
+        if (diff > 10) {
+            // HIDE ALL on scroll-down
+            Animated.parallel([
+                Animated.spring(headerVisible, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }),
+                Animated.spring(miniHeaderVisible, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 })
+            ]).start();
+            isMiniHeaderHapticTriggered.current = false;
+        } else if (diff < -5) {
+            // REVEAL logic on scroll-up
+            if (currentY < 500) {
+                // Near top: Show Branding, ensure Mini is hidden
+                Animated.spring(headerVisible, { toValue: 1, useNativeDriver: true, tension: 50, friction: 8 }).start();
+                Animated.spring(miniHeaderVisible, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }).start();
+                isMiniHeaderHapticTriggered.current = false;
+            } else if (diff < -10) {
+                // Deep scroll: Show Mini context, hide Branding
+                Animated.spring(headerVisible, { toValue: 0, useNativeDriver: true, tension: 50, friction: 8 }).start();
+                Animated.spring(miniHeaderVisible, { toValue: 1, useNativeDriver: true, tension: 60, friction: 9 }).start();
+
+                if (!isMiniHeaderHapticTriggered.current) {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    isMiniHeaderHapticTriggered.current = true;
+                }
+            }
+        }
+
+        lastScrollY.current = currentY;
+    };
+
     const renderHeader = useMemo(() => (
         <View style={styles.spinSection}>
-            <View style={styles.usernameContainer}>
-                <Text style={styles.username}>@{userProfile.username}</Text>
-            </View>
-
-            <View style={styles.spinHeaderInfo}>
-                <Text style={styles.spinTitle}>{spinsLeft > 0 ? "STREAK ACTIVE" : "LOCKOUT PHASE"}</Text>
-                <Text style={styles.spinCount}>{spinsLeft > 0 ? `${spinsLeft} SPINS` : "LOCKED"}</Text>
-            </View>
-
-            <View style={styles.wheelWrapper}>
-                <SpinWheel
-                    options={["DARE", "QUEST", "TRUTH", "RISK"]}
-                    onSpinEnd={handleSpinEnd}
-                    canSpin={spinsLeft > 0}
+            <Pressable onPress={() => setIsProfileVisible(true)} style={styles.pfpContainer}>
+                <Image
+                    source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }}
+                    style={styles.mainPfp}
                 />
-            </View>
+            </Pressable>
+            <Text style={styles.mainUsername}>@{userProfile.username}</Text>
 
             {challenge && (
                 <KeyboardAvoidingView
@@ -213,7 +296,7 @@ export const MainFeedScreen = () => {
                 </KeyboardAvoidingView>
             )}
         </View>
-    ), [userProfile.username, spinsLeft, challenge, handleSpinEnd, handleSaveLater]);
+    ), [userProfile.username, challenge, handleSaveLater]);
 
     if (isLoading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><Text style={{ color: '#FFF' }}>LOADING...</Text></View>;
 
@@ -238,65 +321,64 @@ export const MainFeedScreen = () => {
 
     return (
         <View style={styles.container}>
-            <SafeAreaView style={styles.safeArea} edges={['top']}>
-                <View style={styles.header}>
-                    <AppButton type="icon" onPress={() => showOverlay('saved')} style={styles.navBtn}>
-                        <SavedIcon color="#FFF" />
-                        {savedChallenges.length > 0 && (
-                            <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
-                                <Text style={styles.badgeText}>{savedChallenges.length}</Text>
-                            </Animated.View>
-                        )}
-                    </AppButton>
-                    {!isSearching && <Text style={styles.logo}>SPINDARE</Text>}
-                    <View style={styles.rightActions}>
-                        <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 24] }) }]}>
-                            {isSearching ? (
-                                <View style={styles.searchInner}>
-                                    <TextInput autoFocus placeholder="Search" placeholderTextColor="rgba(255,255,255,0.3)" style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} />
-                                    <Pressable
-                                        onPress={() => toggleSearch(false)}
-                                        style={styles.cancelBtn}
-                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                    >
-                                        <Text style={styles.cancelText}>Cancel</Text>
-                                    </Pressable>
-                                </View>
-                            ) : (
-                                <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#FFF" /></AppButton>
+            <Animated.View style={[styles.headerContainer, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
+                <SafeAreaView style={styles.safeArea} edges={['top']}>
+                    <View style={styles.header}>
+                        <AppButton type="icon" onPress={() => showOverlay('saved')} style={styles.navBtn}>
+                            <SavedIcon color="#FFF" />
+                            {savedChallenges.length > 0 && (
+                                <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
+                                    <Text style={styles.badgeText}>{savedChallenges.length}</Text>
+                                </Animated.View>
                             )}
-                        </Animated.View>
-                        {!isSearching && <AppButton type="icon" onPress={() => setIsProfileVisible(true)} style={styles.navBtn}><UserIcon color="#FFF" /></AppButton>}
-                        {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#FFF" /></AppButton>}
+                        </AppButton>
+                        {!isSearching && <Text style={styles.logo}>SPINDARE</Text>}
+                        <View style={styles.rightActions}>
+                            <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 24] }) }]}>
+                                {isSearching ? (
+                                    <View style={styles.searchInner}>
+                                        <TextInput autoFocus placeholder="Search" placeholderTextColor="rgba(255,255,255,0.3)" style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} />
+                                        <Pressable
+                                            onPress={() => toggleSearch(false)}
+                                            style={styles.cancelBtn}
+                                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                        >
+                                            <Text style={styles.cancelText}>Cancel</Text>
+                                        </Pressable>
+                                    </View>
+                                ) : (
+                                    <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#FFF" /></AppButton>
+                                )}
+                            </Animated.View>
+                            {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#FFF" /></AppButton>}
+                        </View>
                     </View>
-                </View>
-            </SafeAreaView>
+                </SafeAreaView>
+            </Animated.View>
+
+            {/* Mini Slide Popup Header */}
+            <Animated.View style={[styles.miniHeader, { top: 0, transform: [{ translateY: miniHeaderVisible.interpolate({ inputRange: [0, 1], outputRange: [-200, 0] }) }] }]}>
+                <BlurView intensity={40} tint="dark" style={[styles.miniBlurWrapper, { paddingTop: insets.top }]}>
+                    <View style={styles.miniHeaderContent}>
+                        <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
+                            <Image source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }} style={styles.miniPfp} />
+                        </Pressable>
+                        <Text style={styles.miniUsername}>@{userProfile.username}</Text>
+                    </View>
+                </BlurView>
+            </Animated.View>
 
             <View style={styles.content}>
-                {hasPostedToday || spinsLeft === 0 ? (
-                    <FeedScreen ListHeaderComponent={renderHeader} />
-                ) : (
-                    <ScrollView contentContainerStyle={[styles.lockedContainer, { paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
-                        {renderHeader}
-                        <View style={styles.lockedSection}>
-                            <Text style={styles.lockedSmallText}>POST TO UNLOCK COMMUNITY FEED AND REACTIONS</Text>
-                        </View>
-                    </ScrollView>
-                )}
+                <FeedScreen
+                    ListHeaderComponent={renderHeader}
+                    onScroll={onScroll}
+                    contentContainerStyle={{ paddingTop: 60 + insets.top }}
+                />
             </View>
 
             <View style={styles.footer}>
                 <Text style={styles.versionText}>SPINDARE V0.37.1 (PRE-ALPHA TESTING)</Text>
             </View>
-
-            <GenericOverlay
-                visible={!!overlayType}
-                type={overlayType || 'saved'}
-                onClose={hideOverlay}
-                data={savedChallenges}
-                onAction={handleOverlayAction}
-                animation={overlayAnim}
-            />
 
             {isMediaSelecting && <View style={styles.fullOverlay}><MediaSelectionScreen challenge={challenge || ''} onClose={() => setIsMediaSelecting(false)} onSelect={(t, uri) => { setSelectedImage(uri || null); setIsMediaSelecting(false); setTimeout(() => setIsPosting(true), 400); }} /></View>}
             {isPosting && (
@@ -317,12 +399,14 @@ export const MainFeedScreen = () => {
                     />
                 </View>
             )}
-            {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(true)} /></View>}
+            {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
             {isProfileVisible && (
                 <View style={styles.fullOverlay}>
                     <ProfileScreen
                         onBack={() => setIsProfileVisible(false)}
                         onLogout={handleLogout}
+                        spinsLeft={spinsLeft}
+                        setSpinsLeft={updateSpins}
                     />
                 </View>
             )}
@@ -332,6 +416,7 @@ export const MainFeedScreen = () => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
+    headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, overflow: 'hidden', backgroundColor: '#000' },
     safeArea: { zIndex: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: 60 },
     logo: { color: '#FFF', fontSize: 13, fontWeight: '900', letterSpacing: 6, textAlign: 'center', position: 'absolute', left: 0, right: 0, zIndex: -1 },
@@ -345,30 +430,11 @@ const styles = StyleSheet.create({
     cancelBtn: { paddingHorizontal: 12 },
     cancelText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
     content: { flex: 1 },
-    lockedContainer: { flexGrow: 1 },
-    lockedSection: {
-        marginTop: 60,
-        alignItems: 'center',
-        paddingHorizontal: 40,
-    },
-    lockedSmallText: {
-        color: 'rgba(255,255,255,0.2)',
-        fontSize: 10,
-        fontWeight: '900',
-        letterSpacing: 2,
-        textAlign: 'center',
-    },
-    revealWrapper: {
-        width: '100%',
-        alignItems: 'center',
-    },
-    spinSection: { paddingTop: 24, paddingBottom: 24, alignItems: 'center' },
-    usernameContainer: { backgroundColor: '#111', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 24, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-    username: { color: '#FFF', fontSize: 12, fontWeight: '800' },
-    spinHeaderInfo: { alignItems: 'center', marginBottom: 24 },
-    spinTitle: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '900', letterSpacing: 4, marginBottom: 4 },
-    spinCount: { color: '#FFF', fontSize: 24, fontWeight: '900' },
-    wheelWrapper: { marginBottom: 32 },
+    spinSection: { paddingTop: 40, paddingBottom: 24, alignItems: 'center' },
+    pfpContainer: { width: 120, height: 120, borderRadius: 60, padding: 4, backgroundColor: '#111', marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
+    mainPfp: { width: 112, height: 112, borderRadius: 56 },
+    mainUsername: { color: '#FFF', fontSize: 18, fontWeight: '900', marginBottom: 40 },
+    revealWrapper: { width: '100%', alignItems: 'center' },
     revealPost: { width: width - 32, padding: 24, borderRadius: 32, backgroundColor: '#0D0D0D', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
     postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     postAvatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
@@ -382,4 +448,10 @@ const styles = StyleSheet.create({
     footer: { paddingVertical: 16, alignItems: 'center' },
     versionText: { color: 'rgba(255,255,255,0.2)', fontSize: 9, fontWeight: '800', letterSpacing: 2 },
     fullOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 2000 },
+    miniHeader: { position: 'absolute', left: 0, right: 0, zIndex: 1500, overflow: 'hidden' },
+    miniBlurWrapper: { paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.5)' },
+    miniHeaderContent: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+    miniPfpWrapper: { width: 50, height: 50, borderRadius: 25, marginBottom: 4 },
+    miniPfp: { width: 50, height: 50, borderRadius: 25 },
+    miniUsername: { color: '#FFF', fontSize: 12, fontWeight: '800' },
 });

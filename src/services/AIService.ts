@@ -11,6 +11,8 @@ export interface UserProfile {
     studyFields: StudyFieldType[];
     xp: number;
     level: number;
+    spinsLeft?: number;
+    lastSpinTimestamp?: number;
 }
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";

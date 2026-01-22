@@ -81,16 +81,18 @@ const PostItem = ({ post }: { post: typeof MOCK_POSTS[0] }) => {
     );
 };
 
-export const FeedScreen = ({ ListHeaderComponent }: { ListHeaderComponent?: React.ReactElement }) => {
+export const FeedScreen = ({ ListHeaderComponent, onScroll, contentContainerStyle }: { ListHeaderComponent?: React.ReactElement, onScroll?: (event: any) => void, contentContainerStyle?: any }) => {
     return (
         <View style={styles.container}>
             <FlatList
                 data={MOCK_POSTS}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => <PostItem post={item} />}
-                contentContainerStyle={styles.list}
+                contentContainerStyle={[styles.list, contentContainerStyle]}
                 ListHeaderComponent={ListHeaderComponent}
                 showsVerticalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
             />
         </View>
     );
