@@ -377,7 +377,7 @@ export const MainFeedScreen = () => {
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.37.1 (PRE-ALPHA TESTING)</Text>
+                <Text style={styles.versionText}>SPINDARE V0.45.5 (PRE-ALPHA TESTING)</Text>
             </View>
 
             {isMediaSelecting && <View style={styles.fullOverlay}><MediaSelectionScreen challenge={challenge || ''} onClose={() => setIsMediaSelecting(false)} onSelect={(t, uri) => { setSelectedImage(uri || null); setIsMediaSelecting(false); setTimeout(() => setIsPosting(true), 400); }} /></View>}

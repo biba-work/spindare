@@ -1,6 +1,6 @@
 {
   "name": "spindare",
-  "version": "1.0.0",
+  "version": "0.45.5",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
