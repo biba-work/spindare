@@ -54,5 +54,5 @@ Spindare isn't a gallery; it’s a gauntlet. We believe social media should make
 # Current Environment
 SDK: 54.0.0
 Runtime: exposdk:54.0.0
-Version: 0.37.1 (Pre-Alpha)
+Version: 0.45.5 (Pre-Alpha)
 
