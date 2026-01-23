@@ -2,38 +2,18 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Image, TextInput, Keyboard, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedScreen } from './FeedScreen';
-import { SpinWheel } from '../components/molecules/SpinWheel';
-import { MediaSelectionScreen } from './MediaSelectionScreen';
-import { PostCreationScreen } from './PostCreationScreen';
 import { FriendsListScreen } from './FriendsListScreen';
 import { OnboardingScreen } from './OnboardingScreen';
 import { ProfileScreen } from './ProfileScreen';
 import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
-import { AIService, UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
+import { UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
 import { AuthService } from '../services/AuthService';
-import Svg, { Path, Circle, Rect, G, Polygon } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
-
-const SwordIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M14.5 17.5L3 6V3h3l11.5 11.5" />
-        <Path d="M13 19l-2 2-3-3-2-2 2-2" />
-        <Path d="M9.5 12.5L21 21v-3h-3L6.5 6.5" />
-        <Path d="M11 5l2-2 3 3 2 2-2 2" />
-    </Svg>
-);
-
-const GridIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Rect x="3" y="3" width="7" height="7" />
-        <Rect x="14" y="3" width="7" height="7" />
-        <Rect x="14" y="14" width="7" height="7" />
-        <Rect x="3" y="14" width="7" height="7" />
-    </Svg>
-);
 
 const ChevronLeftIcon = ({ color }: { color: string }) => (
     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -62,38 +42,12 @@ const SearchIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-const SendIcon = ({ color }: { color: string }) => (
-    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <Circle cx="8.5" cy="7" r="4" />
-        <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-        <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </Svg>
-);
-
-const CameraIcon = ({ color }: { color: string }) => (
-    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-        <Circle cx="12" cy="13" r="4" />
-    </Svg>
-);
-
-const LockIcon = ({ color }: { color: string }) => (
-    <Svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <Path d="M7 11V7a5 5 0 0110 0v4" />
-    </Svg>
-);
-
 const UserIcon = ({ color }: { color: string }) => (
     <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <Circle cx="12" cy="7" r="4" />
     </Svg>
 );
-
-
-import * as Haptics from 'expo-haptics';
 
 export const MainFeedScreen = () => {
     const insets = useSafeAreaInsets();
@@ -114,13 +68,10 @@ export const MainFeedScreen = () => {
     const [spinsLeft, setSpinsLeft] = useState(2);
     const [hasPostedToday, setHasPostedToday] = useState(false);
     const [savedChallenges, setSavedChallenges] = useState<string[]>([]);
-    const [isMediaSelecting, setIsMediaSelecting] = useState(false);
-    const [isPosting, setIsPosting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [isProfileVisible, setIsProfileVisible] = useState(false);
     const [overlayType, setOverlayType] = useState<'saved' | 'notifications' | null>(null);
-    const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Animations
@@ -167,6 +118,16 @@ export const MainFeedScreen = () => {
         }
     };
 
+    const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
+        setUserProfile(prev => {
+            const newProfile = { ...prev, ...updates };
+            if (updates.photoURL) {
+                AuthService.updateProfilePicture(updates.photoURL);
+            }
+            return newProfile;
+        });
+    };
+
     useEffect(() => {
         if (savedChallenges.length > 0) {
             Animated.sequence([
@@ -177,18 +138,7 @@ export const MainFeedScreen = () => {
     }, [savedChallenges.length]);
 
     // Handlers
-    const handleSpinEnd = useCallback(async () => {
-        const result = await AIService.generateChallenge(userProfile);
-        setChallenge(result);
-        setSpinsLeft((prev) => Math.max(0, prev - 1));
-    }, [userProfile]);
 
-    const handleSaveLater = useCallback(() => {
-        if (challenge) {
-            setSavedChallenges(prev => [...prev, challenge]);
-            setChallenge(null);
-        }
-    }, [challenge]);
 
     const showOverlay = (type: 'saved' | 'notifications') => {
         setOverlayType(type);
@@ -219,7 +169,6 @@ export const MainFeedScreen = () => {
         setChallenge(item);
         hideOverlay();
         if (action === 'send') setIsSharing(true);
-        else setIsMediaSelecting(true);
     };
 
     const onScroll = (event: any) => {
@@ -260,43 +209,13 @@ export const MainFeedScreen = () => {
         <View style={styles.spinSection}>
             <Pressable onPress={() => setIsProfileVisible(true)} style={styles.pfpContainer}>
                 <Image
-                    source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }}
+                    source={{ uri: userProfile.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }}
                     style={styles.mainPfp}
                 />
             </Pressable>
             <Text style={styles.mainUsername}>@{userProfile.username}</Text>
-
-            {challenge && (
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.revealWrapper}
-                >
-                    <View style={styles.revealPost}>
-                        <View style={styles.postHeader}>
-                            <Image source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }} style={styles.postAvatarSmall} />
-                            <View style={styles.postHeaderText}>
-                                <Text style={styles.postAuthor}>{userProfile.username}</Text>
-                                <Text style={styles.postTime}>ACTIVE REVEAL</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.postContent}>{challenge}</Text>
-                        <View style={styles.postActionsRow}>
-                            <AppButton type="icon" onPress={() => setIsSharing(true)} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-                                <SendIcon color="rgba(255,255,255,0.4)" />
-                            </AppButton>
-                            <AppButton onPress={() => setIsMediaSelecting(true)} style={styles.snapBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                <CameraIcon color="#000" />
-                                <Text style={styles.snapText}>SNAP PIC</Text>
-                            </AppButton>
-                            <AppButton type="icon" onPress={handleSaveLater} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-                                <SavedIcon color="rgba(255,255,255,0.4)" />
-                            </AppButton>
-                        </View>
-                    </View>
-                </KeyboardAvoidingView>
-            )}
         </View>
-    ), [userProfile.username, challenge, handleSaveLater]);
+    ), [userProfile.username]);
 
     if (isLoading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><Text style={{ color: '#FFF' }}>LOADING...</Text></View>;
 
@@ -305,6 +224,7 @@ export const MainFeedScreen = () => {
             onComplete={async (email: string, pass: string, username: string, h: HobbyType[], s: StudyFieldType[], isSignup: boolean) => {
                 if (isSignup) {
                     const profile = await AuthService.signUp(email, pass, {
+                        email,
                         username,
                         hobbies: h,
                         studyFields: s
@@ -361,7 +281,7 @@ export const MainFeedScreen = () => {
                 <BlurView intensity={40} tint="dark" style={[styles.miniBlurWrapper, { paddingTop: insets.top }]}>
                     <View style={styles.miniHeaderContent}>
                         <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
-                            <Image source={{ uri: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }} style={styles.miniPfp} />
+                            <Image source={{ uri: userProfile.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }} style={styles.miniPfp} />
                         </Pressable>
                         <Text style={styles.miniUsername}>@{userProfile.username}</Text>
                     </View>
@@ -380,25 +300,6 @@ export const MainFeedScreen = () => {
                 <Text style={styles.versionText}>SPINDARE V0.45.5 (PRE-ALPHA TESTING)</Text>
             </View>
 
-            {isMediaSelecting && <View style={styles.fullOverlay}><MediaSelectionScreen challenge={challenge || ''} onClose={() => setIsMediaSelecting(false)} onSelect={(t, uri) => { setSelectedImage(uri || null); setIsMediaSelecting(false); setTimeout(() => setIsPosting(true), 400); }} /></View>}
-            {isPosting && (
-                <View style={styles.fullOverlay}>
-                    <PostCreationScreen
-                        challenge={challenge || ''}
-                        imageUri={selectedImage}
-                        onClose={() => setIsPosting(false)}
-                        onPost={(c, img, target) => {
-                            setIsPosting(false);
-                            if (target === 'friend') {
-                                setTimeout(() => setIsSharing(true), 400);
-                            } else {
-                                setChallenge(null);
-                                setHasPostedToday(true);
-                            }
-                        }}
-                    />
-                </View>
-            )}
             {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
             {isProfileVisible && (
                 <View style={styles.fullOverlay}>
@@ -407,6 +308,10 @@ export const MainFeedScreen = () => {
                         onLogout={handleLogout}
                         spinsLeft={spinsLeft}
                         setSpinsLeft={updateSpins}
+                        activeChallenge={challenge}
+                        onChallengeReceived={setChallenge}
+                        userProfile={userProfile}
+                        onUpdateProfile={handleUpdateProfile}
                     />
                 </View>
             )}
@@ -442,7 +347,8 @@ const styles = StyleSheet.create({
     postAuthor: { color: '#FFF', fontSize: 14, fontWeight: '800' },
     postTime: { color: '#FF3B30', fontSize: 10, fontWeight: '900' },
     postContent: { color: '#FFF', fontSize: 16, lineHeight: 24, marginBottom: 24, fontWeight: '500' },
-    postActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 },
+    postActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 12 },
+    reactionItem: { flex: 1, alignItems: 'center' },
     snapBtn: { flex: 1, height: 56, borderRadius: 28 },
     snapText: { color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
     footer: { paddingVertical: 16, alignItems: 'center' },

@@ -13,6 +13,7 @@ export interface UserProfile {
     level: number;
     spinsLeft?: number;
     lastSpinTimestamp?: number;
+    photoURL?: string;
 }
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";

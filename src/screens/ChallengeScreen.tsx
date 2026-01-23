@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Platform, TextInput, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Platform, TextInput, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
@@ -16,11 +16,12 @@ const CHALLENGES = [
     "Draw how you feel right now using only circles.",
 ];
 
-import { PanResponder } from 'react-native';
 import { FeedScreen } from './FeedScreen';
 import { PostCreationScreen } from './PostCreationScreen';
 import { FriendsListScreen } from './FriendsListScreen';
-import { MediaSelectionScreen } from './MediaSelectionScreen';
+import * as ImagePicker from 'expo-image-picker';
+import { Camera } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 
 export const ChallengeScreen = () => {
     const [challenge, setChallenge] = useState<string | null>(null);
@@ -28,13 +29,13 @@ export const ChallengeScreen = () => {
     const [isFeedVisible, setIsFeedVisible] = useState(false);
     const [isPosting, setIsPosting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
-    const [isMediaSelecting, setIsMediaSelecting] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
     // Mock user profile for now
     const userProfile: UserProfile = {
         username: "bibovic",
+        email: "bibovic@example.com",
         hobbies: ["Photography", "Gaming", "Art"],
         studyFields: ["Computer Science"],
         xp: 248,
@@ -49,13 +50,11 @@ export const ChallengeScreen = () => {
     const feedTransitionAnim = useRef(new Animated.Value(height)).current;
     const postTransitionAnim = useRef(new Animated.Value(height)).current;
     const shareTransitionAnim = useRef(new Animated.Value(height)).current;
-    const mediaTransitionAnim = useRef(new Animated.Value(height)).current;
 
     const panResponder = useRef(
         PanResponder.create({
             onMoveShouldSetPanResponder: (_, gestureState) => {
-                // Set pan responder if swiping up significantly and not in sub-screens
-                return gestureState.dy < -50 && !isFeedVisible && !isPosting && !isSharing && !isMediaSelecting;
+                return gestureState.dy < -50 && !isFeedVisible && !isPosting && !isSharing;
             },
             onPanResponderRelease: (_, gestureState) => {
                 if (gestureState.dy < -100) {
@@ -133,41 +132,68 @@ export const ChallengeScreen = () => {
         }).start(() => setIsSharing(false));
     };
 
-    const showMediaSelector = () => {
-        setIsMediaSelecting(true);
-        Animated.spring(mediaTransitionAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-            friction: 8,
-            tension: 40,
-        }).start();
-    };
 
-    const hideMediaSelector = () => {
-        Animated.timing(mediaTransitionAnim, {
-            toValue: height,
-            duration: 400,
-            useNativeDriver: true,
-        }).start(() => setIsMediaSelecting(false));
-    };
 
-    const handleMediaSelect = (type: 'camera' | 'gallery' | 'text', imageUri?: string) => {
-        console.log('Media selected:', type, imageUri);
-        setSelectedImage(imageUri || null);
-        hideMediaSelector();
-        // Delay opening the post creator for a smoother transition
-        setTimeout(() => {
+    const handleMediaAction = async (type: 'camera' | 'gallery' | 'text') => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setReaction(type);
+
+        if (type === 'camera') {
+            const { status } = await Camera.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                alert('Permission to access camera is required to take photos.');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
+        } else if (type === 'gallery') {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                alert('Permission to access gallery is required to select photos.');
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
+
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
+        } else {
+            setSelectedImage(null);
             showPostCreator();
-        }, 400);
+        }
     };
 
-    const handlePostSubmit = (content: string) => {
-        console.log('Post submitted:', content);
+    const handlePostSubmit = (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => {
+        console.log('Post submitted:', content, imageUri, target);
         hidePostCreator();
-        // In a real app, you'd save it to a database/local state here
-        setTimeout(() => {
-            showFeed(); // Show the feed after posting
-        }, 500);
+
+        if (target === 'friend') {
+            setTimeout(() => {
+                showShare();
+            }, 500);
+        } else {
+            // In a real app, you'd save it to a database/local state here
+            setTimeout(() => {
+                showFeed(); // Show the feed after posting
+            }, 500);
+        }
     };
 
     const renderChallengeCardContent = () => (
@@ -183,32 +209,37 @@ export const ChallengeScreen = () => {
             <View style={styles.reactionsRow}>
                 <View style={styles.reactionItem}>
                     <ReactionButton
+                        type="text"
+                        label="send text"
+                        selected={reaction === 'text'}
+                        onPress={() => handleMediaAction('text')}
+                    />
+                </View>
+                <View style={styles.reactionItem}>
+                    <ReactionButton
+                        type="camera"
+                        label="camera"
+                        selected={reaction === 'camera'}
+                        onPress={() => handleMediaAction('camera')}
+                    />
+                </View>
+                <View style={styles.reactionItem}>
+                    <ReactionButton
+                        type="gallery"
+                        label="gallery"
+                        selected={reaction === 'gallery'}
+                        onPress={() => handleMediaAction('gallery')}
+                    />
+                </View>
+                <View style={styles.reactionItem}>
+                    <ReactionButton
                         type="send"
-                        label="send to a friend"
+                        label="send"
                         selected={reaction === 'send'}
                         onPress={() => {
                             setReaction('send');
                             showShare();
                         }}
-                    />
-                </View>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="do"
-                        label="do it now"
-                        selected={reaction === 'do'}
-                        onPress={() => {
-                            setReaction('do');
-                            showMediaSelector();
-                        }}
-                    />
-                </View>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="save"
-                        label="save for later"
-                        selected={reaction === 'save'}
-                        onPress={() => setReaction('save')}
                     />
                 </View>
             </View>
@@ -366,22 +397,7 @@ export const ChallengeScreen = () => {
                 )}
             </Animated.View>
 
-            {/* Media Selector Overlay */}
-            <Animated.View
-                style={[
-                    styles.mediaOverlay,
-                    { transform: [{ translateY: mediaTransitionAnim }] }
-                ]}
-                pointerEvents={isMediaSelecting ? 'auto' : 'none'}
-            >
-                {isMediaSelecting && (
-                    <MediaSelectionScreen
-                        challenge={challenge || ''}
-                        onClose={hideMediaSelector}
-                        onSelect={handleMediaSelect}
-                    />
-                )}
-            </Animated.View>
+
         </View>
     );
 };

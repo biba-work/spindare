@@ -1,9 +1,9 @@
 import React, { useRef, useEffect } from 'react';
 import { Pressable, Text, View, StyleSheet, Animated } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Svg, { Circle, Path, Polygon } from 'react-native-svg';
+import Svg, { Circle, Path, Polygon, Rect } from 'react-native-svg';
 
-type ReactionType = 'send' | 'do' | 'save' | 'felt' | 'thought' | 'intrigued';
+type ReactionType = 'send' | 'do' | 'save' | 'felt' | 'thought' | 'intrigued' | 'camera' | 'gallery' | 'text';
 
 interface ReactionButtonProps {
     type: ReactionType;
@@ -14,14 +14,31 @@ interface ReactionButtonProps {
 
 const Shape = ({ type, color }: { type: ReactionType; color: string }) => {
     switch (type) {
+        case 'camera':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <Circle cx="12" cy="13" r="4" />
+                </Svg>
+            );
+        case 'gallery':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <Circle cx="8.5" cy="8.5" r="1.5" />
+                    <Path d="M21 15l-5-5L5 21" />
+                </Svg>
+            );
+        case 'text':
+            return (
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </Svg>
+            );
         case 'send':
             return (
-                <Svg width="20" height="20" viewBox="0 0 24 24">
-                    <Polygon
-                        points="19,5 5,12 19,19"
-                        fill={color}
-                        opacity={0.8}
-                    />
+                <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
                 </Svg>
             );
         case 'do':

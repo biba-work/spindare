@@ -137,6 +137,13 @@ export const AuthService = {
         }
     },
 
+    async updateProfilePicture(photoURL: string) {
+        const user = auth.currentUser;
+        if (user) {
+            await updateDoc(doc(db, 'users', user.uid), { photoURL });
+        }
+    },
+
     async logout() {
         try {
             await signOut(auth);
