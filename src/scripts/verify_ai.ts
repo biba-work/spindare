@@ -1,4 +1,4 @@
-import { AIService, UserProfile } from '../services/AIService.ts';
+import { AIService, UserProfile } from '../services/AIService';
 import * as dotenv from 'dotenv';
 import path from 'path';
 
@@ -9,6 +9,7 @@ async function verify() {
     console.log("--- Spindare AI Service Verification ---");
 
     const mockProfile: UserProfile = {
+        email: "test@example.com",
         username: "bibovic",
         hobbies: ["Photography", "Gaming"],
         studyFields: ["Computer Science"],
