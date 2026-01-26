@@ -5,6 +5,18 @@ dist/
 web-build/
 expo-env.d.ts
 
+# --- NPM Cache & Legacy Folders ---
+--legacy-peer-deps/
+.npm/
+.cache/
+
+# --- IDE & Editor Folders ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 # --- Native Build Artifacts ---
 # We ignore the build results, but keep the source code
 ios/build/

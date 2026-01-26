@@ -5,6 +5,9 @@ import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
 import { ReactionButton } from '../components/atoms/ReactionButton';
 import { AIService, UserProfile } from '../services/AIService';
+import { Post, PostService } from '../services/PostService';
+import { auth } from '../services/firebaseConfig';
+import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
@@ -15,6 +18,56 @@ const CHALLENGES = [
     "Walk for 10 minutes without looking at any screen.",
     "Draw how you feel right now using only circles.",
 ];
+
+const SendIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M22 2L11 13" />
+        <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
+    </Svg>
+);
+
+const ShareIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+        <Path d="M16 6l-4-4-4 4" />
+        <Path d="M12 2v13" />
+    </Svg>
+);
+
+const CheckIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M20 6L9 17l-5-5" />
+    </Svg>
+);
+
+const CameraIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+        <Circle cx="12" cy="13" r="4" />
+    </Svg>
+);
+
+const GalleryIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <Circle cx="8.5" cy="8.5" r="1.5" />
+        <Path d="M21 15l-5-5L5 21" />
+    </Svg>
+);
+
+const TextIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Svg>
+);
+
+const ClockIcon = ({ color }: { color: string }) => (
+    <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="12" r="10" />
+        <Path d="M12 6v6l4 2" />
+    </Svg>
+);
 
 import { FeedScreen } from './FeedScreen';
 import { PostCreationScreen } from './PostCreationScreen';
@@ -31,6 +84,8 @@ export const ChallengeScreen = () => {
     const [isSharing, setIsSharing] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [proofMode, setProofMode] = useState(false);
+    const [posts, setPosts] = useState<Post[]>([]);
 
     // Mock user profile for now
     const userProfile: UserProfile = {
@@ -180,18 +235,31 @@ export const ChallengeScreen = () => {
         }
     };
 
-    const handlePostSubmit = (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => {
+    // ... existing code ...
+
+    const handlePostSubmit = async (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => {
         console.log('Post submitted:', content, imageUri, target);
         hidePostCreator();
 
-        if (target === 'friend') {
+        if (target === 'feed') {
+            try {
+                await PostService.createPost(
+                    userProfile.username,
+                    userProfile.photoURL || '',
+                    challenge || 'Daily Spin',
+                    content,
+                    imageUri || null
+                );
+            } catch (err) {
+                console.error("Error creating post from Challenge Screen:", err);
+            }
+
+            setTimeout(() => {
+                showFeed();
+            }, 500);
+        } else if (target === 'friend') {
             setTimeout(() => {
                 showShare();
-            }, 500);
-        } else {
-            // In a real app, you'd save it to a database/local state here
-            setTimeout(() => {
-                showFeed(); // Show the feed after posting
             }, 500);
         }
     };
@@ -206,45 +274,45 @@ export const ChallengeScreen = () => {
                 {challenge}
             </Text>
 
-            <View style={styles.reactionsRow}>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="text"
-                        label="send text"
-                        selected={reaction === 'text'}
-                        onPress={() => handleMediaAction('text')}
-                    />
+            {!proofMode ? (
+                <View style={styles.actionRow}>
+                    <Pressable style={styles.actionBtn} onPress={showShare}>
+                        <ShareIcon color="#8E8E93" />
+                        <Text style={styles.actionBtnText}>SEND</Text>
+                    </Pressable>
+                    <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
+                        <CheckIcon color="#FAF9F6" />
+                        <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
+                    </Pressable>
                 </View>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="camera"
-                        label="camera"
-                        selected={reaction === 'camera'}
-                        onPress={() => handleMediaAction('camera')}
-                    />
+            ) : (
+                <View style={styles.proofContainer}>
+                    <View style={styles.proofIconsRow}>
+                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('camera')}>
+                            <CameraIcon color="#FAF9F6" />
+                        </Pressable>
+                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('gallery')}>
+                            <GalleryIcon color="#FAF9F6" />
+                        </Pressable>
+                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('text')}>
+                            <TextIcon color="#FAF9F6" />
+                        </Pressable>
+                    </View>
+                    <Pressable style={styles.saveLaterBtn} onPress={() => { setChallenge(null); setProofMode(false); }}>
+                        <ClockIcon color="#AEAEB2" />
+                        <Text style={styles.saveLaterText}>Save for later</Text>
+                    </Pressable>
                 </View>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="gallery"
-                        label="gallery"
-                        selected={reaction === 'gallery'}
-                        onPress={() => handleMediaAction('gallery')}
-                    />
-                </View>
-                <View style={styles.reactionItem}>
-                    <ReactionButton
-                        type="send"
-                        label="send"
-                        selected={reaction === 'send'}
-                        onPress={() => {
-                            setReaction('send');
-                            showShare();
-                        }}
-                    />
-                </View>
-            </View>
+            )}
         </>
     );
+
+    useEffect(() => {
+        const unsubscribe = PostService.subscribeToFeed((updatedPosts) => {
+            setPosts(updatedPosts);
+        });
+        return () => unsubscribe();
+    }, []);
 
     useEffect(() => {
         if (challenge) {
@@ -316,15 +384,19 @@ export const ChallengeScreen = () => {
                             >
                                 {Platform.OS === 'ios' ? (
                                     <BlurView
-                                        intensity={30}
-                                        tint="dark"
+                                        intensity={40}
+                                        tint="light"
                                         style={styles.blurCard}
                                     >
-                                        {renderChallengeCardContent()}
+                                        <View style={styles.cardGradient}>
+                                            {renderChallengeCardContent()}
+                                        </View>
                                     </BlurView>
                                 ) : (
-                                    <View style={[styles.blurCard, { backgroundColor: '#1a1a1c' }]}>
-                                        {renderChallengeCardContent()}
+                                    <View style={[styles.blurCard, { backgroundColor: '#FFF' }]}>
+                                        <View style={styles.cardGradient}>
+                                            {renderChallengeCardContent()}
+                                        </View>
                                     </View>
                                 )}
 
@@ -359,7 +431,12 @@ export const ChallengeScreen = () => {
                 renderToHardwareTextureAndroid={true}
                 pointerEvents={isFeedVisible ? 'auto' : 'none'}
             >
-                {isFeedVisible && <FeedScreen />}
+                {isFeedVisible && (
+                    <FeedScreen
+                        posts={posts}
+                        currentUserId={auth.currentUser?.uid}
+                    />
+                )}
             </Animated.View>
 
             {/* Post Creator Overlay */}
@@ -403,179 +480,97 @@ export const ChallengeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#0c0c0e', // Very dark gray/black
-    },
-    mainContainer: {
-        flex: 1,
-        paddingHorizontal: 24, // Reduced from 32 for better 14 Pro fit
-        justifyContent: 'space-between',
-        paddingVertical: height * 0.05,
-    },
-    header: {
-        alignItems: 'center',
-        flexDirection: 'row',
-        justifyContent: 'center',
-    },
-    headerText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 4,
-        fontFamily: 'Inter_400Regular',
-    },
-    headerDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.3)',
-        marginHorizontal: 12,
-    },
-    headerSubtext: {
-        color: '#FFFFFF',
-        fontSize: 10,
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-        fontFamily: 'Inter_400Regular',
-        opacity: 0.4,
-    },
-    centerSection: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        flex: 1,
-    },
-    wheelWrapper: {
-        alignItems: 'center',
-    },
-    instructionContainer: {
-        marginTop: 60,
-        alignItems: 'center',
-    },
-    instructionText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        textTransform: 'uppercase',
-        letterSpacing: 3,
-        fontFamily: 'Inter_400Regular',
-        marginBottom: 8,
-    },
-    instructionSubtext: {
-        color: 'rgba(255,255,255,0.3)',
-        fontSize: 12,
-        fontFamily: 'Inter_400Regular',
-    },
-    challengeContainer: {
-        width: '100%',
-        alignItems: 'center',
-    },
+    container: { flex: 1, backgroundColor: '#FAF9F6' },
+    safeArea: { flex: 1, backgroundColor: '#FAF9F6' },
+    mainContainer: { flex: 1, paddingHorizontal: 32, justifyContent: 'space-between', paddingVertical: height * 0.05 },
+    header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+    headerText: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textTransform: 'uppercase' },
+    centerSection: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+    wheelWrapper: { alignItems: 'center' },
+    instructionContainer: { marginTop: 60, alignItems: 'center' },
+    instructionText: { color: '#8E8E93', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 8 },
+    instructionSubtext: { color: '#AEAEB2', fontSize: 12, fontWeight: '400' },
+    challengeContainer: { width: '100%', alignItems: 'center' },
     blurCard: {
-        padding: 24, // Reduced from 40 for better fit on 14 Pro
-        borderRadius: 32,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        padding: 36,
+        borderRadius: 48,
+        borderWidth: 2,
+        borderColor: 'rgba(167, 187, 199, 0.2)',
         width: '100%',
         overflow: 'hidden',
+        shadowColor: '#4A4A4A',
+        shadowOffset: { width: 0, height: 16 },
+        shadowOpacity: 0.12,
+        shadowRadius: 40,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
     },
-    cardHeader: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    cardLine: {
-        width: 40,
-        height: 1,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-    },
-    challengeText: {
-        color: '#FFFFFF',
-        fontSize: 26, // Reduced from 30
-        fontFamily: 'Montserrat_400Regular',
-        textAlign: 'center',
-        lineHeight: 34,
-        marginBottom: 40,
-        minHeight: 120,
-        textAlignVertical: 'center',
-    },
-    reactionsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between', // Changed to between for better distribution
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255, 255, 255, 0.05)',
-        paddingTop: 20,
+    cardGradient: {
         width: '100%',
     },
-    reactionItem: {
+    cardHeader: { alignItems: 'center', marginBottom: 24 },
+    cardLine: { width: 40, height: 1.5, backgroundColor: 'rgba(0,0,0,0.03)' },
+    challengeText: {
+        color: '#2C2C2C',
+        fontSize: 26,
+        fontWeight: '500',
+        textAlign: 'center',
+        lineHeight: 38,
+        marginBottom: 40,
+        minHeight: 140,
+        textAlignVertical: 'center',
+        letterSpacing: -0.5,
+    },
+    actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, width: '100%' },
+    actionBtn: {
         flex: 1,
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#FAF9F6',
+        gap: 10,
+        borderWidth: 2,
+        borderColor: '#D1D1D1',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
     },
-    resetButton: {
-        marginTop: 40,
-        paddingVertical: 12,
-        paddingHorizontal: 24,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+    primaryActionBtn: {
+        backgroundColor: '#4A4A4A',
+        borderColor: '#4A4A4A',
+        shadowColor: '#4A4A4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
     },
-    resetText: {
-        color: 'rgba(255, 255, 255, 0.5)',
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-        fontFamily: 'Inter_400Regular',
-    },
-    footer: {
+    actionBtnText: { color: '#8E8E93', fontSize: 14, fontWeight: '600', letterSpacing: 1.5 },
+    proofContainer: { marginTop: 10, width: '100%', alignItems: 'center' },
+    proofIconsRow: { flexDirection: 'row', gap: 24, marginBottom: 20 },
+    proofIconBtn: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#4A4A4A',
         alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'rgba(0,0,0,0.1)',
+        shadowColor: '#4A4A4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
     },
-    footerText: {
-        color: 'rgba(255,255,255,0.2)',
-        fontSize: 9,
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-        fontFamily: 'Inter_400Regular',
-    },
-    container: {
-        flex: 1,
-        backgroundColor: '#0c0c0e',
-    },
-    swipeIndicator: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        marginBottom: 20,
-    },
-    feedOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 10,
-    },
-    postOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 20,
-    },
-    shareOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 30,
-    },
-    mediaOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 40,
-    },
+    saveLaterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16 },
+    saveLaterText: { color: '#A7BBC7', fontSize: 13, fontWeight: '500' },
+    resetButton: { marginTop: 48, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 24, backgroundColor: '#FFF', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    resetText: { color: '#AEAEB2', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 2 },
+    footer: { alignItems: 'center', paddingBottom: 20 },
+    footerText: { color: '#AEAEB2', fontSize: 9, fontWeight: '400', letterSpacing: 2 },
+    swipeIndicator: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.05)', marginBottom: 24 },
+    feedOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
+    postOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20 },
+    shareOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 30 },
+    mediaOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 },
 });

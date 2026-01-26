@@ -1,34 +1,33 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, FlatList, Animated, Share, TextInput, Alert, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppButton } from '../components/atoms/AppButton';
-import Svg, { Path, Rect, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { UserProfile } from '../services/AIService';
+import { PostService } from '../services/PostService';
 import * as ImagePicker from 'expo-image-picker';
-import { FriendsListScreen } from './FriendsListScreen';
-import { PostCreationScreen } from './PostCreationScreen';
-import { SpinWheel } from '../components/molecules/SpinWheel';
 import * as Haptics from 'expo-haptics';
+import { Post } from '../services/PostService';
+import { auth } from '../services/firebaseConfig';
+import { BlurView } from 'expo-blur';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-const ArrowLeftIcon = ({ color }: { color: string }) => (
+// Icons
+const BackIcon = ({ color }: { color: string }) => (
     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M19 12H5M12 19l-7-7 7-7" />
+        <Path d="M15 18l-6-6 6-6" />
     </Svg>
 );
 
-const SwordIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M14.5 17.5L3 6V3h3l11.5 11.5" />
-        <Path d="M13 19l-2 2-3-3-2-2 2-2" />
-        <Path d="M9.5 12.5L21 21v-3h-3L6.5 6.5" />
-        <Path d="M11 5l2-2 3 3 2 2-2 2" />
+const SettingsIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="12" r="3" />
+        <Path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24" />
     </Svg>
 );
 
 const GridIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <Rect x="3" y="3" width="7" height="7" />
         <Rect x="14" y="3" width="7" height="7" />
         <Rect x="14" y="14" width="7" height="7" />
@@ -36,153 +35,83 @@ const GridIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-const SendIcon = ({ color }: { color: string }) => (
+const ListIcon = ({ color }: { color: string }) => (
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M22 2L11 13" />
-        <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
+        <Path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
     </Svg>
 );
 
-const CheckIcon = ({ color }: { color: string }) => (
+const SpinnerIcon = ({ color }: { color: string }) => (
     <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M20 6L9 17l-5-5" />
+        <Path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
     </Svg>
 );
 
-const CameraIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-        <Circle cx="12" cy="13" r="4" />
-    </Svg>
-);
+interface ProfileScreenProps {
+    onBack: () => void;
+    onLogout: () => void;
+    spinsLeft: number;
+    setSpinsLeft: (count: number) => void;
+    activeChallenge: string | null;
+    onChallengeReceived: (challenge: string) => void;
+    userProfile: UserProfile;
+    onUpdateProfile: (updates: Partial<UserProfile>) => void;
+}
 
-const GalleryIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-        <Circle cx="8.5" cy="8.5" r="1.5" />
-        <Path d="M21 15l-5-5L5 21" />
-    </Svg>
-);
+export const ProfileScreen = ({
+    onBack,
+    onLogout,
+    spinsLeft,
+    setSpinsLeft,
+    activeChallenge,
+    onChallengeReceived,
+    userProfile,
+    onUpdateProfile
+}: ProfileScreenProps) => {
+    const [mode, setMode] = useState<'list' | 'grid'>('grid');
+    const [showSettings, setShowSettings] = useState(false);
+    const [darkMode, setDarkMode] = useState(false);
+    const [soundEffects, setSoundEffects] = useState(true);
+    const [notifications, setNotifications] = useState(true);
+    const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main');
+    const [userPosts, setUserPosts] = useState<Post[]>([]);
 
-const TextIcon = ({ color }: { color: string }) => (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-        <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </Svg>
-);
+    const settingsAnim = useRef(new Animated.Value(height)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
 
-const ClockIcon = ({ color }: { color: string }) => (
-    <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <Circle cx="12" cy="12" r="10" />
-        <Path d="M12 6v6l4 2" />
-    </Svg>
-);
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+        }).start();
 
-const COMPLETED_CHALLENGES = [
-    {
-        id: '1',
-        title: "Silence Protocol",
-        content: "Take a photo of something that reminds you of silence.",
-        image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80",
-        date: "2024-01-20"
-    },
-    {
-        id: '2',
-        title: "Deep Memory",
-        content: "Write down one thing you've never told anyone.",
-        image: "https://images.unsplash.com/photo-1541963463532-d68292c34b19?auto=format&fit=crop&w=400&q=80",
-        date: "2024-01-21"
-    },
-    {
-        id: '3',
-        title: "Stranger Bond",
-        content: "Ask a stranger what their favorite memory is.",
-        image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80",
-        date: "2024-01-22"
-    },
-    {
-        id: '4',
-        title: "Unknown Path",
-        content: "Walk 100 steps in a direction you never go.",
-        image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80",
-        date: "2024-01-23"
-    }
-];
+        const uid = auth.currentUser?.uid;
+        if (uid) {
+            const unsub = PostService.subscribeToUserPosts(uid, (posts) => {
+                setUserPosts(posts);
+            });
+            return () => unsub();
+        }
+    }, []);
 
-const SPINNER_CHALLENGES = [
-    "Walk 10 minutes outside.",
-    "Do 20 pushups immediately.",
-    "Drink a full glass of water.",
-    "Send a nice text to a friend.",
-    "Meditate for 5 minutes.",
-    "Write down 3 goals for tomorrow.",
-    "Read 5 pages of a book.",
-    "Clean your workspace for 5 mins."
-];
-
-const SpinnerBadge = ({ size = 28 }: { size?: number }) => {
-    const color = "#FF3B30"; // Red as requested
-
-    return (
-        <View style={[styles.spinnerBadge, { width: size, height: size, borderRadius: size / 2, backgroundColor: color }]}>
-            <Svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24">
-                <Path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="#000" strokeWidth="3" strokeLinecap="round" />
-            </Svg>
-        </View>
-    );
-};
-
-export const ProfileScreen = ({ onBack, onLogout, spinsLeft, setSpinsLeft, activeChallenge, onChallengeReceived, userProfile, onUpdateProfile }: { onBack: () => void; onLogout: () => void; spinsLeft: number; setSpinsLeft: (count: number) => void; activeChallenge: string | null; onChallengeReceived: (challenge: string) => void; userProfile: UserProfile; onUpdateProfile: (updates: Partial<UserProfile>) => void }) => {
-    const [mode, setMode] = useState<'text' | 'grid'>('text');
-    const [activeView, setActiveView] = useState<'none' | 'spinner' | 'friends' | 'post'>('none');
-    const [currentChallenge, setCurrentChallenge] = useState<string | null>(activeChallenge);
-    const [proofMode, setProofMode] = useState(false);
-    const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const expandAnim = useRef(new Animated.Value(0)).current;
-
-
-
-    const handleSpinEnd = (result: string) => {
-        setSpinsLeft(Math.max(0, spinsLeft - 1));
-        setCurrentChallenge(result);
-        onChallengeReceived(result);
-        Animated.spring(expandAnim, { toValue: 1, useNativeDriver: false, tension: 50, friction: 8 }).start();
+    const openSettings = () => {
+        setShowSettings(true);
+        setSettingsPage('main');
+        Animated.spring(settingsAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+        }).start();
     };
 
-    const handleSend = () => {
-        setActiveView('friends');
-    };
-
-    const handleCamera = async () => {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Camera access is required.');
-            return;
-        }
-        const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-        });
-        if (!result.canceled) {
-            setCapturedImage(result.assets[0].uri);
-            setActiveView('post');
-        }
-    };
-
-    const handleGallery = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Gallery access is required.');
-            return;
-        }
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-        });
-        if (!result.canceled) {
-            setCapturedImage(result.assets[0].uri);
-            setActiveView('post');
-        }
+    const closeSettings = () => {
+        Animated.timing(settingsAnim, {
+            toValue: height,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => setShowSettings(false));
     };
 
     const handleUpdatePfp = async () => {
@@ -192,253 +121,652 @@ export const ProfileScreen = ({ onBack, onLogout, spinsLeft, setSpinsLeft, activ
             return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsEditing: true,
             aspect: [1, 1],
-            quality: 0.8,
+            quality: 0.5,
         });
         if (!result.canceled) {
-            onUpdateProfile({ photoURL: result.assets[0].uri });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            try {
+                const storageUrl = await PostService.uploadImage(result.assets[0].uri);
+                onUpdateProfile({ photoURL: storageUrl });
+                if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+                console.error("Error uploading PFP:", err);
+                Alert.alert("Error", "Could not upload profile picture.");
+            }
         }
     };
 
-    const handleTextProof = () => {
-        setCapturedImage(null);
-        setActiveView('post');
-    };
-
-    const handlePostSubmit = (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => {
-        console.log("Posted:", content, imageUri, target);
-        Alert.alert("Challenge Completed!", "Your proof has been uploaded.");
-        closeModal();
-    };
-
-    const closeModal = () => {
-        setActiveView('none');
-        setCurrentChallenge(null);
-        setProofMode(false);
-        setCapturedImage(null);
-        expandAnim.setValue(0);
-    };
-
-    const renderTextItem = ({ item }: { item: typeof COMPLETED_CHALLENGES[0] }) => (
-        <View style={styles.gridModeItem}>
-            <View style={styles.textModeGridItem}>
-                <Text style={styles.gridItemTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.gridItemContent} numberOfLines={4}>{item.content}</Text>
-                <Text style={styles.gridItemDate}>{item.date}</Text>
-            </View>
-        </View>
-    );
-
-    const renderGridItem = ({ item }: { item: typeof COMPLETED_CHALLENGES[0] }) => (
-        <View style={styles.gridModeItem}>
-            <Image source={{ uri: item.image }} style={styles.gridImage} />
-            <View style={styles.gridOverlay}>
-                <Text style={styles.gridText} numberOfLines={2}>{item.content}</Text>
-            </View>
-        </View>
+    const totalReactions = userPosts.reduce((sum, post) =>
+        sum + post.reactions.felt + post.reactions.thought + post.reactions.intrigued, 0
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, darkMode && styles.containerDark]}>
             <SafeAreaView style={styles.safeArea} edges={['top']}>
-                {/* Header Section */}
-                <View style={styles.header}>
-                    <Pressable onPress={onBack} style={styles.backButton}>
-                        <ArrowLeftIcon color="#FFF" />
+                {/* Header */}
+                <View style={[styles.header, darkMode && styles.headerDark]}>
+                    <Pressable onPress={onBack} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <BackIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
+                    </Pressable>
+                    <Text style={[styles.headerTitle, darkMode && styles.textDark]}>Profile</Text>
+                    <Pressable onPress={openSettings} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <SettingsIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
                     </Pressable>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                    {/* User Info Bar */}
-                    <View style={styles.userBar}>
-                        <View style={styles.avatarWrapper}>
-                            <Pressable onPress={handleUpdatePfp}>
-                                <Image
-                                    source={{ uri: userProfile.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80' }}
-                                    style={styles.largeAvatar}
-                                />
-                            </Pressable>
-                            <Pressable style={styles.largeBadgeWrapper} onPress={() => setActiveView('spinner')}>
-                                <SpinnerBadge size={28} />
-                            </Pressable>
-                        </View>
-                        <View style={styles.userTextInfo}>
-                            <Text style={styles.usernameText}>@{userProfile.username}</Text>
-                            <Text style={styles.statusLabel}>CREATIVE</Text>
+                <Animated.ScrollView
+                    showsVerticalScrollIndicator={false}
+                    style={{ opacity: fadeAnim }}
+                >
+                    {/* Profile Section */}
+                    <View style={[styles.profileSection, darkMode && styles.sectionDark]}>
+                        <Pressable onPress={handleUpdatePfp} style={styles.pfpContainer}>
+                            <Image
+                                source={{
+                                    uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL)
+                                        ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
+                                        : userProfile.photoURL
+                                }}
+                                style={styles.pfp}
+                            />
+                            <View style={styles.editBadge}>
+                                <Text style={styles.editBadgeText}>✎</Text>
+                            </View>
+                        </Pressable>
+
+                        <Text style={[styles.username, darkMode && styles.textDark]}>@{userProfile.username}</Text>
+                        <Text style={[styles.bio, darkMode && styles.bioDark]}>Creative Explorer</Text>
+
+                        <Pressable onPress={() => { }} style={styles.spinBtn}>
+                            <SpinnerIcon color="#FAF9F6" />
+                            <Text style={styles.spinBtnText}>SPIN WHEEL</Text>
+                            <View style={styles.spinBadge}>
+                                <Text style={styles.spinBadgeText}>{spinsLeft}</Text>
+                            </View>
+                        </Pressable>
+
+                        {/* Stats */}
+                        <View style={styles.statsRow}>
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
+                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
+                            </View>
+                            <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
+                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
+                            </View>
+                            <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
+                            <View style={styles.statItem}>
+                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{userProfile.level || 1}</Text>
+                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Level</Text>
+                            </View>
                         </View>
                     </View>
 
-                    {/* Content Tabs */}
-                    <View style={styles.tabsContainer}>
+                    {/* View Toggle */}
+                    <View style={styles.viewToggle}>
                         <Pressable
-                            style={[styles.tab, mode === 'text' && styles.activeTab]}
-                            onPress={() => setMode('text')}
+                            onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('grid'); }}
+                            style={[styles.toggleBtn, mode === 'grid' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
                         >
-                            <SwordIcon color={mode === 'text' ? "#FFF" : "rgba(255,255,255,0.4)"} />
+                            <GridIcon color={mode === 'grid' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
                         </Pressable>
                         <Pressable
-                            style={[styles.tab, mode === 'grid' && styles.activeTab]}
-                            onPress={() => setMode('grid')}
+                            onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('list'); }}
+                            style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
                         >
-                            <GridIcon color={mode === 'grid' ? "#FFF" : "rgba(255,255,255,0.4)"} />
+                            <ListIcon color={mode === 'list' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
                         </Pressable>
                     </View>
 
-                    {/* Challenges History */}
-                    <View style={styles.historyContainer}>
-                        <View style={styles.gridContainer}>
-                            {COMPLETED_CHALLENGES.map(item => (
-                                <View key={item.id}>
-                                    {mode === 'text' ? renderTextItem({ item }) : renderGridItem({ item })}
-                                </View>
-                            ))}
-                        </View>
+                    {/* Posts Grid/List */}
+                    <View style={styles.postsContainer}>
+                        {userPosts.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <SpinnerIcon color="#D1D1D1" />
+                                <Text style={styles.emptyText}>No posts yet</Text>
+                                <Text style={styles.emptySubtext}>Spin the wheel to start your journey!</Text>
+                            </View>
+                        ) : mode === 'grid' ? (
+                            <View style={styles.gridContainer}>
+                                {userPosts.map(post => (
+                                    <View key={post.id} style={styles.gridItem}>
+                                        {post.media ? (
+                                            <Image source={{ uri: post.media }} style={styles.gridImage} />
+                                        ) : (
+                                            <View style={[styles.gridImage, styles.gridTextOnly]}>
+                                                <Text style={styles.gridTextContent} numberOfLines={4}>{post.content}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                ))}
+                            </View>
+                        ) : (
+                            <View style={styles.listContainer}>
+                                {userPosts.map(post => (
+                                    <View key={post.id} style={[styles.listItem, darkMode && styles.listItemDark]}>
+                                        {post.media && <Image source={{ uri: post.media }} style={styles.listImage} />}
+                                        <View style={styles.listContent}>
+                                            {post.challenge && <Text style={styles.listChallenge}>{post.challenge}</Text>}
+                                            <Text style={[styles.listText, darkMode && styles.textDark]}>{post.content}</Text>
+                                            <View style={styles.listReactions}>
+                                                <Text style={styles.reactionCount}>❤️ {post.reactions.felt}</Text>
+                                                <Text style={styles.reactionCount}>💭 {post.reactions.thought}</Text>
+                                                <Text style={styles.reactionCount}>✨ {post.reactions.intrigued}</Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
                     </View>
-
-                    <AppButton type="secondary" onPress={onLogout} style={styles.logoutBtn}>
-                        <Text style={styles.logoutText}>LOGOUT</Text>
-                    </AppButton>
-                </ScrollView>
+                </Animated.ScrollView>
             </SafeAreaView>
 
-            {
-                activeView === 'spinner' && (
-                    <Pressable style={styles.spinModalOverlay} onPress={closeModal}>
-                        <Animated.View
-                            style={[
-                                styles.spinModalContent,
-                                {
-                                    transform: [{
-                                        scale: expandAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] })
-                                    }]
-                                }
-                            ]}
-                            onStartShouldSetResponder={() => true}
-                        >
-                            <Text style={styles.spinModalTitle}>SPIN TO REVEAL</Text>
-                            <SpinWheel
-                                options={SPINNER_CHALLENGES}
-                                onSpinEnd={handleSpinEnd}
-                                canSpin={true}
-                            />
+            {/* Settings Modal */}
+            {showSettings && (
+                <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: settingsAnim }] }]}>
+                    <View style={styles.solidModalBg} />
+                    <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill}>
+                        <SafeAreaView style={styles.modalContainer}>
+                            <View style={styles.modalHeader}>
+                                {settingsPage !== 'main' && (
+                                    <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                                        <BackIcon color="#4A4A4A" />
+                                    </Pressable>
+                                )}
+                                <Text style={styles.modalTitle}>
+                                    {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
+                                </Text>
+                                <Pressable onPress={closeSettings} style={styles.closeBtn}>
+                                    <Text style={styles.closeBtnText}>Done</Text>
+                                </Pressable>
+                            </View>
 
-                            {currentChallenge && (
-                                <Animated.View style={[styles.challengeExpand, { opacity: expandAnim, maxHeight: expandAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 500] }) }]}>
-                                    <Text style={styles.expandedLabel}>NEW CHALLENGE</Text>
-                                    <Text style={styles.expandedText}>{currentChallenge}</Text>
-
-                                    {!proofMode ? (
-                                        <View style={styles.actionRow}>
-                                            <Pressable style={styles.actionBtn} onPress={handleSend}>
-                                                <SendIcon color="#FFF" />
-                                                <Text style={styles.actionBtnText}>SEND</Text>
-                                            </Pressable>
-                                            <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
-                                                <CheckIcon color="#000" />
-                                                <Text style={[styles.actionBtnText, { color: '#000' }]}>DO IT</Text>
-                                            </Pressable>
+                            <ScrollView style={styles.settingsContent}>
+                                {settingsPage === 'main' && (
+                                    <>
+                                        <View style={styles.settingItem}>
+                                            <Text style={styles.settingLabel}>Dark Mode</Text>
+                                            <Switch value={darkMode} onValueChange={setDarkMode} />
                                         </View>
-                                    ) : (
-                                        <View style={styles.proofContainer}>
-                                            <View style={styles.proofIconsRow}>
-                                                <Pressable style={styles.proofIconBtn} onPress={handleCamera}>
-                                                    <CameraIcon color="#FFF" />
-                                                </Pressable>
-                                                <Pressable style={styles.proofIconBtn} onPress={handleGallery}>
-                                                    <GalleryIcon color="#FFF" />
-                                                </Pressable>
-                                                <Pressable style={styles.proofIconBtn} onPress={handleTextProof}>
-                                                    <TextIcon color="#FFF" />
-                                                </Pressable>
-                                            </View>
-                                            <Pressable style={styles.saveLaterBtn} onPress={closeModal}>
-                                                <ClockIcon color="rgba(255,255,255,0.5)" />
-                                                <Text style={styles.saveLaterText}>Save for later</Text>
-                                            </Pressable>
+                                        <View style={styles.settingItem}>
+                                            <Text style={styles.settingLabel}>Notifications</Text>
+                                            <Switch value={notifications} onValueChange={setNotifications} />
                                         </View>
-                                    )}
-                                </Animated.View>
-                            )}
+                                        <View style={styles.settingItem}>
+                                            <Text style={styles.settingLabel}>Sound Effects</Text>
+                                            <Switch value={soundEffects} onValueChange={setSoundEffects} />
+                                        </View>
 
+                                        <View style={styles.settingsDivider} />
 
-                        </Animated.View>
-                    </Pressable>
-                )
-            }
+                                        <Pressable onPress={() => setSettingsPage('privacy')} style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Privacy & Security</Text>
+                                        </Pressable>
+                                        <Pressable onPress={() => setSettingsPage('help')} style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Help & Support</Text>
+                                        </Pressable>
 
-            <Modal visible={activeView === 'friends'} animationType="slide" transparent>
-                <FriendsListScreen
-                    challenge={currentChallenge || ''}
-                    onClose={() => setActiveView('spinner')}
-                />
-            </Modal>
+                                        <View style={styles.settingsDivider} />
 
-            <Modal visible={activeView === 'post'} animationType="slide" transparent>
-                <PostCreationScreen
-                    challenge={currentChallenge || ''}
-                    imageUri={capturedImage}
-                    onClose={() => setActiveView('spinner')}
-                    onPost={handlePostSubmit}
-                />
-            </Modal>
-        </View >
+                                        <Pressable onPress={onLogout} style={styles.logoutButton}>
+                                            <Text style={styles.logoutButtonText}>Log Out</Text>
+                                        </Pressable>
+                                    </>
+                                )}
+
+                                {settingsPage === 'privacy' && (
+                                    <>
+                                        <Text style={styles.pageDescription}>Manage your privacy and security settings</Text>
+
+                                        <View style={styles.settingItem}>
+                                            <Text style={styles.settingLabel}>Private Account</Text>
+                                            <Switch value={false} onValueChange={() => { }} />
+                                        </View>
+                                        <View style={styles.settingItem}>
+                                            <Text style={styles.settingLabel}>Show Activity Status</Text>
+                                            <Switch value={true} onValueChange={() => { }} />
+                                        </View>
+
+                                        <View style={styles.settingsDivider} />
+
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Blocked Users</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Data & Storage</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Account Security</Text>
+                                        </Pressable>
+                                    </>
+                                )}
+
+                                {settingsPage === 'help' && (
+                                    <>
+                                        <Text style={styles.pageDescription}>Get help and support</Text>
+
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>FAQs</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Contact Support</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Report a Problem</Text>
+                                        </Pressable>
+
+                                        <View style={styles.settingsDivider} />
+
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Terms of Service</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Privacy Policy</Text>
+                                        </Pressable>
+                                        <Pressable style={styles.settingButton}>
+                                            <Text style={styles.settingButtonText}>Community Guidelines</Text>
+                                        </Pressable>
+
+                                        <View style={styles.settingsDivider} />
+
+                                        <View style={styles.versionInfo}>
+                                            <Text style={styles.versionText}>Spindare v0.61.30</Text>
+                                            <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
+                                        </View>
+                                    </>
+                                )}
+                            </ScrollView>
+                        </SafeAreaView>
+                    </BlurView>
+                </Animated.View>
+            )}
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
+    container: { flex: 1, backgroundColor: '#FAF9F6' },
+    containerDark: { backgroundColor: '#1C1C1E' },
     safeArea: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 60 },
-    backButton: { width: 44, height: 44, marginLeft: -10, justifyContent: 'center', alignItems: 'center' },
-    userBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 10, marginBottom: 40, gap: 24, width: '100%' },
-    avatarWrapper: { width: 100, height: 100, position: 'relative' },
-    largeAvatar: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#111' },
-    largeBadgeWrapper: { position: 'absolute', bottom: 2, right: 2, zIndex: 20 },
-    userTextInfo: { flex: 1, justifyContent: 'center' },
-    usernameText: { color: '#FFF', fontSize: 24, fontWeight: '900', marginBottom: 4 },
-    statusLabel: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '800', letterSpacing: 2 },
-    scrollContent: { paddingBottom: 60 },
-    tabsContainer: { flexDirection: 'row', marginBottom: 20, marginHorizontal: 20, borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-    tab: { flex: 1, alignItems: 'center', paddingVertical: 16 },
-    activeTab: { borderBottomWidth: 2, borderColor: '#FFF' },
-    historyContainer: { paddingHorizontal: 20 },
-    gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    gridModeItem: { width: (width - 52) / 2, height: (width - 52) / 2, borderRadius: 24, overflow: 'hidden', backgroundColor: '#0D0D0D', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-    textModeGridItem: { flex: 1, padding: 16, justifyContent: 'space-between' },
-    gridItemTitle: { color: '#FF3B30', fontSize: 9, fontWeight: '900', letterSpacing: 1.5, marginBottom: 4 },
-    gridItemContent: { color: '#FFF', fontSize: 13, fontWeight: '600', lineHeight: 18 },
-    gridItemDate: { color: 'rgba(255,255,255,0.2)', fontSize: 9, fontWeight: '700' },
-    gridImage: { width: '100%', height: '100%', opacity: 0.5 },
-    gridOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12, backgroundColor: 'rgba(0,0,0,0.5)' },
-    gridText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
-    spinnerBadge: { justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000', shadowColor: '#FF3B30', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 5 },
-    spinModalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 3000 },
-    spinModalContent: { width: width * 0.9, backgroundColor: '#0D0D0D', borderRadius: 40, padding: 32, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-    spinModalTitle: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 4, marginBottom: 32 },
-    challengeExpand: { width: '100%', marginTop: 24, padding: 20, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 24, overflow: 'hidden' },
-    expandedLabel: { color: '#FF3B30', fontSize: 8, fontWeight: '900', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
-    expandedText: { color: '#FFF', fontSize: 16, fontWeight: '600', textAlign: 'center', lineHeight: 24 },
-    spinModalFooter: { color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: '800', marginTop: 32, letterSpacing: 2 },
-    logoutBtn: { marginTop: 40, marginHorizontal: 20, height: 50, borderColor: 'rgba(255,59,48,0.2)', borderWidth: 1 },
-    logoutText: { color: '#FF3B30', fontWeight: '900', fontSize: 14, letterSpacing: 2 },
-    actionRow: { flexDirection: 'row', gap: 12, marginTop: 32, width: '100%' },
-    actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', gap: 8 },
-    primaryActionBtn: { backgroundColor: '#FFF' },
-    actionBtnText: { color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-    proofContainer: { marginTop: 32, width: '100%', alignItems: 'center' },
-    proofIconsRow: { flexDirection: 'row', gap: 24, marginBottom: 20 },
-    proofIconBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-    saveLaterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16 },
-    saveLaterText: { color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' },
-    textInputContainer: { width: '100%', marginTop: 24, gap: 12 },
-    textInput: { width: '100%', height: 100, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 16, color: '#FFF', fontSize: 14, textAlignVertical: 'top' },
-    textInputActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
-    textActionBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
-    textConfirmBtn: { backgroundColor: '#FFF' },
-    textActionLabel: { color: '#FFF', fontSize: 11, fontWeight: '800' },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    headerDark: {
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    headerBtn: { padding: 4 },
+    headerTitle: {
+        color: '#2C2C2C',
+        fontSize: 18,
+        fontWeight: '600',
+        letterSpacing: -0.4,
+    },
+    textDark: { color: '#FAF9F6' },
+    profileSection: {
+        alignItems: 'center',
+        paddingVertical: 40,
+        paddingHorizontal: 24,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    sectionDark: {
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    pfpContainer: {
+        width: 110,
+        height: 110,
+        borderRadius: 55,
+        marginBottom: 20,
+        position: 'relative',
+    },
+    pfp: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 55,
+        borderWidth: 3,
+        borderColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+    },
+    editBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#4A4A4A',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 3,
+        borderColor: '#FAF9F6',
+    },
+    editBadgeText: {
+        color: '#FAF9F6',
+        fontSize: 14,
+    },
+    username: {
+        color: '#2C2C2C',
+        fontSize: 24,
+        fontWeight: '700',
+        marginBottom: 6,
+        letterSpacing: -0.6,
+    },
+    bio: {
+        color: '#8E8E93',
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 24,
+    },
+    bioDark: { color: '#AEAEB2' },
+    spinBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        borderRadius: 28,
+        backgroundColor: '#4A4A4A',
+        marginBottom: 32,
+        shadowColor: '#4A4A4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+    },
+    spinBtnText: {
+        color: '#FAF9F6',
+        fontSize: 13,
+        fontWeight: '700',
+        letterSpacing: 1.5,
+    },
+    spinBadge: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: '#A7BBC7',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    spinBadgeText: {
+        color: '#FAF9F6',
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 32,
+    },
+    statItem: {
+        alignItems: 'center',
+    },
+    statValue: {
+        color: '#2C2C2C',
+        fontSize: 22,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    statLabel: {
+        color: '#8E8E93',
+        fontSize: 11,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    statDivider: {
+        width: 1,
+        height: 36,
+        backgroundColor: 'rgba(0,0,0,0.08)',
+    },
+    dividerDark: {
+        backgroundColor: 'rgba(255,255,255,0.15)',
+    },
+    viewToggle: {
+        flexDirection: 'row',
+        gap: 12,
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+    },
+    toggleBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.5)',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.05)',
+    },
+    toggleBtnActive: {
+        backgroundColor: '#FFF',
+        borderColor: 'rgba(0,0,0,0.08)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+    },
+    toggleBtnDark: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    postsContainer: {
+        paddingHorizontal: 24,
+        paddingBottom: 40,
+    },
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    gridItem: {
+        width: (width - 64) / 3,
+        height: (width - 64) / 3,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#FFF',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.04)',
+    },
+    gridImage: {
+        width: '100%',
+        height: '100%',
+    },
+    gridTextOnly: {
+        backgroundColor: '#F0F0F0',
+        padding: 8,
+        justifyContent: 'center',
+    },
+    gridTextContent: {
+        color: '#4A4A4A',
+        fontSize: 9,
+        fontWeight: '500',
+        lineHeight: 12,
+    },
+    listContainer: {
+        gap: 16,
+    },
+    listItem: {
+        borderRadius: 20,
+        backgroundColor: '#FFF',
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.04)',
+    },
+    listItemDark: {
+        backgroundColor: '#2C2C2E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    listImage: {
+        width: '100%',
+        height: width - 48,
+        backgroundColor: '#F0F0F0',
+    },
+    listContent: {
+        padding: 20,
+    },
+    listChallenge: {
+        color: '#8E8E93',
+        fontSize: 10,
+        fontWeight: '600',
+        letterSpacing: 1.5,
+        textTransform: 'uppercase',
+        marginBottom: 8,
+    },
+    listText: {
+        color: '#2C2C2C',
+        fontSize: 15,
+        fontWeight: '400',
+        lineHeight: 22,
+        marginBottom: 12,
+        letterSpacing: -0.2,
+    },
+    listReactions: {
+        flexDirection: 'row',
+        gap: 16,
+    },
+    reactionCount: {
+        color: '#8E8E93',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    emptyState: {
+        paddingVertical: 80,
+        alignItems: 'center',
+    },
+    emptyText: {
+        color: '#AEAEB2',
+        fontSize: 16,
+        fontWeight: '600',
+        marginTop: 16,
+    },
+    emptySubtext: {
+        color: '#D1D1D1',
+        fontSize: 13,
+        fontWeight: '400',
+        marginTop: 6,
+    },
+    modalOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 5000,
+    },
+    solidModalBg: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#FAF9F6',
+    },
+    modalContainer: {
+        flex: 1,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    backBtn: {
+        padding: 4,
+        position: 'absolute',
+        left: 20,
+        zIndex: 10,
+    },
+    modalTitle: {
+        color: '#2C2C2C',
+        fontSize: 18,
+        fontWeight: '700',
+        letterSpacing: -0.4,
+        flex: 1,
+        textAlign: 'center',
+    },
+    closeBtn: {
+        padding: 4,
+    },
+    closeBtnText: {
+        color: '#4A4A4A',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    settingsContent: {
+        flex: 1,
+        paddingHorizontal: 24,
+        paddingTop: 20,
+    },
+    pageDescription: {
+        color: '#8E8E93',
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 24,
+        lineHeight: 20,
+    },
+    settingItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.04)',
+    },
+    settingLabel: {
+        color: '#2C2C2C',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    settingsDivider: {
+        height: 1,
+        backgroundColor: 'rgba(0,0,0,0.08)',
+        marginVertical: 24,
+    },
+    settingButton: {
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.04)',
+    },
+    settingButtonText: {
+        color: '#4A4A4A',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    logoutButton: {
+        paddingVertical: 18,
+        borderRadius: 16,
+        backgroundColor: '#FFF',
+        alignItems: 'center',
+        marginTop: 20,
+        marginBottom: 40,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.08)',
+    },
+    logoutButtonText: {
+        color: '#FF3B30',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    versionInfo: {
+        alignItems: 'center',
+        paddingVertical: 32,
+    },
+    versionText: {
+        color: '#2C2C2C',
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    versionSubtext: {
+        color: '#AEAEB2',
+        fontSize: 12,
+        fontWeight: '500',
+    },
 });
-
-

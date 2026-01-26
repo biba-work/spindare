@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HobbyType, StudyFieldType } from '../services/AIService';
 import { AppButton } from '../components/atoms/AppButton';
@@ -42,68 +42,54 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
         setSelectedFields(prev => prev.includes(field) ? prev.filter(l => l !== field) : [...prev, field]);
     };
 
+    const handleSocialAuth = async (type: 'google' | 'apple') => {
+        try {
+            setError(null);
+            const profile = type === 'google' ? await AuthService.signInWithGoogle() : await AuthService.signInWithApple();
+            if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
+                setEmail(profile.email);
+                setUsername(profile.username);
+                setView('traits');
+            } else {
+                await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
+            }
+        } catch (err: any) {
+            setError(err.message);
+        }
+    };
+
     const renderWelcome = () => (
         <SafeAreaView style={styles.centerWrapper}>
             <View style={styles.heroContent}>
                 <View style={styles.logoCircle}>
-                    <Text style={styles.logoText}>S</Text>
+                    <Image source={require('../../assets/logo.png')} style={styles.mainLogoImage} resizeMode="contain" />
                 </View>
                 <Text style={styles.title}>SPINDARE</Text>
-                <Text style={styles.subtitle}>Curated challenges. Personalized for you.</Text>
+                <Text style={styles.subtitle}>Curated challenges.{"\n"}Personalized for you.</Text>
 
                 <View style={styles.btnStack}>
-                    <AppButton
-                        onPress={async () => {
-                            try {
-                                setError(null);
-                                const profile = await AuthService.signInWithGoogle();
-                                if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
-                                    setEmail(profile.email);
-                                    setUsername(profile.username);
-                                    setView('traits');
-                                } else {
-                                    await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
-                                }
-                            } catch (err: any) {
-                                setError(err.message);
-                            }
-                        }}
-                        style={styles.googleBtn}
-                    >
-                        <Ionicons name="logo-google" size={20} color="#000" />
+                    <AppButton onPress={() => handleSocialAuth('google')} style={styles.googleBtn}>
+                        <Ionicons name="logo-google" size={18} color="#4A4A4A" />
                         <Text style={styles.btnTextBlack}>Continue with Google</Text>
                     </AppButton>
 
-                    <AppButton
-                        onPress={async () => {
-                            try {
-                                setError(null);
-                                const profile = await AuthService.signInWithApple();
-                                if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
-                                    setEmail(profile.email);
-                                    setUsername(profile.username);
-                                    setView('traits');
-                                } else {
-                                    await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
-                                }
-                            } catch (err: any) {
-                                setError(err.message);
-                            }
-                        }}
-                        style={styles.appleBtn}
-                    >
-                        <Ionicons name="logo-apple" size={20} color="#FFF" />
+                    <AppButton onPress={() => handleSocialAuth('apple')} style={styles.appleBtn}>
+                        <Ionicons name="logo-apple" size={18} color="#FAF9F6" />
                         <Text style={styles.btnTextWhite}>Continue with Apple</Text>
                     </AppButton>
                 </View>
 
                 <View style={styles.altAuthLinks}>
                     <Pressable onPress={() => setView('login')}>
-                        <Text style={styles.altAuthText}>Login here via Email</Text>
+                        <Text style={styles.altAuthText}>Already have an account? <Text style={styles.altAuthTextHighlight}>Login</Text></Text>
                     </Pressable>
-                    <Text style={styles.altAuthOr}>or</Text>
+                    <View style={styles.altAuthOrContainer}>
+                        <View style={styles.altAuthLine} />
+                        <Text style={styles.altAuthOr}>or</Text>
+                        <View style={styles.altAuthLine} />
+                    </View>
                     <Pressable onPress={() => setView('signup')}>
-                        <Text style={styles.altAuthTextHighlight}>Sign Up now!</Text>
+                        <Text style={styles.altAuthText}>New here? <Text style={styles.altAuthTextHighlight}>Join Spindare</Text></Text>
                     </Pressable>
                 </View>
             </View>
@@ -113,16 +99,16 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
     const renderLoginForm = () => (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
             <SafeAreaView style={styles.container}>
-                <AppButton type="icon" onPress={() => setView('welcome')} style={styles.backButton}>
-                    <Text style={styles.backText}>←</Text>
-                </AppButton>
+                <Pressable onPress={() => setView('welcome')} style={styles.backButton}>
+                    <Text style={styles.backText}>← back</Text>
+                </Pressable>
                 <View style={styles.contentPadding}>
-                    <Text style={styles.formTitle}>LOG IN</Text>
+                    <Text style={styles.formTitle}>LOGIN</Text>
                     {error && <Text style={styles.errorText}>{error}</Text>}
                     <View style={styles.inputStack}>
                         <TextInput
                             placeholder="Email Address"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            placeholderTextColor="#C5C5C5"
                             style={styles.input}
                             autoCapitalize="none"
                             keyboardType="email-address"
@@ -131,7 +117,7 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                         />
                         <TextInput
                             placeholder="Password"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            placeholderTextColor="#C5C5C5"
                             style={styles.input}
                             secureTextEntry
                             value={password}
@@ -140,10 +126,10 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                     </View>
                     <AppButton
                         onPress={() => setView('traits')}
-                        style={(!email || !password) && styles.btnDisabled}
+                        style={[styles.mainActionBtn, (!email || !password) && styles.btnDisabled]}
                         disabled={!email || !password}
                     >
-                        <Text style={styles.btnTextBlack}>CONTINUE</Text>
+                        <Text style={styles.btnTextWhite}>CONTINUE</Text>
                     </AppButton>
                 </View>
             </SafeAreaView>
@@ -153,16 +139,16 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
     const renderSignupForm = () => (
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
             <SafeAreaView style={styles.container}>
-                <AppButton type="icon" onPress={() => setView('welcome')} style={styles.backButton}>
-                    <Text style={styles.backText}>←</Text>
-                </AppButton>
+                <Pressable onPress={() => setView('welcome')} style={styles.backButton}>
+                    <Text style={styles.backText}>← back</Text>
+                </Pressable>
                 <View style={styles.contentPadding}>
-                    <Text style={styles.formTitle}>SIGN UP</Text>
+                    <Text style={styles.formTitle}>JOIN</Text>
                     {error && <Text style={styles.errorText}>{error}</Text>}
                     <View style={styles.inputStack}>
                         <TextInput
-                            placeholder="Email Address"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            placeholder="Email"
+                            placeholderTextColor="#C5C5C5"
                             style={styles.input}
                             autoCapitalize="none"
                             keyboardType="email-address"
@@ -170,8 +156,8 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                             onChangeText={(t) => { setEmail(t); setError(null); }}
                         />
                         <TextInput
-                            placeholder="Pick a Username"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            placeholder="Username"
+                            placeholderTextColor="#C5C5C5"
                             style={styles.input}
                             autoCapitalize="none"
                             value={username}
@@ -179,7 +165,7 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                         />
                         <TextInput
                             placeholder="Password"
-                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            placeholderTextColor="#C5C5C5"
                             style={styles.input}
                             secureTextEntry
                             value={password}
@@ -188,10 +174,10 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                     </View>
                     <AppButton
                         onPress={() => setView('traits')}
-                        style={(!email || !username || !password) && styles.btnDisabled}
+                        style={[styles.mainActionBtn, (!email || !username || !password) && styles.btnDisabled]}
                         disabled={!email || !username || !password}
                     >
-                        <Text style={styles.btnTextBlack}>CREATE ACCOUNT</Text>
+                        <Text style={styles.btnTextWhite}>NEXT STEP</Text>
                     </AppButton>
                 </View>
             </SafeAreaView>
@@ -201,8 +187,8 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
     const renderTraits = () => (
         <SafeAreaView style={styles.container}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentPadding}>
-                <Text style={styles.formTitle}>YOUR DNA</Text>
-                <Text style={styles.formSubtitle}>AI will optimize your spins based on your background.</Text>
+                <Text style={styles.formTitle}>PROFILE</Text>
+                <Text style={styles.subtitle}>Select your DNA to personalize challenges.</Text>
 
                 <Text style={styles.groupLabel}>HOBBIES</Text>
                 <View style={styles.pillGrid}>
@@ -211,48 +197,43 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                             key={hobby}
                             style={[styles.pill, selectedHobbies.includes(hobby) && styles.pillActive]}
                             onPress={() => toggleHobby(hobby)}
-                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                         >
                             <Text style={[styles.pillText, selectedHobbies.includes(hobby) && styles.pillTextActive]}>{hobby}</Text>
                         </Pressable>
                     ))}
                 </View>
 
-                <Text style={styles.groupLabel}>STUDY FIELDS</Text>
+                <Text style={styles.groupLabel}>FIELDS</Text>
                 <View style={styles.pillGrid}>
                     {FIELDS.map(field => (
                         <Pressable
                             key={field}
                             style={[styles.pill, selectedFields.includes(field) && styles.pillActive]}
                             onPress={() => toggleField(field)}
-                            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                         >
                             <Text style={[styles.pillText, selectedFields.includes(field) && styles.pillTextActive]}>{field}</Text>
                         </Pressable>
                     ))}
                 </View>
 
-                <View style={{ marginTop: 40, paddingBottom: 60 }}>
+                <View style={{ marginTop: 60, paddingBottom: 60 }}>
                     <AppButton
                         onPress={async () => {
                             try {
                                 setIsSubmitting(true);
                                 setError(null);
-                                // This is now handled in the parent component via onComplete
-                                // but we pass all the auth info now
                                 await onComplete(email, password, username, selectedHobbies, selectedFields, view === 'signup');
                             } catch (err: any) {
                                 setError(err.message);
-                                // Go back to login/signup view if there's an auth error
                                 setView(view === 'signup' ? 'signup' : 'login');
                             } finally {
                                 setIsSubmitting(false);
                             }
                         }}
-                        style={(!(selectedHobbies.length > 0 && selectedFields.length > 0) || isSubmitting) && styles.btnDisabled}
+                        style={[styles.mainActionBtn, (!(selectedHobbies.length > 0 && selectedFields.length > 0) || isSubmitting) && styles.btnDisabled]}
                         disabled={!(selectedHobbies.length > 0 && selectedFields.length > 0) || isSubmitting}
                     >
-                        <Text style={styles.btnTextBlack}>{isSubmitting ? 'PREPARING...' : 'START SPINNING'}</Text>
+                        <Text style={styles.btnTextWhite}>{isSubmitting ? '...' : 'ENTER SPINDARE'}</Text>
                     </AppButton>
                 </View>
             </ScrollView>
@@ -270,62 +251,39 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
 };
 
 const styles = StyleSheet.create({
-    flexContainer: { flex: 1, backgroundColor: '#000' },
+    flexContainer: { flex: 1, backgroundColor: '#FAF9F6' },
     flex: { flex: 1 },
-    centerWrapper: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-    container: { flex: 1 },
-    contentPadding: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40 },
+    centerWrapper: { flex: 1, justifyContent: 'center', paddingHorizontal: 40 },
+    container: { flex: 1, backgroundColor: '#FAF9F6' },
+    contentPadding: { paddingHorizontal: 32, paddingTop: 48, paddingBottom: 40 },
     heroContent: { alignItems: 'center' },
-    logoCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-    logoText: { fontSize: 40, fontWeight: '900', color: '#000' },
-    title: { color: '#FFF', fontSize: 24, fontWeight: '900', letterSpacing: 8, textAlign: 'center', marginBottom: 12 },
-    subtitle: { color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginBottom: 48, lineHeight: 20 },
-    btnStack: { width: '100%', gap: 16 },
-    btnTextBlack: { color: '#000', fontSize: 14, fontWeight: '900' },
-    btnTextWhite: { color: '#FFF', fontSize: 14, fontWeight: '900' },
-    btnDisabled: { opacity: 0.1 },
-    accountLinks: { marginTop: 32, alignItems: 'center', gap: 8 },
-    accountText: { color: 'rgba(255,255,255,0.3)', fontSize: 12 },
-    redLink: { color: '#FF3B30', fontWeight: '900' },
-    whiteLink: { color: '#FFF', fontWeight: '900' },
-    backButton: { marginLeft: 16, marginTop: 16 },
-    backText: { color: '#FFF', fontSize: 20, fontWeight: '800' },
-    formTitle: { color: '#FFF', fontSize: 28, fontWeight: '900', marginBottom: 12, letterSpacing: 2 },
-    formSubtitle: { color: 'rgba(255,255,255,0.4)', fontSize: 14, marginBottom: 40 },
-    inputStack: { gap: 16, marginBottom: 40 },
-    input: { backgroundColor: '#0D0D0D', borderRadius: 16, padding: 18, color: '#FFF', fontSize: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-    groupLabel: { color: 'rgba(255,255,255,0.2)', fontSize: 11, fontWeight: '900', letterSpacing: 4, marginBottom: 16, marginTop: 16 },
-    pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', backgroundColor: '#0A0A0A' },
-    pillActive: { backgroundColor: '#FFF', borderColor: '#FFF' },
-    pillText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
-    pillTextActive: { color: '#000' },
-    errorText: { color: '#FF3B30', fontSize: 12, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
-    googleBtn: { backgroundColor: '#FFF' },
-    appleBtn: {
-        backgroundColor: '#000',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)'
-    },
-    altAuthLinks: {
-        marginTop: 32,
-        alignItems: 'center',
-        gap: 4,
-    },
-    altAuthText: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    altAuthOr: {
-        color: 'rgba(255,255,255,0.2)',
-        fontSize: 12,
-        marginVertical: 4,
-    },
-    altAuthTextHighlight: {
-        color: '#FFF',
-        fontSize: 15,
-        fontWeight: '800',
-        textDecorationLine: 'underline',
-    }
+    logoCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    mainLogoImage: { width: 40, height: 40 },
+    title: { color: '#4A4A4A', fontSize: 24, fontWeight: '500', letterSpacing: 8, textAlign: 'center', marginBottom: 12 },
+    subtitle: { color: '#8E8E93', fontSize: 14, textAlign: 'center', marginBottom: 48, lineHeight: 22, fontWeight: '400' },
+    btnStack: { width: '100%', gap: 12 },
+    googleBtn: { backgroundColor: '#FFF', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)', height: 50, borderRadius: 25, flexDirection: 'row', gap: 10, justifyContent: 'center', alignItems: 'center' },
+    appleBtn: { backgroundColor: '#4A4A4A', height: 50, borderRadius: 25, flexDirection: 'row', gap: 10, justifyContent: 'center', alignItems: 'center' },
+    btnTextBlack: { color: '#4A4A4A', fontSize: 13, fontWeight: '500' },
+    btnTextWhite: { color: '#FAF9F6', fontSize: 13, fontWeight: '500' },
+    btnDisabled: { opacity: 0.2 },
+    altAuthLinks: { marginTop: 40, alignItems: 'center', width: '100%' },
+    altAuthOrContainer: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: 20 },
+    altAuthLine: { flex: 1, height: 1, backgroundColor: 'rgba(0,0,0,0.03)' },
+    altAuthOr: { color: '#C5C5C5', fontSize: 11, paddingHorizontal: 12, fontWeight: '400' },
+    altAuthText: { color: '#8E8E93', fontSize: 13, fontWeight: '400' },
+    altAuthTextHighlight: { color: '#A7BBC7', fontWeight: '500' },
+    backButton: { padding: 20, paddingTop: 10 },
+    backText: { color: '#8E8E93', fontSize: 14, fontWeight: '400' },
+    formTitle: { color: '#4A4A4A', fontSize: 22, fontWeight: '500', marginBottom: 8, letterSpacing: 2 },
+    inputStack: { gap: 12, marginBottom: 32, marginTop: 24 },
+    input: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, color: '#4A4A4A', fontSize: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    mainActionBtn: { backgroundColor: '#4A4A4A', height: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center' },
+    groupLabel: { color: '#4A4A4A', fontSize: 10, fontWeight: '500', letterSpacing: 2, marginBottom: 16, marginTop: 32 },
+    pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)', backgroundColor: '#FFF' },
+    pillActive: { backgroundColor: '#FAF9F6', borderColor: '#A7BBC7' },
+    pillText: { color: '#AEAEB2', fontSize: 13, fontWeight: '400' },
+    pillTextActive: { color: '#4A4A4A', fontWeight: '500' },
+    errorText: { color: '#FF3B30', fontSize: 12, fontWeight: '400', marginBottom: 16, textAlign: 'center' },
 });

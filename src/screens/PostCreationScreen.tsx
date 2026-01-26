@@ -50,9 +50,9 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
     return (
         <View style={styles.fullScreen}>
             {Platform.OS === 'ios' ? (
-                <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+                <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
             ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(250, 249, 246, 0.95)' }]} />
             )}
 
             <SafeAreaView style={styles.safeArea}>
@@ -66,7 +66,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
                             <View style={styles.header}>
                                 <Pressable onPress={onClose} hitSlop={20}>
-                                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <Path d="M19 12H5M12 19l-7-7 7-7" />
                                     </Svg>
                                 </Pressable>
@@ -76,6 +76,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
                             <ScrollView
                                 showsVerticalScrollIndicator={false}
+                                style={{ flexGrow: 0 }}
                                 contentContainerStyle={styles.scrollContent}
                                 keyboardShouldPersistTaps="handled"
                             >
@@ -89,7 +90,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                         <Image source={{ uri: imageUri }} style={styles.image} />
                                         <Pressable style={styles.removeImageButton} onPress={removeImage}>
                                             <View style={styles.removeIconWrapper}>
-                                                <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <Path d="M18 6L6 18M6 6l12 12" />
                                                 </Svg>
                                             </View>
@@ -97,16 +98,17 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                     </View>
                                 )}
 
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Add a caption or thoughts..."
-                                    placeholderTextColor="rgba(255,255,255,0.2)"
-                                    multiline
-                                    value={content}
-                                    onChangeText={setContent}
-                                    maxLength={300}
-                                    autoFocus={!imageUri}
-                                />
+                                <View style={styles.inputContainer}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Add a caption or thoughts..."
+                                        placeholderTextColor="#C5C5C5"
+                                        multiline
+                                        value={content}
+                                        onChangeText={setContent}
+                                        maxLength={300}
+                                    />
+                                </View>
                             </ScrollView>
 
                             <View style={styles.actionFooter}>
@@ -115,8 +117,8 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                     style={[styles.actionBtn, styles.secondaryBtn, !isReady && styles.disabledBtn]}
                                     disabled={!isReady}
                                 >
-                                    <SendIcon color={isReady ? "#FFF" : "rgba(255,255,255,0.2)"} />
-                                    <Text style={[styles.actionText, !isReady && styles.disabledText]}>SEND TO FRIEND</Text>
+                                    <SendIcon color={isReady ? "#8E8E93" : "#AEAEB2"} />
+                                    <Text style={[styles.actionText, !isReady && styles.disabledText]}>SEND PRIVATELY</Text>
                                 </Pressable>
 
                                 <Pressable
@@ -137,37 +139,50 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
 const styles = StyleSheet.create({
     fullScreen: { flex: 1, backgroundColor: 'transparent' },
-    safeArea: { flex: 1, justifyContent: 'flex-end' },
+    safeArea: { flex: 1 },
     keyboardView: { flex: 1, justifyContent: 'flex-end' },
     container: {
-        backgroundColor: '#161618',
+        backgroundColor: '#FAF9F6',
         borderTopLeftRadius: 32,
         borderTopRightRadius: 32,
-        paddingHorizontal: 20,
-        paddingTop: 12,
-        paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-        height: height * 0.85,
+        paddingHorizontal: 24,
+        paddingTop: 24,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 25,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: 'rgba(0,0,0,0.03)',
         borderBottomWidth: 0,
+        width: '100%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.03,
+        shadowRadius: 20,
     },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 40, marginBottom: 15 },
-    headerTitle: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 3, opacity: 0.5 },
-    scrollContent: { paddingBottom: 20 },
-    challengeCard: { backgroundColor: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-    challengeLabel: { color: '#FF3B30', fontSize: 8, fontWeight: '900', letterSpacing: 2, marginBottom: 6 },
-    challengeText: { color: '#FFF', fontSize: 14, fontWeight: '500', lineHeight: 20 },
-    imageWrapper: { width: '100%', aspectRatio: 1.2, borderRadius: 20, overflow: 'hidden', marginBottom: 20, backgroundColor: '#111' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', letterSpacing: 2, textTransform: 'uppercase' },
+    scrollContent: { paddingVertical: 8 },
+    challengeCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 24, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    challengeLabel: { color: '#A7BBC7', fontSize: 9, fontWeight: '500', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+    challengeText: { color: '#4A4A4A', fontSize: 16, fontWeight: '400', lineHeight: 24 },
+    imageWrapper: { width: '100%', aspectRatio: 1.25, borderRadius: 24, overflow: 'hidden', marginBottom: 20, backgroundColor: '#F0F0F0' },
     image: { width: '100%', height: '100%' },
     removeImageButton: { position: 'absolute', top: 12, right: 12 },
-    removeIconWrapper: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-    input: { color: '#FFF', fontSize: 16, minHeight: 80, textAlignVertical: 'top', paddingTop: 0, marginBottom: 10 },
-    actionFooter: { flexDirection: 'row', gap: 10, paddingVertical: 15, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
-    actionBtn: { flex: 1, height: 50, borderRadius: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-    primaryBtn: { backgroundColor: '#FFF' },
-    secondaryBtn: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-    disabledBtn: { opacity: 0.3 },
-    primaryText: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
-    actionText: { color: '#FFF', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
-    disabledText: { color: 'rgba(255,255,255,0.5)' },
+    removeIconWrapper: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.85)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    inputContainer: {
+        backgroundColor: '#FFF',
+        borderRadius: 24,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.03)',
+        marginBottom: 10,
+    },
+    input: { color: '#4A4A4A', fontSize: 16, minHeight: 60, maxHeight: 150, textAlignVertical: 'top', lineHeight: 24 },
+    actionFooter: { flexDirection: 'row', gap: 12, paddingVertical: 20, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.03)' },
+    actionBtn: { flex: 1, height: 54, borderRadius: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    primaryBtn: { backgroundColor: '#4A4A4A' },
+    secondaryBtn: { backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#D1D1D1' },
+    disabledBtn: { opacity: 0.2 },
+    primaryText: { color: '#FAF9F6', fontWeight: '500', fontSize: 12, letterSpacing: 1 },
+    actionText: { color: '#8E8E93', fontWeight: '500', fontSize: 12, letterSpacing: 1 },
+    disabledText: { color: '#AEAEB2' },
 });

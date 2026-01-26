@@ -144,6 +144,27 @@ export const AuthService = {
         }
     },
 
+    // Reactive session listener
+    onSessionChange(callback: (user: User | null, profile: UserProfile | null) => void) {
+        return onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    if (userDoc.exists()) {
+                        callback(user, userDoc.data() as UserProfile);
+                    } else {
+                        callback(user, null);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user profile in listener:', error);
+                    callback(user, null);
+                }
+            } else {
+                callback(null, null);
+            }
+        });
+    },
+
     async logout() {
         try {
             await signOut(auth);

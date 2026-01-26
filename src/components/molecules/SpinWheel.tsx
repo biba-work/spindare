@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { View, StyleSheet, Dimensions, Animated, Platform } from 'react-native';
-import Svg, { G, Path, Circle, Text as SvgText } from 'react-native-svg';
+import { View, StyleSheet, Dimensions, Animated, Platform, Image } from 'react-native';
+import Svg, { G, Path, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
@@ -154,7 +154,7 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelPro
                 <Path
                     key={i}
                     d={`M${x1},${y1} L${x2},${y2}`}
-                    stroke={i % (count / 4) === 0 ? "#FFF" : "rgba(255,255,255,0.15)"}
+                    stroke={i % (count / 4) === 0 ? "#A7BBC7" : "rgba(0,0,0,0.05)"}
                     strokeWidth={i % (count / 4) === 0 ? "2" : "1"}
                 />
             );
@@ -175,17 +175,19 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelPro
                     renderToHardwareTextureAndroid={true}
                 >
                     <Svg width={WHEEL_SIZE} height={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS - 2} fill="#000" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS - 2} fill="#FFF" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
                         <G>{segments}</G>
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.3} fill="#000" stroke="#FFF" strokeWidth="2" />
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.25} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                        <SvgText x={RADIUS} y={RADIUS + 8} fill="#FFF" fontSize="24" fontWeight="900" textAnchor="middle">S</SvgText>
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.3} fill="#FFF" stroke="#4A4A4A" strokeWidth="1" />
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.25} fill="none" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
                     </Svg>
+                    <View style={styles.centerLogoContainer}>
+                        <Image source={require('../../../assets/logo.png')} style={styles.centerLogo} resizeMode="contain" />
+                    </View>
                 </Animated.View>
             </PanGestureHandler>
             <View style={styles.pointerContainer}>
                 <Svg width="20" height="30" viewBox="0 0 20 30">
-                    <Path d="M10 0 L20 10 L10 30 L0 10 Z" fill="#FFF" />
+                    <Path d="M10 0 L20 10 L10 30 L0 10 Z" fill="#4A4A4A" />
                 </Svg>
             </View>
         </View>
@@ -196,5 +198,7 @@ const styles = StyleSheet.create({
     container: { alignItems: 'center', justifyContent: 'center' },
     wheelContainer: { width: WHEEL_SIZE, height: WHEEL_SIZE, alignItems: 'center', justifyContent: 'center' },
     pointerContainer: { position: 'absolute', top: -10, zIndex: 500, alignItems: 'center' },
+    centerLogoContainer: { position: 'absolute', width: RADIUS * 0.45, height: RADIUS * 0.45, justifyContent: 'center', alignItems: 'center' },
+    centerLogo: { width: '100%', height: '100%' },
 });
 

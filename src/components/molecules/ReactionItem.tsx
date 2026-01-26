@@ -11,14 +11,12 @@ const FeltIcon = ({ active }: { active: boolean }) => {
 
     useEffect(() => {
         if (active) {
-            Animated.loop(
-                Animated.timing(anim, {
-                    toValue: 1,
-                    duration: 1500,
-                    easing: Easing.bezier(0.4, 0, 0.2, 1),
-                    useNativeDriver: true
-                })
-            ).start();
+            Animated.timing(anim, {
+                toValue: 1,
+                duration: 1000, // Faster single pulse
+                easing: Easing.bezier(0.4, 0, 0.2, 1),
+                useNativeDriver: true
+            }).start();
         } else {
             anim.setValue(0);
         }
@@ -66,12 +64,10 @@ const ThoughtIcon = ({ active }: { active: boolean }) => {
 
     useEffect(() => {
         if (active) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: false }),
-                    Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: false })
-                ])
-            ).start();
+            Animated.sequence([
+                Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: false }),
+                Animated.timing(anim, { toValue: 0.5, duration: 400, useNativeDriver: false })
+            ]).start();
         } else {
             anim.setValue(0);
         }
@@ -91,8 +87,8 @@ const ThoughtIcon = ({ active }: { active: boolean }) => {
                             styles.waveLine,
                             {
                                 height: active ? height : 6,
+                                backgroundColor: '#FFD60A',
                                 opacity: active ? 1 : 0.4,
-                                backgroundColor: active ? '#FFD60A' : 'rgba(255,255,255,0.4)',
                                 transform: [{ translateY: i % 2 === 0 ? 3 : -3 }]
                             }
                         ]}
@@ -108,9 +104,12 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
 
     useEffect(() => {
         if (active) {
-            Animated.loop(
-                Animated.timing(anim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
-            ).start();
+            Animated.timing(anim, {
+                toValue: 1,
+                duration: 1200,
+                easing: Easing.bezier(0.4, 0, 0.2, 1),
+                useNativeDriver: true
+            }).start();
         } else {
             anim.setValue(0);
         }
@@ -134,15 +133,28 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
                     <Circle cx="12" cy="4" r="1.5" fill="#5856D6" opacity={active ? 1 : 0.4} />
                     <Circle cx="12" cy="20" r="1.5" fill="#5856D6" opacity={active ? 1 : 0.4} />
                     <Path d="M4 12 L8 12 M16 12 L20 12" stroke="#5856D6" strokeWidth="2" strokeLinecap="round" opacity={active ? 0.8 : 0.3} />
-                    {active && <Circle cx="12" cy="12" r="1" fill="#FFF" />}
+                    {active && <Circle cx="12" cy="12" r="1" fill="#4A4A4A" />}
                 </Svg>
             </Animated.View>
         </View>
     );
 };
 
-export const ReactionItem = ({ type, count, active, onSelect }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void }) => {
+export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean }) => {
     const scale = useRef(new Animated.Value(1)).current;
+    const opacity = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (fadeOut) {
+            Animated.timing(opacity, {
+                toValue: 0,
+                duration: 800,
+                useNativeDriver: true
+            }).start();
+        } else {
+            opacity.setValue(1);
+        }
+    }, [fadeOut]);
 
     const handlePress = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -162,13 +174,21 @@ export const ReactionItem = ({ type, count, active, onSelect }: { type: 'felt' |
     };
 
     return (
-        <Pressable onPress={handlePress} style={styles.reactionBtn}>
-            <Animated.View style={[styles.iconBox, active && styles.iconBoxActive, { transform: [{ scale }] }]}>
+        <Pressable onPress={handlePress} style={styles.reactionBtn} disabled={fadeOut}>
+            <Animated.View style={[styles.iconBox, active && styles.iconBoxActive, { transform: [{ scale }], opacity }]}>
                 {renderIcon()}
             </Animated.View>
             <View style={styles.infoBox}>
-                <Text style={[styles.countText, active && styles.countTextActive]}>{count}</Text>
-                <Text style={[styles.label, active && styles.labelActive]}>{type.toUpperCase()}</Text>
+                {(isOwner || active) && (
+                    <Animated.View style={{ opacity }}>
+                        <Text style={[styles.countText, active && styles.countTextActive]}>
+                            {isOwner ? count : active ? '+1' : ''}
+                        </Text>
+                    </Animated.View>
+                )}
+                <Animated.View style={{ opacity }}>
+                    <Text style={[styles.label, active && styles.labelActive]}>{type.toUpperCase()}</Text>
+                </Animated.View>
             </View>
         </Pressable>
     );
@@ -177,49 +197,43 @@ export const ReactionItem = ({ type, count, active, onSelect }: { type: 'felt' |
 const styles = StyleSheet.create({
     reactionBtn: {
         alignItems: 'center',
-        marginVertical: 10,
+        marginVertical: 12,
     },
     iconBox: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: '#FFF',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.1)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E5E5E5',
     },
     iconBoxActive: {
-        borderColor: 'rgba(255,255,255,0.4)',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderColor: '#4A4A4A',
+        backgroundColor: '#FFF',
+        borderWidth: 1.5,
     },
     infoBox: {
         alignItems: 'center',
-        marginTop: 4,
+        marginTop: 6,
     },
     countText: {
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 11,
-        fontWeight: '800',
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 2,
+        color: '#9E9E9E',
+        fontSize: 12,
+        fontWeight: '500',
     },
     countTextActive: {
-        color: '#FFF',
+        color: '#4A4A4A',
     },
     label: {
-        color: 'rgba(255,255,255,0.3)',
-        fontSize: 7,
-        fontWeight: '900',
-        letterSpacing: 1,
+        color: '#AEAEB2',
+        fontSize: 8,
+        fontWeight: '500',
+        letterSpacing: 1.2,
     },
     labelActive: {
-        color: '#FFF',
+        color: '#4A4A4A',
     },
     thoughtContainer: {
         width: 24,
@@ -230,10 +244,10 @@ const styles = StyleSheet.create({
         gap: 3,
     },
     waveLine: {
-        width: 2.5,
+        width: 2,
         height: 8,
-        backgroundColor: '#FFD60A',
-        borderRadius: 1.5,
+        backgroundColor: '#D1D1D1',
+        borderRadius: 1,
     },
     intriguedBox: {
         width: 24,
@@ -243,9 +257,9 @@ const styles = StyleSheet.create({
     },
     glow: {
         position: 'absolute',
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
         backgroundColor: '#5856D6',
     },
     iconCenterer: {

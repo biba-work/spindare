@@ -9,9 +9,14 @@ import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
 import { UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
 import { AuthService } from '../services/AuthService';
+import { Post, PostService } from '../services/PostService';
+import { auth } from '../services/firebaseConfig';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import { PostCreationScreen } from './PostCreationScreen';
+import { UserProfileView } from './UserProfileView';
 
 const { width, height } = Dimensions.get('window');
 
@@ -56,8 +61,8 @@ export const MainFeedScreen = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [userProfile, setUserProfile] = useState<UserProfile>({
-        email: "example@spindare.com",
-        username: "example",
+        email: "rashica07@spindare.com",
+        username: "rashica07",
         hobbies: [],
         studyFields: [],
         xp: 0,
@@ -73,11 +78,16 @@ export const MainFeedScreen = () => {
     const [isProfileVisible, setIsProfileVisible] = useState(false);
     const [overlayType, setOverlayType] = useState<'saved' | 'notifications' | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [isPosting, setIsPosting] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [viewingProfile, setViewingProfile] = useState<{ userId: string; username: string; avatar: string } | null>(null);
 
     // Animations
     const searchExpandAnim = useRef(new Animated.Value(0)).current;
     const overlayAnim = useRef(new Animated.Value(height)).current;
     const badgeScale = useRef(new Animated.Value(0)).current;
+    const postTransitionAnim = useRef(new Animated.Value(height)).current;
 
     const scrollY = useRef(new Animated.Value(0)).current;
     const lastScrollY = useRef(0);
@@ -86,12 +96,14 @@ export const MainFeedScreen = () => {
     const isMiniHeaderHapticTriggered = useRef(false);
 
     useEffect(() => {
-        AuthService.getSession().then(({ isAuthenticated: authed, userProfile: profile }) => {
-            if (authed && profile) {
+        // Real-time session listener (The "Remember Me" logic)
+        const unsubscribeAuth = AuthService.onSessionChange(async (user, profile) => {
+            if (user && profile) {
                 setUserProfile(profile);
                 setIsAuthenticated(true);
+                PostService.seedFakeData();
 
-                // Handle Spinner State from Firebase
+                // Handle Spinner State
                 const now = Date.now();
                 const lastTs = profile.lastSpinTimestamp || 0;
                 const hoursPassed = (now - lastTs) / (1000 * 60 * 60);
@@ -102,9 +114,20 @@ export const MainFeedScreen = () => {
                 } else if (profile.spinsLeft !== undefined) {
                     setSpinsLeft(profile.spinsLeft);
                 }
+            } else {
+                setIsAuthenticated(false);
             }
             setIsLoading(false);
         });
+
+        const unsubscribeFeed = PostService.subscribeToFeed((updatedPosts) => {
+            setPosts(updatedPosts);
+        });
+
+        return () => {
+            unsubscribeAuth();
+            unsubscribeFeed();
+        };
     }, []);
 
     const updateSpins = async (newCount: number) => {
@@ -165,10 +188,79 @@ export const MainFeedScreen = () => {
         }
     };
 
-    const handleOverlayAction = (item: string, action: 'send' | 'snap') => {
-        setChallenge(item);
-        hideOverlay();
-        if (action === 'send') setIsSharing(true);
+    const showPostCreator = () => {
+        setIsPosting(true);
+        Animated.spring(postTransitionAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+        }).start();
+    };
+
+    const hidePostCreator = () => {
+        Animated.timing(postTransitionAnim, {
+            toValue: height,
+            duration: 400,
+            useNativeDriver: true,
+        }).start(() => setIsPosting(false));
+    };
+
+    const handleMediaAction = async (type: 'camera' | 'gallery' | 'text', itemChallenge: string) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setChallenge(itemChallenge);
+
+        if (type === 'camera') {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') return;
+            const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
+        } else if (type === 'gallery') {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') return;
+            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+            if (!result.canceled) {
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
+        } else {
+            setSelectedImage(null);
+            showPostCreator();
+        }
+    };
+
+    const handlePostSubmit = async (content: string, imageUri?: string | null) => {
+        hidePostCreator();
+        try {
+            await PostService.createPost(
+                userProfile.username,
+                userProfile.photoURL || '',
+                challenge || 'Inbox Challenge',
+                content,
+                imageUri || null
+            );
+        } catch (err) {
+            console.error("Error creating post from Inbox:", err);
+        }
+    };
+
+    const handleOverlayAction = (itemChallenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => {
+        if (action === 'send') {
+            setChallenge(itemChallenge);
+            hideOverlay();
+            setIsSharing(true);
+        } else {
+            // It's a media action (camera/gallery/text)
+            hideOverlay();
+            handleMediaAction(action, itemChallenge);
+        }
+    };
+
+    const handleProfilePress = (userId: string, username: string, avatar: string) => {
+        setViewingProfile({ userId, username, avatar });
     };
 
     const onScroll = (event: any) => {
@@ -207,17 +299,15 @@ export const MainFeedScreen = () => {
 
     const renderHeader = useMemo(() => (
         <View style={styles.spinSection}>
-            <Pressable onPress={() => setIsProfileVisible(true)} style={styles.pfpContainer}>
-                <Image
-                    source={{ uri: userProfile.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }}
-                    style={styles.mainPfp}
-                />
-            </Pressable>
-            <Text style={styles.mainUsername}>@{userProfile.username}</Text>
+            {/* Profile picture and username removed - now in top bar */}
         </View>
     ), [userProfile.username]);
 
-    if (isLoading) return <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><Text style={{ color: '#FFF' }}>LOADING...</Text></View>;
+    if (isLoading) return (
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Image source={require('../../assets/logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" />
+        </View>
+    );
 
     if (!isAuthenticated) return (
         <OnboardingScreen
@@ -244,20 +334,28 @@ export const MainFeedScreen = () => {
             <Animated.View style={[styles.headerContainer, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
                 <SafeAreaView style={styles.safeArea} edges={['top']}>
                     <View style={styles.header}>
-                        <AppButton type="icon" onPress={() => showOverlay('saved')} style={styles.navBtn}>
-                            <SavedIcon color="#FFF" />
-                            {savedChallenges.length > 0 && (
-                                <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
-                                    <Text style={styles.badgeText}>{savedChallenges.length}</Text>
-                                </Animated.View>
-                            )}
-                        </AppButton>
+                        <View style={styles.leftActions}>
+                            <Pressable onPress={() => setIsProfileVisible(true)} style={styles.topBarPfpContainer}>
+                                <Image
+                                    source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }}
+                                    style={styles.topBarPfp}
+                                />
+                            </Pressable>
+                            <AppButton type="icon" onPress={() => showOverlay('saved')} style={styles.navBtn}>
+                                <SavedIcon color="#4A4A4A" />
+                                {savedChallenges.length > 0 && (
+                                    <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
+                                        <Text style={styles.badgeText}>{savedChallenges.length}</Text>
+                                    </Animated.View>
+                                )}
+                            </AppButton>
+                        </View>
                         {!isSearching && <Text style={styles.logo}>SPINDARE</Text>}
                         <View style={styles.rightActions}>
-                            <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 24] }) }]}>
+                            <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 48] }) }]}>
                                 {isSearching ? (
                                     <View style={styles.searchInner}>
-                                        <TextInput autoFocus placeholder="Search" placeholderTextColor="rgba(255,255,255,0.3)" style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} />
+                                        <TextInput autoFocus placeholder="Search" placeholderTextColor="#C5C5C5" style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} />
                                         <Pressable
                                             onPress={() => toggleSearch(false)}
                                             style={styles.cancelBtn}
@@ -267,21 +365,29 @@ export const MainFeedScreen = () => {
                                         </Pressable>
                                     </View>
                                 ) : (
-                                    <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#FFF" /></AppButton>
+                                    <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#4A4A4A" /></AppButton>
                                 )}
                             </Animated.View>
-                            {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#FFF" /></AppButton>}
+                            {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#4A4A4A" /></AppButton>}
                         </View>
                     </View>
                 </SafeAreaView>
             </Animated.View>
 
             {/* Mini Slide Popup Header */}
-            <Animated.View style={[styles.miniHeader, { top: 0, transform: [{ translateY: miniHeaderVisible.interpolate({ inputRange: [0, 1], outputRange: [-200, 0] }) }] }]}>
-                <BlurView intensity={40} tint="dark" style={[styles.miniBlurWrapper, { paddingTop: insets.top }]}>
+            <Animated.View style={[styles.miniHeader, {
+                opacity: miniHeaderVisible,
+                transform: [{
+                    translateY: miniHeaderVisible.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-100, 0]
+                    })
+                }]
+            }]}>
+                <BlurView intensity={80} tint="light" style={[styles.miniBlurWrapper, { paddingTop: insets.top }]}>
                     <View style={styles.miniHeaderContent}>
                         <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
-                            <Image source={{ uri: userProfile.photoURL || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80" }} style={styles.miniPfp} />
+                            <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.miniPfp} />
                         </Pressable>
                         <Text style={styles.miniUsername}>@{userProfile.username}</Text>
                     </View>
@@ -290,14 +396,17 @@ export const MainFeedScreen = () => {
 
             <View style={styles.content}>
                 <FeedScreen
+                    posts={posts}
+                    currentUserId={auth.currentUser?.uid}
                     ListHeaderComponent={renderHeader}
                     onScroll={onScroll}
                     contentContainerStyle={{ paddingTop: 60 + insets.top }}
+                    onProfilePress={handleProfilePress}
                 />
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.45.5 (PRE-ALPHA TESTING)</Text>
+                <Text style={styles.versionText}>SPINDARE V0.61.30 (PRE-ALPHA TESTING)</Text>
             </View>
 
             {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
@@ -315,49 +424,122 @@ export const MainFeedScreen = () => {
                     />
                 </View>
             )}
+
+            {/* In-Feed Post Creator (for Inbox) */}
+            <Animated.View style={[styles.fullOverlay, { transform: [{ translateY: postTransitionAnim }] }]}>
+                {isPosting && (
+                    <PostCreationScreen
+                        challenge={challenge || ''}
+                        imageUri={selectedImage}
+                        onClose={hidePostCreator}
+                        onPost={handlePostSubmit}
+                    />
+                )}
+            </Animated.View>
+
+            <GenericOverlay
+                visible={overlayType !== null}
+                type={overlayType || 'saved'}
+                onClose={hideOverlay}
+                data={overlayType === 'saved' ? savedChallenges : []}
+                onAction={handleOverlayAction}
+                animation={overlayAnim}
+            />
+
+            {viewingProfile && (
+                <View style={styles.fullOverlay}>
+                    <UserProfileView
+                        userId={viewingProfile.userId}
+                        username={viewingProfile.username}
+                        avatar={viewingProfile.avatar}
+                        onBack={() => setViewingProfile(null)}
+                    />
+                </View>
+            )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#000' },
-    headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, overflow: 'hidden', backgroundColor: '#000' },
+    container: { flex: 1, backgroundColor: '#FAF9F6' },
+    headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, overflow: 'hidden', backgroundColor: '#FAF9F6' },
     safeArea: { zIndex: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: 60 },
-    logo: { color: '#FFF', fontSize: 13, fontWeight: '900', letterSpacing: 6, textAlign: 'center', position: 'absolute', left: 0, right: 0, zIndex: -1 },
+    leftActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    topBarPfpContainer: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
+    topBarPfp: { width: '100%', height: '100%' },
+    logo: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textAlign: 'center', position: 'absolute', left: 0, right: 0, zIndex: -1 },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     navBtn: { width: 48, height: 48, backgroundColor: 'transparent' },
-    badge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FF3B30', width: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
-    badgeText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+    badge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#A7BBC7', width: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
+    badgeText: { color: '#FAF9F6', fontSize: 8, fontWeight: '500' },
     searchOuter: { height: 48, justifyContent: 'center', overflow: 'hidden' },
-    searchInner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 24, paddingLeft: 16, paddingRight: 8, flex: 1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-    searchInput: { flex: 1, color: '#FFF', fontSize: 14, paddingVertical: 0 },
+    searchInner: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F0F0', borderRadius: 24, paddingLeft: 16, paddingRight: 8, flex: 1, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    searchInput: { flex: 1, color: '#4A4A4A', fontSize: 14, paddingVertical: 0 },
     cancelBtn: { paddingHorizontal: 12 },
-    cancelText: { color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700' },
+    cancelText: { color: '#8E8E93', fontSize: 12, fontWeight: '500' },
     content: { flex: 1 },
-    spinSection: { paddingTop: 40, paddingBottom: 24, alignItems: 'center' },
-    pfpContainer: { width: 120, height: 120, borderRadius: 60, padding: 4, backgroundColor: '#111', marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
-    mainPfp: { width: 112, height: 112, borderRadius: 56 },
-    mainUsername: { color: '#FFF', fontSize: 18, fontWeight: '900', marginBottom: 40 },
+    miniHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 3000,
+        overflow: 'hidden',
+    },
+    miniUsername: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: -0.2 },
+    spinSection: { paddingTop: 20, paddingBottom: 24, alignItems: 'center' },
     revealWrapper: { width: '100%', alignItems: 'center' },
-    revealPost: { width: width - 32, padding: 24, borderRadius: 32, backgroundColor: '#0D0D0D', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    revealPost: { width: width - 32, padding: 24, borderRadius: 32, backgroundColor: '#FFF', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 10 },
     postHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     postAvatarSmall: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
     postHeaderText: { justifyContent: 'center' },
-    postAuthor: { color: '#FFF', fontSize: 14, fontWeight: '800' },
-    postTime: { color: '#FF3B30', fontSize: 10, fontWeight: '900' },
-    postContent: { color: '#FFF', fontSize: 16, lineHeight: 24, marginBottom: 24, fontWeight: '500' },
+    postAuthor: { color: '#4A4A4A', fontSize: 14, fontWeight: '500' },
+    postTime: { color: '#A7BBC7', fontSize: 10, fontWeight: '400' },
+    postContent: { color: '#333333', fontSize: 16, lineHeight: 24, marginBottom: 24, fontWeight: '400' },
     postActionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 12 },
-    reactionItem: { flex: 1, alignItems: 'center' },
-    snapBtn: { flex: 1, height: 56, borderRadius: 28 },
-    snapText: { color: '#000', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
-    footer: { paddingVertical: 16, alignItems: 'center' },
-    versionText: { color: 'rgba(255,255,255,0.2)', fontSize: 9, fontWeight: '800', letterSpacing: 2 },
-    fullOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 2000 },
-    miniHeader: { position: 'absolute', left: 0, right: 0, zIndex: 1500, overflow: 'hidden' },
-    miniBlurWrapper: { paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.5)' },
-    miniHeaderContent: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-    miniPfpWrapper: { width: 50, height: 50, borderRadius: 25, marginBottom: 4 },
-    miniPfp: { width: 50, height: 50, borderRadius: 25 },
-    miniUsername: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+    postAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    postActionText: { color: '#8E8E93', fontSize: 12, fontWeight: '500' },
+    snapBtnWrapper: { width: '100%', paddingHorizontal: 20, paddingBottom: 100 },
+    snapBtn: { flex: 1, height: 56, borderRadius: 28, backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#D1D1D1' },
+    footer: { paddingVertical: 24, alignItems: 'center' },
+    versionText: { color: '#8E8E93', fontSize: 9, fontWeight: '400', letterSpacing: 2 },
+    fullOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 4000 },
+    navBar: {
+        flexDirection: 'row',
+        backgroundColor: '#FAF9F6',
+        paddingTop: 12,
+        paddingBottom: 28,
+        paddingHorizontal: 30,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.03)',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+    },
+    navItem: { alignItems: 'center', justifyContent: 'center', width: 44, height: 44 },
+    navItemActive: { opacity: 1 },
+    navIndicator: {
+        position: 'absolute',
+        bottom: -4,
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#A7BBC7',
+    },
+    miniBlurWrapper: {
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(167, 187, 199, 0.2)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+    },
+    miniHeaderContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 8, gap: 10 },
+    miniPfpWrapper: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
+    miniPfp: { width: '100%', height: '100%' },
 });

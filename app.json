@@ -2,12 +2,11 @@
   "expo": {
     "name": "spindare",
     "slug": "spindare",
-    "version": "1.0.0",
+    "version": "1.55.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "jsEngine": "hermes",
-    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -55,11 +54,12 @@
     "runtimeVersion": "1.0.0",
     "extra": {
       "eas": {
-        "projectId": "fa60657e-ef26-4b6f-ba81-bd4d5ebe08b9"
+        "projectId": "63795649-304c-41b9-aef2-72f39625676a"
       }
     },
+    "owner": "spindare",
     "updates": {
-      "url": "https://u.expo.dev/fa60657e-ef26-4b6f-ba81-bd4d5ebe08b9"
+      "url": "https://u.expo.dev/63795649-304c-41b9-aef2-72f39625676a"
     }
   }
 }

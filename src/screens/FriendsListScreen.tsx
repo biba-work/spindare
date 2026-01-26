@@ -84,9 +84,9 @@ export const FriendsListScreen = ({ onClose, challenge }: { onClose: () => void,
     return (
         <View style={styles.fullScreen}>
             {Platform.OS === 'ios' ? (
-                <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+                <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
             ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0c0c0e' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(250, 249, 246, 0.95)' }]} />
             )}
 
             <SafeAreaView style={styles.safeArea}>
@@ -123,123 +123,38 @@ export const FriendsListScreen = ({ onClose, challenge }: { onClose: () => void,
 };
 
 const styles = StyleSheet.create({
-    fullScreen: {
-        flex: 1,
-    },
-    safeArea: {
-        flex: 1,
-    },
-    container: {
-        flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 20,
-    },
-    headerTitle: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 4,
-        fontFamily: 'Inter_400Regular',
-    },
-    closeButton: {
-        padding: 4,
-    },
-    closeText: {
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: 12,
-        fontFamily: 'Inter_400Regular',
-    },
+    fullScreen: { flex: 1, backgroundColor: 'transparent' },
+    safeArea: { flex: 1 },
+    container: { flex: 1, backgroundColor: '#FAF9F6' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 32, paddingVertical: 24 },
+    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3 },
+    closeButton: { padding: 4 },
+    closeText: { color: '#A7BBC7', fontSize: 13, fontWeight: '500' },
     challengePreview: {
-        marginHorizontal: 24,
-        padding: 16,
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 16,
+        marginHorizontal: 32,
+        padding: 20,
+        backgroundColor: '#FFF',
+        borderRadius: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
-        marginBottom: 24,
+        borderColor: 'rgba(0,0,0,0.03)',
+        marginBottom: 32,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.02,
+        shadowRadius: 10,
     },
-    previewLabel: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 8,
-        fontWeight: '600',
-        letterSpacing: 2,
-        marginBottom: 4,
-    },
-    previewText: {
-        color: '#FFFFFF',
-        fontSize: 13,
-        fontFamily: 'Montserrat_400Regular',
-        fontStyle: 'italic',
-        opacity: 0.8,
-    },
-    listContent: {
-        paddingHorizontal: 24,
-        paddingBottom: 40,
-    },
-    friendRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    friendInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
-    avatarText: {
-        color: '#000000',
-        fontSize: 16,
-        fontWeight: '700',
-    },
-    nameContainer: {
-        justifyContent: 'center',
-    },
-    nameText: {
-        color: '#FFFFFF',
-        fontSize: 15,
-        fontWeight: '600',
-        fontFamily: 'Inter_400Regular',
-    },
-    usernameText: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 12,
-        fontFamily: 'Inter_400Regular',
-    },
-    sendButton: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-        minWidth: 80,
-        alignItems: 'center',
-    },
-    sentButton: {
-        backgroundColor: 'transparent',
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    sendButtonText: {
-        color: '#FFFFFF',
-        fontSize: 10,
-        fontWeight: '700',
-        letterSpacing: 1,
-    },
-    sentButtonText: {
-        color: 'rgba(255,255,255,0.4)',
-    },
+    previewLabel: { color: '#A7BBC7', fontSize: 8, fontWeight: '500', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
+    previewText: { color: '#4A4A4A', fontSize: 15, lineHeight: 22, fontWeight: '400' },
+    listContent: { paddingHorizontal: 32, paddingBottom: 40 },
+    friendRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    friendInfo: { flexDirection: 'row', alignItems: 'center' },
+    avatar: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginRight: 16, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
+    avatarText: { color: '#4A4A4A', fontSize: 16, fontWeight: '500' },
+    nameContainer: { justifyContent: 'center' },
+    nameText: { color: '#4A4A4A', fontSize: 15, fontWeight: '500' },
+    usernameText: { color: '#AEAEB2', fontSize: 12, fontWeight: '400', marginTop: 2 },
+    sendButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 25, backgroundColor: '#4A4A4A', minWidth: 90, alignItems: 'center' },
+    sentButton: { backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#D1D1D1' },
+    sendButtonText: { color: '#FAF9F6', fontSize: 11, fontWeight: '500', letterSpacing: 1 },
+    sentButtonText: { color: '#8E8E93' },
 });

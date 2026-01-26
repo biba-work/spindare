@@ -67,19 +67,21 @@ const styles = StyleSheet.create({
         minHeight: 48,
     },
     primary: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#4A4A4A',
         paddingHorizontal: 24,
     },
     secondary: {
-        backgroundColor: '#111',
+        backgroundColor: '#FAF9F6',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: '#D1D1D1',
         paddingHorizontal: 20,
     },
     icon: {
         width: 48,
         height: 48,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: '#FFF',
         borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.03)',
     },
 });
