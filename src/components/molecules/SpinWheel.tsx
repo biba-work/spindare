@@ -15,8 +15,13 @@ interface SpinWheelProps {
     onPress?: () => void;
 }
 
+import { useTheme } from '../../contexts/ThemeContext';
+
 export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelProps) => {
+    const { darkMode } = useTheme();
     const rotation = useRef(new Animated.Value(0)).current;
+
+    // ... existing refs ...
     const currentRotation = useRef(0);
     const lastAngle = useRef(0);
     const lastSegmentIndex = useRef(-1);
@@ -154,13 +159,13 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelPro
                 <Path
                     key={i}
                     d={`M${x1},${y1} L${x2},${y2}`}
-                    stroke={i % (count / 4) === 0 ? "#A7BBC7" : "rgba(0,0,0,0.05)"}
+                    stroke={i % (count / 4) === 0 ? "#A7BBC7" : (darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)")}
                     strokeWidth={i % (count / 4) === 0 ? "2" : "1"}
                 />
             );
         }
         return paths;
-    }, []);
+    }, [darkMode]);
 
     return (
         <View style={styles.container} onLayout={onLayout} ref={wheelRef}>
@@ -175,19 +180,19 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelPro
                     renderToHardwareTextureAndroid={true}
                 >
                     <Svg width={WHEEL_SIZE} height={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS - 2} fill="#FFF" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS - 2} fill={darkMode ? "#1C1C1E" : "#FFF"} stroke={darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.03)"} strokeWidth="1" />
                         <G>{segments}</G>
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.3} fill="#FFF" stroke="#4A4A4A" strokeWidth="1" />
-                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.25} fill="none" stroke="rgba(0,0,0,0.03)" strokeWidth="1" />
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.3} fill={darkMode ? "#2C2C2E" : "#FFF"} stroke={darkMode ? "#FFF" : "#4A4A4A"} strokeWidth="1" />
+                        <Circle cx={RADIUS} cy={RADIUS} r={RADIUS * 0.25} fill="none" stroke={darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.03)"} strokeWidth="1" />
                     </Svg>
                     <View style={styles.centerLogoContainer}>
-                        <Image source={require('../../../assets/logo.png')} style={styles.centerLogo} resizeMode="contain" />
+                        <Image source={require('../../../assets/logo.png')} style={[styles.centerLogo, darkMode && { tintColor: '#FFF' }]} resizeMode="contain" />
                     </View>
                 </Animated.View>
             </PanGestureHandler>
             <View style={styles.pointerContainer}>
                 <Svg width="20" height="30" viewBox="0 0 20 30">
-                    <Path d="M10 0 L20 10 L10 30 L0 10 Z" fill="#4A4A4A" />
+                    <Path d="M10 0 L20 10 L10 30 L0 10 Z" fill={darkMode ? "#FFF" : "#4A4A4A"} />
                 </Svg>
             </View>
         </View>

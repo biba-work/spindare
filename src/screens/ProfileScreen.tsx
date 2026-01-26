@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { UserProfile } from '../services/AIService';
@@ -9,6 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { Post } from '../services/PostService';
 import { auth } from '../services/firebaseConfig';
 import { BlurView } from 'expo-blur';
+import { SpinWheel } from '../components/molecules/SpinWheel';
 
 const { width, height } = Dimensions.get('window');
 
@@ -56,7 +59,11 @@ interface ProfileScreenProps {
     onChallengeReceived: (challenge: string) => void;
     userProfile: UserProfile;
     onUpdateProfile: (updates: Partial<UserProfile>) => void;
+    onShare?: () => void;
+    onOpenCamera?: () => void;
 }
+
+import { useTheme } from '../contexts/ThemeContext';
 
 export const ProfileScreen = ({
     onBack,
@@ -65,19 +72,45 @@ export const ProfileScreen = ({
     setSpinsLeft,
     activeChallenge,
     onChallengeReceived,
+
     userProfile,
-    onUpdateProfile
+    onUpdateProfile,
+    onShare,
+    onOpenCamera
 }: ProfileScreenProps) => {
     const [mode, setMode] = useState<'list' | 'grid'>('grid');
     const [showSettings, setShowSettings] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
+
+    // Global Theme
+    const { darkMode, toggleDarkMode } = useTheme();
+
     const [soundEffects, setSoundEffects] = useState(true);
     const [notifications, setNotifications] = useState(true);
     const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main');
     const [userPosts, setUserPosts] = useState<Post[]>([]);
 
+    const [showSpinner, setShowSpinner] = useState(false);
+    const [spinResult, setSpinResult] = useState<string | null>(null);
+
     const settingsAnim = useRef(new Animated.Value(height)).current;
+    const spinnerAnim = useRef(new Animated.Value(height)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    const SPIN_REWARDS = [
+        'Read 10 pages of a book 📚',
+        'Take a photo of something red 📸',
+        'Write a poem about rain ✍️',
+        'Do 10 pushups immediately 💪',
+        'Cook a healthy meal 🍳',
+        'Draw a self-portrait 🎨',
+        'Meditate for 5 minutes 🧘',
+        'Compliment a stranger 🤝',
+    ];
+
+    const [submissionStep, setSubmissionStep] = useState<'idle' | 'result' | 'choose' | 'preview_media' | 'input_text'>('idle');
+    const [mediaUri, setMediaUri] = useState<string | null>(null);
+    const [textContent, setTextContent] = useState('');
+    const [mediaAspectRatio, setMediaAspectRatio] = useState(1);
 
     useEffect(() => {
         Animated.timing(fadeAnim, {
@@ -94,6 +127,101 @@ export const ProfileScreen = ({
             return () => unsub();
         }
     }, []);
+
+    const openSpinner = () => {
+        if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setShowSpinner(true);
+        setSpinResult(null);
+        setSubmissionStep('idle');
+        setMediaUri(null);
+        setTextContent('');
+        Animated.spring(spinnerAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+        }).start();
+    };
+
+    const closeSpinner = () => {
+        Animated.timing(spinnerAnim, {
+            toValue: height,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => {
+            setShowSpinner(false);
+            setSpinResult(null);
+            setSubmissionStep('idle');
+        });
+    };
+
+    const handleSpinEnd = (result: string) => {
+        if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // No limit check
+        // if (spinsLeft > 0) setSpinsLeft(spinsLeft - 1);
+
+        setSpinResult(result);
+        setSubmissionStep('result');
+        onChallengeReceived(result);
+
+        // Haptic success
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+
+    const handleActionChoose = () => {
+        setSubmissionStep('choose');
+        // Layout animation for smoothness
+        // LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    };
+
+    const handleCamera = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Camera access is required.');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'], // Photo only as requested
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            setMediaUri(result.assets[0].uri);
+            setMediaAspectRatio(result.assets[0].width / result.assets[0].height);
+            setSubmissionStep('preview_media');
+        }
+    };
+
+    const handleGallery = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Gallery access is required.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            setMediaUri(result.assets[0].uri);
+            setMediaAspectRatio(result.assets[0].width / result.assets[0].height);
+            setSubmissionStep('preview_media');
+        }
+    };
+
+    const handleTextAction = () => {
+        setSubmissionStep('input_text');
+    };
+
+    const submitChallenge = () => {
+        // Here we would actually submit
+        Alert.alert("Submitted!", "Great job matching the challenge!");
+        closeSpinner();
+    };
 
     const openSettings = () => {
         setShowSettings(true);
@@ -143,248 +271,359 @@ export const ProfileScreen = ({
     );
 
     return (
-        <View style={[styles.container, darkMode && styles.containerDark]}>
-            <SafeAreaView style={styles.safeArea} edges={['top']}>
-                {/* Header */}
-                <View style={[styles.header, darkMode && styles.headerDark]}>
-                    <Pressable onPress={onBack} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <BackIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
-                    </Pressable>
-                    <Text style={[styles.headerTitle, darkMode && styles.textDark]}>Profile</Text>
-                    <Pressable onPress={openSettings} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <SettingsIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
-                    </Pressable>
-                </View>
-
-                <Animated.ScrollView
-                    showsVerticalScrollIndicator={false}
-                    style={{ opacity: fadeAnim }}
-                >
-                    {/* Profile Section */}
-                    <View style={[styles.profileSection, darkMode && styles.sectionDark]}>
-                        <Pressable onPress={handleUpdatePfp} style={styles.pfpContainer}>
-                            <Image
-                                source={{
-                                    uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL)
-                                        ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
-                                        : userProfile.photoURL
-                                }}
-                                style={styles.pfp}
-                            />
-                            <View style={styles.editBadge}>
-                                <Text style={styles.editBadgeText}>✎</Text>
-                            </View>
+        <View style={{ flex: 1 }}>
+            <ImageBackground
+                source={require('../../assets/guest_1.jpg')}
+                style={[styles.container, darkMode && styles.containerDark]}
+                blurRadius={40}
+            >
+                <LinearGradient
+                    colors={darkMode ? ['rgba(28,28,30,0.8)', 'rgba(28,28,30,0.95)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.95)']}
+                    style={StyleSheet.absoluteFill}
+                />
+                <SafeAreaView style={styles.safeArea} edges={['top']}>
+                    {/* Header */}
+                    <View style={[styles.header, darkMode && styles.headerDark]}>
+                        <Pressable onPress={onBack} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <BackIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
                         </Pressable>
-
-                        <Text style={[styles.username, darkMode && styles.textDark]}>@{userProfile.username}</Text>
-                        <Text style={[styles.bio, darkMode && styles.bioDark]}>Creative Explorer</Text>
-
-                        <Pressable onPress={() => { }} style={styles.spinBtn}>
-                            <SpinnerIcon color="#FAF9F6" />
-                            <Text style={styles.spinBtnText}>SPIN WHEEL</Text>
-                            <View style={styles.spinBadge}>
-                                <Text style={styles.spinBadgeText}>{spinsLeft}</Text>
-                            </View>
+                        <Text style={[styles.headerTitle, darkMode && styles.textDark]}>Profile</Text>
+                        <Pressable onPress={openSettings} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                            <SettingsIcon color={darkMode ? "#FAF9F6" : "#4A4A4A"} />
                         </Pressable>
+                    </View>
 
-                        {/* Stats */}
-                        <View style={styles.statsRow}>
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
-                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
-                            </View>
-                            <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
-                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
-                            </View>
-                            <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
-                            <View style={styles.statItem}>
-                                <Text style={[styles.statValue, darkMode && styles.textDark]}>{userProfile.level || 1}</Text>
-                                <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Level</Text>
+                    <Animated.ScrollView
+                        showsVerticalScrollIndicator={false}
+                        style={{ opacity: fadeAnim }}
+                    >
+                        {/* Profile Section */}
+                        <View style={[styles.profileSection, darkMode && styles.sectionDark]}>
+                            <Pressable onPress={handleUpdatePfp} style={styles.pfpContainer}>
+                                <Image
+                                    source={{
+                                        uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL)
+                                            ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
+                                            : userProfile.photoURL
+                                    }}
+                                    style={styles.pfp}
+                                />
+                                <View style={styles.editBadge}>
+                                    <Text style={styles.editBadgeText}>✎</Text>
+                                </View>
+                            </Pressable>
+
+                            <Text style={[styles.username, darkMode && styles.textDark]}>@{userProfile.username}</Text>
+                            <Text style={[styles.bio, darkMode && styles.bioDark]}>Creative Explorer</Text>
+
+                            <Pressable onPress={openSpinner} style={styles.spinBtn}>
+                                <SpinnerIcon color="#FAF9F6" />
+                                <Text style={styles.spinBtnText}>SPIN WHEEL</Text>
+
+                            </Pressable>
+
+                            {/* Stats */}
+                            <View style={styles.statsRow}>
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
+                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
+                                </View>
+                                <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
+                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
+                                </View>
+                                <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userProfile.level || 1}</Text>
+                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Level</Text>
+                                </View>
                             </View>
                         </View>
-                    </View>
 
-                    {/* View Toggle */}
-                    <View style={styles.viewToggle}>
-                        <Pressable
-                            onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('grid'); }}
-                            style={[styles.toggleBtn, mode === 'grid' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
-                        >
-                            <GridIcon color={mode === 'grid' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
-                        </Pressable>
-                        <Pressable
-                            onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('list'); }}
-                            style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
-                        >
-                            <ListIcon color={mode === 'list' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
-                        </Pressable>
-                    </View>
+                        {/* View Toggle */}
+                        <View style={styles.viewToggle}>
+                            <Pressable
+                                onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('grid'); }}
+                                style={[styles.toggleBtn, mode === 'grid' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
+                            >
+                                <GridIcon color={mode === 'grid' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
+                            </Pressable>
+                            <Pressable
+                                onPress={() => { if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMode('list'); }}
+                                style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive, darkMode && styles.toggleBtnDark]}
+                            >
+                                <ListIcon color={mode === 'list' ? (darkMode ? '#FAF9F6' : '#4A4A4A') : '#AEAEB2'} />
+                            </Pressable>
+                        </View>
 
-                    {/* Posts Grid/List */}
-                    <View style={styles.postsContainer}>
-                        {userPosts.length === 0 ? (
-                            <View style={styles.emptyState}>
-                                <SpinnerIcon color="#D1D1D1" />
-                                <Text style={styles.emptyText}>No posts yet</Text>
-                                <Text style={styles.emptySubtext}>Spin the wheel to start your journey!</Text>
-                            </View>
-                        ) : mode === 'grid' ? (
-                            <View style={styles.gridContainer}>
-                                {userPosts.map(post => (
-                                    <View key={post.id} style={styles.gridItem}>
-                                        {post.media ? (
-                                            <Image source={{ uri: post.media }} style={styles.gridImage} />
-                                        ) : (
-                                            <View style={[styles.gridImage, styles.gridTextOnly]}>
-                                                <Text style={styles.gridTextContent} numberOfLines={4}>{post.content}</Text>
+                        {/* Posts Grid/List */}
+                        <View style={styles.postsContainer}>
+                            {userPosts.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <SpinnerIcon color="#D1D1D1" />
+                                    <Text style={styles.emptyText}>No posts yet</Text>
+                                    <Text style={styles.emptySubtext}>Spin the wheel to start your journey!</Text>
+                                </View>
+                            ) : mode === 'grid' ? (
+                                <View style={styles.gridContainer}>
+                                    {userPosts.map(post => (
+                                        <View key={post.id} style={styles.gridItem}>
+                                            {post.media ? (
+                                                <Image source={{ uri: post.media }} style={styles.gridImage} />
+                                            ) : (
+                                                <View style={[styles.gridImage, styles.gridTextOnly]}>
+                                                    <Text style={styles.gridTextContent} numberOfLines={4}>{post.content}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
+                                <View style={styles.listContainer}>
+                                    {userPosts.map(post => (
+                                        <View key={post.id} style={[styles.listItem, darkMode && styles.listItemDark]}>
+                                            {post.media && <Image source={{ uri: post.media }} style={styles.listImage} />}
+                                            <View style={styles.listContent}>
+                                                {post.challenge && <Text style={styles.listChallenge}>{post.challenge}</Text>}
+                                                <Text style={[styles.listText, darkMode && styles.textDark]}>{post.content}</Text>
+                                                <View style={styles.listReactions}>
+                                                    <Text style={styles.reactionCount}>❤️ {post.reactions.felt}</Text>
+                                                    <Text style={styles.reactionCount}>💭 {post.reactions.thought}</Text>
+                                                    <Text style={styles.reactionCount}>✨ {post.reactions.intrigued}</Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    </Animated.ScrollView>
+                </SafeAreaView>
+
+                {/* Settings Modal */}
+                {showSettings && (
+                    <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: settingsAnim }] }]}>
+                        <View style={styles.solidModalBg} />
+                        <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill}>
+                            <SafeAreaView style={styles.modalContainer}>
+                                <View style={styles.modalHeader}>
+                                    {settingsPage !== 'main' && (
+                                        <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
+                                            <BackIcon color="#4A4A4A" />
+                                        </Pressable>
+                                    )}
+                                    <Text style={styles.modalTitle}>
+                                        {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
+                                    </Text>
+                                    <Pressable onPress={closeSettings} style={styles.closeBtn}>
+                                        <Text style={styles.closeBtnText}>Done</Text>
+                                    </Pressable>
+                                </View>
+
+                                <ScrollView style={styles.settingsContent}>
+                                    {settingsPage === 'main' && (
+                                        <>
+                                            <View style={styles.settingItem}>
+                                                <Text style={styles.settingLabel}>Dark Mode</Text>
+                                                <Switch value={darkMode} onValueChange={toggleDarkMode} />
+                                            </View>
+                                            <View style={styles.settingItem}>
+                                                <Text style={styles.settingLabel}>Notifications</Text>
+                                                <Switch value={notifications} onValueChange={setNotifications} />
+                                            </View>
+                                            <View style={styles.settingItem}>
+                                                <Text style={styles.settingLabel}>Sound Effects</Text>
+                                                <Switch value={soundEffects} onValueChange={setSoundEffects} />
+                                            </View>
+
+                                            <View style={styles.settingsDivider} />
+
+                                            <Pressable onPress={() => setSettingsPage('privacy')} style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Privacy & Security</Text>
+                                            </Pressable>
+                                            <Pressable onPress={() => setSettingsPage('help')} style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Help & Support</Text>
+                                            </Pressable>
+
+                                            <View style={styles.settingsDivider} />
+
+                                            <Pressable onPress={onLogout} style={styles.logoutButton}>
+                                                <Text style={styles.logoutButtonText}>Log Out</Text>
+                                            </Pressable>
+                                        </>
+                                    )}
+
+                                    {settingsPage === 'privacy' && (
+                                        <>
+                                            <Text style={styles.pageDescription}>Manage your privacy and security settings</Text>
+
+                                            <View style={styles.settingItem}>
+                                                <Text style={styles.settingLabel}>Private Account</Text>
+                                                <Switch value={false} onValueChange={() => { }} />
+                                            </View>
+                                            <View style={styles.settingItem}>
+                                                <Text style={styles.settingLabel}>Show Activity Status</Text>
+                                                <Switch value={true} onValueChange={() => { }} />
+                                            </View>
+
+                                            <View style={styles.settingsDivider} />
+
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Blocked Users</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Data & Storage</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Account Security</Text>
+                                            </Pressable>
+                                        </>
+                                    )}
+
+                                    {settingsPage === 'help' && (
+                                        <>
+                                            <Text style={styles.pageDescription}>Get help and support</Text>
+
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>FAQs</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Contact Support</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Report a Problem</Text>
+                                            </Pressable>
+
+                                            <View style={styles.settingsDivider} />
+
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Terms of Service</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Privacy Policy</Text>
+                                            </Pressable>
+                                            <Pressable style={styles.settingButton}>
+                                                <Text style={styles.settingButtonText}>Community Guidelines</Text>
+                                            </Pressable>
+
+                                            <View style={styles.settingsDivider} />
+
+                                            <View style={styles.versionInfo}>
+                                                <Text style={styles.versionText}>Spindare v0.61.38</Text>
+                                                <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
+                                            </View>
+                                        </>
+                                    )}
+                                </ScrollView>
+                            </SafeAreaView>
+                        </BlurView>
+                    </Animated.View>
+                )}
+
+                {/* Spinner Modal */}
+                {showSpinner && (
+                    <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: spinnerAnim }] }]}>
+                        <Pressable style={styles.spinnerModalBg} onPress={closeSpinner}>
+                            <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill}>
+                                <SafeAreaView style={styles.spinnerModalContainer}>
+                                    <View style={styles.spinnerModal}>
+                                        {submissionStep === 'idle' && (
+                                            <View style={styles.spinWheelContainer}>
+                                                <SpinWheel
+                                                    options={SPIN_REWARDS}
+                                                    onSpinEnd={handleSpinEnd}
+                                                    canSpin={true}
+                                                />
                                             </View>
                                         )}
-                                    </View>
-                                ))}
-                            </View>
-                        ) : (
-                            <View style={styles.listContainer}>
-                                {userPosts.map(post => (
-                                    <View key={post.id} style={[styles.listItem, darkMode && styles.listItemDark]}>
-                                        {post.media && <Image source={{ uri: post.media }} style={styles.listImage} />}
-                                        <View style={styles.listContent}>
-                                            {post.challenge && <Text style={styles.listChallenge}>{post.challenge}</Text>}
-                                            <Text style={[styles.listText, darkMode && styles.textDark]}>{post.content}</Text>
-                                            <View style={styles.listReactions}>
-                                                <Text style={styles.reactionCount}>❤️ {post.reactions.felt}</Text>
-                                                <Text style={styles.reactionCount}>💭 {post.reactions.thought}</Text>
-                                                <Text style={styles.reactionCount}>✨ {post.reactions.intrigued}</Text>
+
+                                        {submissionStep === 'result' && spinResult && (
+                                            <Animated.View style={styles.resultContainer}>
+                                                <Text style={styles.resultLabel}>CHALLENGE UNLOCKED</Text>
+                                                <Text style={styles.resultText}>{spinResult}</Text>
+
+                                                <View style={styles.actionRow}>
+                                                    <Pressable onPress={() => { onShare?.(); }} style={styles.actionBtnSecondary}>
+                                                        <Ionicons name="share-outline" size={24} color="#1C1C1E" />
+                                                        <Text style={styles.actionBtnTextSecondary}>Share</Text>
+                                                    </Pressable>
+
+                                                    <Pressable onPress={handleActionChoose} style={styles.actionBtnPrimary}>
+                                                        <Ionicons name="camera-outline" size={24} color="#FFF" />
+                                                        <Text style={styles.actionBtnTextPrimary}>Do It</Text>
+                                                    </Pressable>
+                                                </View>
+                                            </Animated.View>
+                                        )}
+
+                                        {submissionStep === 'choose' && (
+                                            <View style={styles.chooseContainer}>
+                                                <Text style={styles.miniChallengeText}>{spinResult}</Text>
+
+                                                <View style={styles.iconRow}>
+                                                    <Pressable onPress={handleCamera} style={styles.iconBtn}>
+                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
+                                                            <Ionicons name="camera" size={24} color="#1C1C1E" />
+                                                        </View>
+                                                        <Text style={styles.iconBtnText}>Camera</Text>
+                                                    </Pressable>
+
+                                                    <Pressable onPress={handleGallery} style={styles.iconBtn}>
+                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
+                                                            <Ionicons name="images" size={24} color="#1C1C1E" />
+                                                        </View>
+                                                        <Text style={styles.iconBtnText}>Gallery</Text>
+                                                    </Pressable>
+
+                                                    <Pressable onPress={handleTextAction} style={styles.iconBtn}>
+                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
+                                                            <Ionicons name="text" size={24} color="#1C1C1E" />
+                                                        </View>
+                                                        <Text style={styles.iconBtnText}>Text</Text>
+                                                    </Pressable>
+                                                </View>
                                             </View>
-                                        </View>
+                                        )}
+
+                                        {submissionStep === 'preview_media' && mediaUri && (
+                                            <View style={styles.mediaPreviewContainer}>
+                                                <Image
+                                                    source={{ uri: mediaUri }}
+                                                    style={[styles.mediaPreview, { aspectRatio: mediaAspectRatio }]}
+                                                    resizeMode="contain"
+                                                />
+                                                <Pressable onPress={submitChallenge} style={styles.submitBtn}>
+                                                    <Text style={styles.submitBtnText}>Post Challenge</Text>
+                                                </Pressable>
+                                            </View>
+                                        )}
+
+                                        {submissionStep === 'input_text' && (
+                                            <View style={{ width: '100%' }}>
+                                                <TextInput
+                                                    style={styles.textInputArea}
+                                                    multiline
+                                                    placeholder="Write your response..."
+                                                    placeholderTextColor="#8E8E93"
+                                                    value={textContent}
+                                                    onChangeText={setTextContent}
+                                                    autoFocus
+                                                />
+                                                <Pressable onPress={submitChallenge} style={styles.submitBtn}>
+                                                    <Text style={styles.submitBtnText}>Post Challenge</Text>
+                                                </Pressable>
+                                            </View>
+                                        )}
+
+
                                     </View>
-                                ))}
-                            </View>
-                        )}
-                    </View>
-                </Animated.ScrollView>
-            </SafeAreaView>
-
-            {/* Settings Modal */}
-            {showSettings && (
-                <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: settingsAnim }] }]}>
-                    <View style={styles.solidModalBg} />
-                    <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill}>
-                        <SafeAreaView style={styles.modalContainer}>
-                            <View style={styles.modalHeader}>
-                                {settingsPage !== 'main' && (
-                                    <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
-                                        <BackIcon color="#4A4A4A" />
-                                    </Pressable>
-                                )}
-                                <Text style={styles.modalTitle}>
-                                    {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
-                                </Text>
-                                <Pressable onPress={closeSettings} style={styles.closeBtn}>
-                                    <Text style={styles.closeBtnText}>Done</Text>
-                                </Pressable>
-                            </View>
-
-                            <ScrollView style={styles.settingsContent}>
-                                {settingsPage === 'main' && (
-                                    <>
-                                        <View style={styles.settingItem}>
-                                            <Text style={styles.settingLabel}>Dark Mode</Text>
-                                            <Switch value={darkMode} onValueChange={setDarkMode} />
-                                        </View>
-                                        <View style={styles.settingItem}>
-                                            <Text style={styles.settingLabel}>Notifications</Text>
-                                            <Switch value={notifications} onValueChange={setNotifications} />
-                                        </View>
-                                        <View style={styles.settingItem}>
-                                            <Text style={styles.settingLabel}>Sound Effects</Text>
-                                            <Switch value={soundEffects} onValueChange={setSoundEffects} />
-                                        </View>
-
-                                        <View style={styles.settingsDivider} />
-
-                                        <Pressable onPress={() => setSettingsPage('privacy')} style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Privacy & Security</Text>
-                                        </Pressable>
-                                        <Pressable onPress={() => setSettingsPage('help')} style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Help & Support</Text>
-                                        </Pressable>
-
-                                        <View style={styles.settingsDivider} />
-
-                                        <Pressable onPress={onLogout} style={styles.logoutButton}>
-                                            <Text style={styles.logoutButtonText}>Log Out</Text>
-                                        </Pressable>
-                                    </>
-                                )}
-
-                                {settingsPage === 'privacy' && (
-                                    <>
-                                        <Text style={styles.pageDescription}>Manage your privacy and security settings</Text>
-
-                                        <View style={styles.settingItem}>
-                                            <Text style={styles.settingLabel}>Private Account</Text>
-                                            <Switch value={false} onValueChange={() => { }} />
-                                        </View>
-                                        <View style={styles.settingItem}>
-                                            <Text style={styles.settingLabel}>Show Activity Status</Text>
-                                            <Switch value={true} onValueChange={() => { }} />
-                                        </View>
-
-                                        <View style={styles.settingsDivider} />
-
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Blocked Users</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Data & Storage</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Account Security</Text>
-                                        </Pressable>
-                                    </>
-                                )}
-
-                                {settingsPage === 'help' && (
-                                    <>
-                                        <Text style={styles.pageDescription}>Get help and support</Text>
-
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>FAQs</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Contact Support</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Report a Problem</Text>
-                                        </Pressable>
-
-                                        <View style={styles.settingsDivider} />
-
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Terms of Service</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Privacy Policy</Text>
-                                        </Pressable>
-                                        <Pressable style={styles.settingButton}>
-                                            <Text style={styles.settingButtonText}>Community Guidelines</Text>
-                                        </Pressable>
-
-                                        <View style={styles.settingsDivider} />
-
-                                        <View style={styles.versionInfo}>
-                                            <Text style={styles.versionText}>Spindare v0.61.30</Text>
-                                            <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
-                                        </View>
-                                    </>
-                                )}
-                            </ScrollView>
-                        </SafeAreaView>
-                    </BlurView>
-                </Animated.View>
-            )}
+                                </SafeAreaView>
+                            </BlurView>
+                        </Pressable>
+                    </Animated.View>
+                )}
+            </ImageBackground>
         </View>
     );
 };
@@ -768,5 +1007,171 @@ const styles = StyleSheet.create({
         color: '#AEAEB2',
         fontSize: 12,
         fontWeight: '500',
+    },
+    spinnerModalBg: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    spinnerModalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    spinnerModal: {
+        width: width - 32, // Wider modal
+        backgroundColor: '#FFF',
+        borderRadius: 32,
+        padding: 24,
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.3,
+        shadowRadius: 40,
+    },
+    spinnerTitle: {
+        display: 'none', // Hidden
+    },
+    spinnerSubtitle: {
+        display: 'none', // Hidden
+    },
+    spinWheelContainer: {
+        width: '100%',
+        aspectRatio: 1,
+        marginBottom: 20,
+        transform: [{ scale: 0.85 }] // Make it smaller
+    },
+    spinnerCloseBtn: {
+        paddingVertical: 12,
+    },
+    spinnerCloseBtnText: {
+        color: '#8E8E93',
+        fontSize: 16,
+        fontWeight: '500',
+    },
+    resultContainer: {
+        width: '100%',
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    resultLabel: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: '#AEAEB2',
+        letterSpacing: 2,
+        marginBottom: 8,
+    },
+    resultText: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#1C1C1E',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: 12,
+        width: '100%',
+        marginTop: 8,
+    },
+    actionBtnPrimary: {
+        flex: 1,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 20,
+        height: 56,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: 8,
+    },
+    actionBtnSecondary: {
+        flex: 1,
+        backgroundColor: '#F0F0F0',
+        borderRadius: 20,
+        height: 56,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: 8,
+    },
+    actionBtnTextPrimary: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    actionBtnTextSecondary: {
+        color: '#1C1C1E',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    // New Styles for Submission Flow
+    navBtn: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    chooseContainer: {
+        width: '100%',
+        alignItems: 'center',
+        paddingVertical: 20,
+    },
+    miniChallengeText: {
+        fontSize: 14,
+        color: '#8E8E93',
+        marginBottom: 32,
+        textAlign: 'center',
+        fontWeight: '500',
+    },
+    iconRow: {
+        flexDirection: 'row',
+        gap: 32,
+        justifyContent: 'center',
+        width: '100%',
+    },
+    iconBtn: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    iconBtnText: {
+        fontSize: 12,
+        color: '#1C1C1E',
+        fontWeight: '600',
+    },
+    mediaPreviewContainer: {
+        width: '100%',
+        alignItems: 'center',
+    },
+    mediaPreview: {
+        width: '100%',
+        borderRadius: 16,
+        backgroundColor: '#F0F0F0',
+        marginBottom: 20,
+    },
+    textInputArea: {
+        width: '100%',
+        minHeight: 120,
+        backgroundColor: '#F9F9F9',
+        borderRadius: 16,
+        padding: 16,
+        fontSize: 16,
+        color: '#1C1C1E',
+        marginBottom: 20,
+        textAlignVertical: 'top',
+    },
+    submitBtn: {
+        backgroundColor: '#1C1C1E',
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 24,
+        width: '100%',
+        alignItems: 'center',
+    },
+    submitBtnText: {
+        color: '#FFF',
+        fontSize: 16,
+        fontWeight: '700',
     },
 });

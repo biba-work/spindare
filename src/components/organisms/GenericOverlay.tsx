@@ -4,6 +4,7 @@ import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -76,6 +77,7 @@ const MOCK_CHALLENGES = {
 };
 
 export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation }: OverlayProps) => {
+    const { darkMode } = useTheme();
     const [subTab, setSubTab] = useState<'notifs' | 'inbox'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
 
@@ -91,11 +93,11 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
             return (
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     {MOCK_NOTIFS.map((notif, index) => (
-                        <Pressable key={notif.id} style={styles.notifCard}>
+                        <Pressable key={notif.id} style={[styles.notifCard, darkMode && styles.notifCardDark]}>
                             <View style={styles.notifDot} />
                             <View style={styles.notifContent}>
-                                <Text style={styles.notifText}>
-                                    <Text style={styles.notifUser}>@{notif.user}</Text> {notif.content}
+                                <Text style={[styles.notifText, darkMode && styles.notifTextDark]}>
+                                    <Text style={[styles.notifUser, darkMode && styles.notifUserDark]}>@{notif.user}</Text> {notif.content}
                                 </Text>
                                 <Text style={styles.notifTime}>{notif.time}</Text>
                             </View>
@@ -103,8 +105,8 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                     ))}
                     {MOCK_NOTIFS.length === 0 && (
                         <View style={styles.emptyState}>
-                            <BellIcon color="#D1D1D1" />
-                            <Text style={styles.emptyText}>All caught up!</Text>
+                            <BellIcon color={darkMode ? "#555" : "#D1D1D1"} />
+                            <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>All caught up!</Text>
                         </View>
                     )}
                 </ScrollView>
@@ -121,12 +123,12 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                 </View>
 
                 {MOCK_CHALLENGES.new.map(c => (
-                    <View key={c.id} style={styles.inboxCard}>
+                    <View key={c.id} style={[styles.inboxCard, darkMode && styles.inboxCardDark]}>
                         <View style={styles.inboxHeader}>
-                            <Text style={styles.inboxFrom}>@{c.from}</Text>
+                            <Text style={[styles.inboxFrom, darkMode && styles.inboxFromDark]}>@{c.from}</Text>
                             <Text style={styles.inboxTime}>{c.time}</Text>
                         </View>
-                        <Text style={styles.inboxChallenge}>"{c.challenge}"</Text>
+                        <Text style={[styles.inboxChallenge, darkMode && styles.inboxChallengeDark]}>"{c.challenge}"</Text>
 
                         {activeProofId === c.id ? (
                             <View style={styles.proofActions}>
@@ -156,14 +158,14 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                 </View>
 
                 {MOCK_CHALLENGES.pending.map(c => (
-                    <View key={c.id} style={[styles.inboxCard, { opacity: 0.6 }]}>
+                    <View key={c.id} style={[styles.inboxCard, { opacity: 0.6 }, darkMode && styles.inboxCardDark]}>
                         <View style={styles.inboxHeader}>
-                            <Text style={styles.inboxFrom}>@{c.from}</Text>
+                            <Text style={[styles.inboxFrom, darkMode && styles.inboxFromDark]}>@{c.from}</Text>
                             <View style={styles.statusPill}>
                                 <Text style={styles.statusText}>{c.status}</Text>
                             </View>
                         </View>
-                        <Text style={styles.inboxChallenge}>"{c.challenge}"</Text>
+                        <Text style={[styles.inboxChallenge, darkMode && styles.inboxChallengeDark]}>"{c.challenge}"</Text>
                         <Text style={styles.inboxTime}>{c.time}</Text>
                     </View>
                 ))}
@@ -173,26 +175,26 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
 
     return (
         <Animated.View style={[styles.overlay, { transform: [{ translateY: animation }] }]}>
-            <View style={styles.solidBackground} />
-            <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill}>
+            <View style={[styles.solidBackground, darkMode && styles.solidBackgroundDark]} />
+            <BlurView intensity={20} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill}>
                 <SafeAreaView style={styles.container}>
-                    <View style={styles.header}>
+                    <View style={[styles.header, darkMode && styles.headerDark]}>
                         <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                            <Text style={styles.closeText}>Close</Text>
+                            <Text style={[styles.closeText, darkMode && styles.closeTextDark]}>Close</Text>
                         </Pressable>
-                        <Text style={styles.title}>{type === 'saved' ? 'SAVED' : 'ACTIVITY'}</Text>
+                        <Text style={[styles.title, darkMode && styles.titleDark]}>{type === 'saved' ? 'SAVED' : 'ACTIVITY'}</Text>
                         <View style={styles.placeholder} />
                     </View>
 
                     {type === 'notifications' && (
                         <View style={styles.tabsContainer}>
-                            <Pressable onPress={() => handleTabSwitch('notifs')} style={[styles.tab, subTab === 'notifs' && styles.activeTab]}>
-                                <BellIcon color={subTab === 'notifs' ? '#4A4A4A' : '#AEAEB2'} />
-                                <Text style={[styles.tabLabel, subTab === 'notifs' && styles.activeTabLabel]}>Notifications</Text>
+                            <Pressable onPress={() => handleTabSwitch('notifs')} style={[styles.tab, darkMode && styles.tabDark, subTab === 'notifs' && (darkMode ? styles.activeTabDark : styles.activeTab)]}>
+                                <BellIcon color={subTab === 'notifs' ? (darkMode ? "#FFF" : "#4A4A4A") : "#AEAEB2"} />
+                                <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'notifs' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>Notifications</Text>
                             </Pressable>
-                            <Pressable onPress={() => handleTabSwitch('inbox')} style={[styles.tab, subTab === 'inbox' && styles.activeTab]}>
-                                <InboxIcon color={subTab === 'inbox' ? '#4A4A4A' : '#AEAEB2'} />
-                                <Text style={[styles.tabLabel, subTab === 'inbox' && styles.activeTabLabel]}>Inbox</Text>
+                            <Pressable onPress={() => handleTabSwitch('inbox')} style={[styles.tab, darkMode && styles.tabDark, subTab === 'inbox' && (darkMode ? styles.activeTabDark : styles.activeTab)]}>
+                                <InboxIcon color={subTab === 'inbox' ? (darkMode ? "#FFF" : "#4A4A4A") : "#AEAEB2"} />
+                                <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'inbox' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>Inbox</Text>
                             </Pressable>
                         </View>
                     )}
@@ -201,16 +203,16 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                         {type === 'saved' ? (
                             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                                 {data.map((item, index) => (
-                                    <View key={index} style={styles.savedCard}>
-                                        <Text style={styles.savedText}>{item}</Text>
+                                    <View key={index} style={[styles.savedCard, darkMode && styles.savedCardDark]}>
+                                        <Text style={[styles.savedText, darkMode && styles.savedTextDark]}>{item}</Text>
                                         <View style={styles.savedActions}>
-                                            <Pressable onPress={() => onAction(item, 'send')} style={styles.savedActionBtn}>
+                                            <Pressable onPress={() => onAction(item, 'send')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
                                                 <SendIcon color="#FAF9F6" />
                                             </Pressable>
-                                            <Pressable onPress={() => onAction(item, 'camera')} style={styles.savedActionBtn}>
+                                            <Pressable onPress={() => onAction(item, 'camera')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
                                                 <CameraIcon color="#FAF9F6" />
                                             </Pressable>
-                                            <Pressable onPress={() => onAction(item, 'gallery')} style={styles.savedActionBtn}>
+                                            <Pressable onPress={() => onAction(item, 'gallery')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
                                                 <GalleryIcon color="#FAF9F6" />
                                             </Pressable>
                                         </View>
@@ -218,7 +220,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                                 ))}
                                 {data.length === 0 && (
                                     <View style={styles.emptyState}>
-                                        <Text style={styles.emptyText}>No saved challenges yet.</Text>
+                                        <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>No saved challenges yet.</Text>
                                         <Text style={styles.emptySubtext}>Challenges you save will appear here</Text>
                                     </View>
                                 )}
@@ -454,5 +456,65 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '400',
         marginTop: 6,
+    },
+    // Dark Mode Styles
+    solidBackgroundDark: {
+        backgroundColor: '#1C1C1E',
+    },
+    headerDark: {
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    closeTextDark: {
+        color: '#FFF',
+    },
+    titleDark: {
+        color: '#FFF',
+    },
+    tabDark: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    activeTabDark: {
+        backgroundColor: '#2C2C2E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    tabLabelDark: {
+        color: '#8E8E93',
+    },
+    activeTabLabelDark: {
+        color: '#FFF',
+    },
+    notifCardDark: {
+        backgroundColor: 'rgba(44,44,46,0.8)',
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    notifTextDark: {
+        color: '#E5E5EA',
+    },
+    notifUserDark: {
+        color: '#FFF',
+    },
+    inboxCardDark: {
+        backgroundColor: 'rgba(44,44,46,0.9)',
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    inboxFromDark: {
+        color: '#FFF',
+    },
+    inboxChallengeDark: {
+        color: '#E5E5EA',
+    },
+    savedCardDark: {
+        backgroundColor: 'rgba(44,44,46,0.9)',
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    savedTextDark: {
+        color: '#E5E5EA',
+    },
+    savedActionBtnDark: {
+        backgroundColor: '#3A3A3C',
+    },
+    emptyTextDark: {
+        color: '#8E8E93',
     },
 });

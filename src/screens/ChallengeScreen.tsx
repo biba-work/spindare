@@ -75,10 +75,14 @@ import { FriendsListScreen } from './FriendsListScreen';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../contexts/ThemeContext';
+import { StatusBar } from 'expo-status-bar';
 
 export const ChallengeScreen = () => {
+    const { darkMode } = useTheme();
     const [challenge, setChallenge] = useState<string | null>(null);
     const [reaction, setReaction] = useState<string | null>(null);
+    // ... rest of state
     const [isFeedVisible, setIsFeedVisible] = useState(false);
     const [isPosting, setIsPosting] = useState(false);
     const [isSharing, setIsSharing] = useState(false);
@@ -87,7 +91,7 @@ export const ChallengeScreen = () => {
     const [proofMode, setProofMode] = useState(false);
     const [posts, setPosts] = useState<Post[]>([]);
 
-    // Mock user profile for now
+    // ... mocked user profile logic ...
     const userProfile: UserProfile = {
         username: "bibovic",
         email: "bibovic@example.com",
@@ -349,7 +353,8 @@ export const ChallengeScreen = () => {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, darkMode && styles.containerDark]}>
+            <StatusBar style={darkMode ? "light" : "dark"} />
             <SafeAreaView
                 style={styles.safeArea}
                 {...panResponder.panHandlers}
@@ -385,7 +390,7 @@ export const ChallengeScreen = () => {
                                 {Platform.OS === 'ios' ? (
                                     <BlurView
                                         intensity={40}
-                                        tint="light"
+                                        tint={darkMode ? "dark" : "light"}
                                         style={styles.blurCard}
                                     >
                                         <View style={styles.cardGradient}>
@@ -393,7 +398,7 @@ export const ChallengeScreen = () => {
                                         </View>
                                     </BlurView>
                                 ) : (
-                                    <View style={[styles.blurCard, { backgroundColor: '#FFF' }]}>
+                                    <View style={[styles.blurCard, { backgroundColor: darkMode ? '#1C1C1E' : '#FFF' }]}>
                                         <View style={styles.cardGradient}>
                                             {renderChallengeCardContent()}
                                         </View>
@@ -573,4 +578,5 @@ const styles = StyleSheet.create({
     postOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20 },
     shareOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 30 },
     mediaOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 },
+    containerDark: { backgroundColor: '#1C1C1E' },
 });

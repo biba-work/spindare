@@ -17,6 +17,8 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { PostCreationScreen } from './PostCreationScreen';
 import { UserProfileView } from './UserProfileView';
+import { StatusBar } from 'expo-status-bar';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -56,6 +58,10 @@ const UserIcon = ({ color }: { color: string }) => (
 
 export const MainFeedScreen = () => {
     const insets = useSafeAreaInsets();
+
+    // Global Theme
+    const { darkMode } = useTheme();
+
     // ... rest of the code stays the same ...
     // State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -330,8 +336,9 @@ export const MainFeedScreen = () => {
     );
 
     return (
-        <View style={styles.container}>
-            <Animated.View style={[styles.headerContainer, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
+        <View style={[styles.container, darkMode && styles.containerDark]}>
+            <StatusBar style={darkMode ? "light" : "dark"} />
+            <Animated.View style={[styles.headerContainer, darkMode && styles.headerContainerDark, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
                 <SafeAreaView style={styles.safeArea} edges={['top']}>
                     <View style={styles.header}>
                         <View style={styles.leftActions}>
@@ -341,8 +348,8 @@ export const MainFeedScreen = () => {
                                     style={styles.topBarPfp}
                                 />
                             </Pressable>
-                            <AppButton type="icon" onPress={() => showOverlay('saved')} style={styles.navBtn}>
-                                <SavedIcon color="#4A4A4A" />
+                            <AppButton type="icon" onPress={() => showOverlay('saved')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                <SavedIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
                                 {savedChallenges.length > 0 && (
                                     <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
                                         <Text style={styles.badgeText}>{savedChallenges.length}</Text>
@@ -350,12 +357,19 @@ export const MainFeedScreen = () => {
                                 )}
                             </AppButton>
                         </View>
-                        {!isSearching && <Text style={styles.logo}>SPINDARE</Text>}
+                        {!isSearching && <Text style={[styles.logo, darkMode && styles.logoDark]}>SPINDARE</Text>}
                         <View style={styles.rightActions}>
                             <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 48] }) }]}>
                                 {isSearching ? (
-                                    <View style={styles.searchInner}>
-                                        <TextInput autoFocus placeholder="Search" placeholderTextColor="#C5C5C5" style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} />
+                                    <View style={[styles.searchInner, darkMode && styles.searchInnerDark]}>
+                                        <TextInput
+                                            autoFocus
+                                            placeholder="Search"
+                                            placeholderTextColor={darkMode ? "#777" : "#C5C5C5"}
+                                            style={[styles.searchInput, darkMode && styles.searchInputDark]}
+                                            value={searchQuery}
+                                            onChangeText={setSearchQuery}
+                                        />
                                         <Pressable
                                             onPress={() => toggleSearch(false)}
                                             style={styles.cancelBtn}
@@ -365,10 +379,20 @@ export const MainFeedScreen = () => {
                                         </Pressable>
                                     </View>
                                 ) : (
-                                    <AppButton type="icon" onPress={() => toggleSearch(true)} style={styles.navBtn}><SearchIcon color="#4A4A4A" /></AppButton>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        <AppButton type="icon" onPress={() => showOverlay('notifications')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                            <NotificationIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                        </AppButton>
+                                        <AppButton type="icon" onPress={() => toggleSearch(true)} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                            <SearchIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                        </AppButton>
+                                        {/* User Icon to show Right Panel / Drawer if needed, or another action */}
+                                        <AppButton type="icon" onPress={() => { }} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                            <UserIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                        </AppButton>
+                                    </View>
                                 )}
                             </Animated.View>
-                            {!isSearching && <AppButton type="icon" onPress={() => showOverlay('notifications')} style={styles.navBtn}><NotificationIcon color="#4A4A4A" /></AppButton>}
                         </View>
                     </View>
                 </SafeAreaView>
@@ -406,10 +430,10 @@ export const MainFeedScreen = () => {
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.61.30 (PRE-ALPHA TESTING)</Text>
+                <Text style={styles.versionText}>SPINDARE V0.61.52 (PRE-ALPHA TESTING)</Text>
             </View>
 
-            {isSharing && <View style={styles.fullOverlay}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
+
             {isProfileVisible && (
                 <View style={styles.fullOverlay}>
                     <ProfileScreen
@@ -421,9 +445,22 @@ export const MainFeedScreen = () => {
                         onChallengeReceived={setChallenge}
                         userProfile={userProfile}
                         onUpdateProfile={handleUpdateProfile}
+                        onShare={() => setIsSharing(true)}
+                        onOpenCamera={() => {
+                            setIsProfileVisible(false);
+                            // Assuming there's a handleCamera function or similar, or just close profile so they can use the main FAB
+                            // But usually "Do It" should open camera directly. 
+                            // Since I don't see handleCamera exposed here easily (it might be handleImagePicker), 
+                            // I will just close profile for now and maybe trigger the FAB if I can?
+                            // Actually, let's just close profile so they are on the feed.
+                            // Better: if there's a way to open camera, use it. 
+                            // Looking at MainFeedScreen outline might help, but let's stick to simple handlers for now.
+                            handleMediaAction('camera', challenge || '');
+                        }}
                     />
                 </View>
             )}
+            {isSharing && <View style={[styles.fullOverlay, { zIndex: 6000 }]}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
 
             {/* In-Feed Post Creator (for Inbox) */}
             <Animated.View style={[styles.fullOverlay, { transform: [{ translateY: postTransitionAnim }] }]}>
@@ -542,4 +579,22 @@ const styles = StyleSheet.create({
     miniHeaderContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 8, gap: 10 },
     miniPfpWrapper: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
     miniPfp: { width: '100%', height: '100%' },
+    // Dark Mode Styles
+    containerDark: {
+        backgroundColor: '#1C1C1E',
+    },
+    headerContainerDark: {
+        backgroundColor: '#1C1C1E',
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    logoDark: {
+        color: '#FFF',
+    },
+    searchInnerDark: {
+        backgroundColor: '#2C2C2E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    searchInputDark: {
+        color: '#FFF',
+    },
 });

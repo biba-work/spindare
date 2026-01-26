@@ -11,6 +11,8 @@ import { AppConfig } from "./src/config/AppConfig";
 
 SplashScreen.preventAutoHideAsync();
 
+import { ThemeProvider } from "./src/contexts/ThemeContext";
+
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -32,17 +34,19 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={styles.container} onLayout={onLayoutRootView}>
-        <View style={styles.deadzone} />
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <StatusBar style="light" />
-          {AppConfig.useRestructuredLayout ? (
-            <MainFeedScreen />
-          ) : (
-            <ChallengeScreen />
-          )}
-        </GestureHandlerRootView>
-      </View>
+      <ThemeProvider>
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <View style={styles.deadzone} />
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <StatusBar style="light" />
+            {AppConfig.useRestructuredLayout ? (
+              <MainFeedScreen />
+            ) : (
+              <ChallengeScreen />
+            )}
+          </GestureHandlerRootView>
+        </View>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

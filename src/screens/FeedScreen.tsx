@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions, FlatList, Animated, Image, Pressabl
 import { ReactionItem } from '../components/molecules/ReactionItem';
 import { Post, PostService } from '../services/PostService';
 import * as Haptics from 'expo-haptics';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -10,9 +11,10 @@ interface PostItemProps {
     post: Post;
     isOwner?: boolean;
     onProfilePress?: (userId: string, username: string, avatar: string) => void;
+    darkMode: boolean;
 }
 
-const PostItem = ({ post, isOwner, onProfilePress }: PostItemProps) => {
+const PostItem = ({ post, isOwner, onProfilePress, darkMode }: PostItemProps) => {
     const [selected, setSelected] = useState<string | null>(null);
     const [isReacted, setIsReacted] = useState(false);
     const [fadeOut, setFadeOut] = useState(false);
@@ -82,7 +84,7 @@ const PostItem = ({ post, isOwner, onProfilePress }: PostItemProps) => {
     );
 
     return (
-        <View style={styles.postCard}>
+        <View style={[styles.postCard, darkMode && styles.postCardDark]}>
             <View style={styles.header}>
                 <Pressable
                     onPress={handleProfilePress}
@@ -100,7 +102,7 @@ const PostItem = ({ post, isOwner, onProfilePress }: PostItemProps) => {
                 </Pressable>
                 <View style={styles.headerInfo}>
                     <Pressable onPress={handleProfilePress} disabled={isOwner}>
-                        <Text style={styles.author}>
+                        <Text style={[styles.author, darkMode && styles.authorDark]}>
                             @{post.author} {isOwner && <Text style={styles.youLabel}>(You)</Text>}
                         </Text>
                     </Pressable>
@@ -114,16 +116,16 @@ const PostItem = ({ post, isOwner, onProfilePress }: PostItemProps) => {
                     <View style={[styles.reactionOverlay, isReacted && { opacity: 0 }]}>
                         {renderReactions()}
                     </View>
-                    <View style={[styles.textOverlay, isReacted && { paddingRight: 24 }]}>
+                    <View style={[styles.textOverlay, darkMode && styles.textOverlayDark, isReacted && { paddingRight: 24 }]}>
                         {post.challenge && <Text style={styles.challengeLabel}>{post.challenge}</Text>}
-                        <Text style={styles.contentText} numberOfLines={3}>{post.content}</Text>
+                        <Text style={[styles.contentText, darkMode && styles.contentTextDark]} numberOfLines={3}>{post.content}</Text>
                     </View>
                 </View>
             ) : (
                 <View style={[styles.textOnlyPost, isReacted && { opacity: 0.6 }]}>
                     <View style={styles.textOnlyBody}>
                         {post.challenge && <Text style={[styles.challengeLabel, { marginBottom: 8 }]}>{post.challenge}</Text>}
-                        <Text style={styles.textOnlyContent}>{post.content}</Text>
+                        <Text style={[styles.textOnlyContent, darkMode && styles.textOnlyContentDark]}>{post.content}</Text>
                     </View>
                     {!isReacted && (
                         <View style={styles.horizontalReactions}>
@@ -153,8 +155,10 @@ export const FeedScreen = ({
     contentContainerStyle,
     onProfilePress
 }: FeedScreenProps) => {
+    const { darkMode } = useTheme();
+
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, darkMode && styles.containerDark]}>
             <FlatList
                 data={posts}
                 keyExtractor={(item) => item.id}
@@ -163,6 +167,7 @@ export const FeedScreen = ({
                         post={item}
                         isOwner={item.userId === currentUserId}
                         onProfilePress={onProfilePress}
+                        darkMode={darkMode}
                     />
                 )}
                 contentContainerStyle={[styles.list, contentContainerStyle]}
@@ -177,12 +182,16 @@ export const FeedScreen = ({
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FAF9F6' },
+    containerDark: { backgroundColor: '#1C1C1E' }, // Dark background
     list: { paddingBottom: 100 },
     postCard: {
         marginBottom: 32,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.08)',
         paddingBottom: 32,
+    },
+    postCardDark: {
+        borderBottomColor: 'rgba(255,255,255,0.08)',
     },
     header: {
         flexDirection: 'row',
@@ -285,4 +294,12 @@ const styles = StyleSheet.create({
         paddingTop: 16,
         marginHorizontal: -4,
     },
+    // Dark Mode Styles
+    authorDark: { color: '#FFF' },
+    textOverlayDark: {
+        backgroundColor: 'rgba(28, 28, 30, 0.92)',
+        borderTopColor: 'rgba(255,255,255,0.05)',
+    },
+    contentTextDark: { color: '#E5E5EA' },
+    textOnlyContentDark: { color: '#E5E5EA' },
 });

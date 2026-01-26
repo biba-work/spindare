@@ -1,6 +1,6 @@
 {
   "name": "spindare",
-  "version": "0.45.5",
+  "version": "0.61.52",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -13,6 +13,7 @@
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
     "@google/generative-ai": "^0.24.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "^55.0.0-preview.5",
     "expo-blur": "~55.0.1",
     "expo-camera": "~55.0.1",
@@ -20,6 +21,7 @@
     "expo-font": "~55.0.1",
     "expo-haptics": "~55.0.1",
     "expo-image-picker": "~55.0.1",
+    "expo-linear-gradient": "~55.0.1",
     "expo-splash-screen": "~55.0.1",
     "expo-status-bar": "~55.0.1",
     "expo-updates": "~55.0.3",
