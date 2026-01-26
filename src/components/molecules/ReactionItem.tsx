@@ -99,7 +99,12 @@ const ThoughtIcon = ({ active }: { active: boolean }) => {
     );
 };
 
+import { useTheme } from '../../contexts/ThemeContext';
+
 const IntriguedIcon = ({ active }: { active: boolean }) => {
+    // ... existing hook logic ...
+    const { darkMode } = useTheme();
+    // ... animation logic ...
     const anim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -133,7 +138,7 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
                     <Circle cx="12" cy="4" r="1.5" fill="#5856D6" opacity={active ? 1 : 0.4} />
                     <Circle cx="12" cy="20" r="1.5" fill="#5856D6" opacity={active ? 1 : 0.4} />
                     <Path d="M4 12 L8 12 M16 12 L20 12" stroke="#5856D6" strokeWidth="2" strokeLinecap="round" opacity={active ? 0.8 : 0.3} />
-                    {active && <Circle cx="12" cy="12" r="1" fill="#4A4A4A" />}
+                    {active && <Circle cx="12" cy="12" r="1" fill={darkMode ? "#FFF" : "#4A4A4A"} />}
                 </Svg>
             </Animated.View>
         </View>
@@ -141,6 +146,7 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
 };
 
 export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean }) => {
+    const { darkMode } = useTheme();
     const scale = useRef(new Animated.Value(1)).current;
     const opacity = useRef(new Animated.Value(1)).current;
 
@@ -175,19 +181,32 @@ export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }
 
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn} disabled={fadeOut}>
-            <Animated.View style={[styles.iconBox, active && styles.iconBoxActive, { transform: [{ scale }], opacity }]}>
+            <Animated.View style={[
+                styles.iconBox,
+                darkMode && styles.iconBoxDark,
+                active && (darkMode ? styles.iconBoxActiveDark : styles.iconBoxActive),
+                { transform: [{ scale }], opacity }
+            ]}>
                 {renderIcon()}
             </Animated.View>
             <View style={styles.infoBox}>
                 {(isOwner || active) && (
                     <Animated.View style={{ opacity }}>
-                        <Text style={[styles.countText, active && styles.countTextActive]}>
+                        <Text style={[
+                            styles.countText,
+                            darkMode && styles.countTextDark,
+                            active && (darkMode ? styles.countTextActiveDark : styles.countTextActive)
+                        ]}>
                             {isOwner ? count : active ? '+1' : ''}
                         </Text>
                     </Animated.View>
                 )}
                 <Animated.View style={{ opacity }}>
-                    <Text style={[styles.label, active && styles.labelActive]}>{type.toUpperCase()}</Text>
+                    <Text style={[
+                        styles.label,
+                        darkMode && styles.labelDark,
+                        active && (darkMode ? styles.labelActiveDark : styles.labelActive)
+                    ]}>{type.toUpperCase()}</Text>
                 </Animated.View>
             </View>
         </Pressable>
@@ -209,9 +228,18 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#E5E5E5',
     },
+    iconBoxDark: {
+        backgroundColor: '#2C2C2E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
     iconBoxActive: {
         borderColor: '#4A4A4A',
         backgroundColor: '#FFF',
+        borderWidth: 1.5,
+    },
+    iconBoxActiveDark: {
+        borderColor: '#FFF',
+        backgroundColor: '#2C2C2E',
         borderWidth: 1.5,
     },
     infoBox: {
@@ -223,18 +251,22 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500',
     },
+    countTextDark: { color: '#8E8E93' },
     countTextActive: {
         color: '#4A4A4A',
     },
+    countTextActiveDark: { color: '#FFF' },
     label: {
         color: '#AEAEB2',
         fontSize: 8,
         fontWeight: '500',
         letterSpacing: 1.2,
     },
+    labelDark: { color: '#8E8E93' },
     labelActive: {
         color: '#4A4A4A',
     },
+    labelActiveDark: { color: '#FFF' },
     thoughtContainer: {
         width: 24,
         height: 24,

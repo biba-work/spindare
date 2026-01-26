@@ -404,51 +404,51 @@ export const ProfileScreen = ({
                 {/* Settings Modal */}
                 {showSettings && (
                     <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: settingsAnim }] }]}>
-                        <View style={styles.solidModalBg} />
-                        <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill}>
+                        <View style={[styles.solidModalBg, darkMode && styles.solidModalBgDark]} />
+                        <BlurView intensity={40} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill}>
                             <SafeAreaView style={styles.modalContainer}>
-                                <View style={styles.modalHeader}>
+                                <View style={[styles.modalHeader, darkMode && styles.modalHeaderDark]}>
                                     {settingsPage !== 'main' && (
                                         <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
-                                            <BackIcon color="#4A4A4A" />
+                                            <BackIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
                                         </Pressable>
                                     )}
-                                    <Text style={styles.modalTitle}>
+                                    <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>
                                         {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
                                     </Text>
                                     <Pressable onPress={closeSettings} style={styles.closeBtn}>
-                                        <Text style={styles.closeBtnText}>Done</Text>
+                                        <Text style={[styles.closeBtnText, darkMode && styles.closeBtnTextDark]}>Done</Text>
                                     </Pressable>
                                 </View>
 
                                 <ScrollView style={styles.settingsContent}>
                                     {settingsPage === 'main' && (
                                         <>
-                                            <View style={styles.settingItem}>
-                                                <Text style={styles.settingLabel}>Dark Mode</Text>
+                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Dark Mode</Text>
                                                 <Switch value={darkMode} onValueChange={toggleDarkMode} />
                                             </View>
-                                            <View style={styles.settingItem}>
-                                                <Text style={styles.settingLabel}>Notifications</Text>
+                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Notifications</Text>
                                                 <Switch value={notifications} onValueChange={setNotifications} />
                                             </View>
-                                            <View style={styles.settingItem}>
-                                                <Text style={styles.settingLabel}>Sound Effects</Text>
+                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Sound Effects</Text>
                                                 <Switch value={soundEffects} onValueChange={setSoundEffects} />
                                             </View>
 
-                                            <View style={styles.settingsDivider} />
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable onPress={() => setSettingsPage('privacy')} style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Privacy & Security</Text>
+                                            <Pressable onPress={() => setSettingsPage('privacy')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy & Security</Text>
                                             </Pressable>
-                                            <Pressable onPress={() => setSettingsPage('help')} style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Help & Support</Text>
+                                            <Pressable onPress={() => setSettingsPage('help')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Help & Support</Text>
                                             </Pressable>
 
-                                            <View style={styles.settingsDivider} />
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable onPress={onLogout} style={styles.logoutButton}>
+                                            <Pressable onPress={onLogout} style={[styles.logoutButton, darkMode && styles.logoutButtonDark]}>
                                                 <Text style={styles.logoutButtonText}>Log Out</Text>
                                             </Pressable>
                                         </>
@@ -456,61 +456,61 @@ export const ProfileScreen = ({
 
                                     {settingsPage === 'privacy' && (
                                         <>
-                                            <Text style={styles.pageDescription}>Manage your privacy and security settings</Text>
+                                            <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Manage your privacy and security settings</Text>
 
-                                            <View style={styles.settingItem}>
-                                                <Text style={styles.settingLabel}>Private Account</Text>
+                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Private Account</Text>
                                                 <Switch value={false} onValueChange={() => { }} />
                                             </View>
-                                            <View style={styles.settingItem}>
-                                                <Text style={styles.settingLabel}>Show Activity Status</Text>
+                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Show Activity Status</Text>
                                                 <Switch value={true} onValueChange={() => { }} />
                                             </View>
 
-                                            <View style={styles.settingsDivider} />
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Blocked Users</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Blocked Users</Text>
                                             </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Data & Storage</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Data & Storage</Text>
                                             </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Account Security</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Account Security</Text>
                                             </Pressable>
                                         </>
                                     )}
 
                                     {settingsPage === 'help' && (
                                         <>
-                                            <Text style={styles.pageDescription}>Get help and support</Text>
+                                            <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Get help and support</Text>
 
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>FAQs</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>FAQs</Text>
                                             </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Contact Support</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Contact Support</Text>
                                             </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Report a Problem</Text>
-                                            </Pressable>
-
-                                            <View style={styles.settingsDivider} />
-
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Terms of Service</Text>
-                                            </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Privacy Policy</Text>
-                                            </Pressable>
-                                            <Pressable style={styles.settingButton}>
-                                                <Text style={styles.settingButtonText}>Community Guidelines</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Report a Problem</Text>
                                             </Pressable>
 
-                                            <View style={styles.settingsDivider} />
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
+
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Terms of Service</Text>
+                                            </Pressable>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy Policy</Text>
+                                            </Pressable>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Community Guidelines</Text>
+                                            </Pressable>
+
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
                                             <View style={styles.versionInfo}>
-                                                <Text style={styles.versionText}>Spindare v0.61.38</Text>
+                                                <Text style={[styles.versionText, darkMode && styles.textDark]}>Spindare v0.61.38</Text>
                                                 <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
                                             </View>
                                         </>
@@ -592,6 +592,14 @@ export const ProfileScreen = ({
                                                     source={{ uri: mediaUri }}
                                                     style={[styles.mediaPreview, { aspectRatio: mediaAspectRatio }]}
                                                     resizeMode="contain"
+                                                />
+                                                <TextInput
+                                                    style={[styles.textInputArea, darkMode && { backgroundColor: '#2C2C2E', color: '#FFF' }]}
+                                                    placeholder="Add a caption..."
+                                                    placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
+                                                    value={textContent}
+                                                    onChangeText={setTextContent}
+                                                    multiline
                                                 />
                                                 <Pressable onPress={submitChallenge} style={styles.submitBtn}>
                                                     <Text style={styles.submitBtnText}>Post Challenge</Text>
@@ -1174,4 +1182,18 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
     },
+    // Dark Mode for Settings
+    solidModalBgDark: { backgroundColor: '#1C1C1E' },
+    modalTitleDark: { color: '#FFF' },
+    closeBtnTextDark: { color: '#FFF' },
+    modalHeaderDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+    settingLabelDark: { color: '#FFF' },
+    settingButtonTextDark: { color: '#FFF' },
+    settingsDividerDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
+    settingItemDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+    logoutButtonDark: {
+        backgroundColor: '#2C2C2E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    pageDescriptionDark: { color: '#8E8E93' },
 });
