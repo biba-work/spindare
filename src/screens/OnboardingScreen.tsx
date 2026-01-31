@@ -132,29 +132,98 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
             setIsSubmitting(true);
             try {
                 // We pass empty arrays for login, they will be fetched from profile
-                await onComplete(email, password, '', [], [], false);
+                await onComplete(email.trim(), password, '', [], [], false);
             } catch (err: any) {
                 setError(err.message || 'Login failed');
                 setIsSubmitting(false);
             }
         } else {
             // Signup flow -> Go to traits
-            if (!email || !password || !username) {
-                setError('Please fill in all fields');
+            const trimmedEmail = email.trim().toLowerCase();
+            const trimmedUsername = username.trim();
+
+            // Log for debugging
+            console.log('Signup Continue pressed with:', { email, trimmedEmail, username: trimmedUsername, password: password ? '[set]' : '[empty]' });
+
+            if (!trimmedEmail) {
+                setError('Please enter your email address');
                 return;
             }
+
+            // Basic email format check
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(trimmedEmail)) {
+                setError('Please enter a valid email address (e.g., example@email.com)');
+                return;
+            }
+
+            if (!password) {
+                setError('Please enter a password');
+                return;
+            }
+
+            if (password.length < 6) {
+                setError('Password must be at least 6 characters');
+                return;
+            }
+
+            if (!trimmedUsername) {
+                setError('Please enter a username');
+                return;
+            }
+
+            // Update the email state to the normalized version before switching
+            setEmail(trimmedEmail);
             switchView('traits');
         }
+    };
+
+    // Email validation regex
+    const isValidEmail = (emailToCheck: string): boolean => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(emailToCheck);
     };
 
     const handleFinalSignup = async () => {
         if (isSubmitting) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+        const trimmedEmail = email.trim().toLowerCase();
+        const trimmedUsername = username.trim();
+
+        // Log exact characters for debugging
+        console.log('Email raw value:', JSON.stringify(email));
+        console.log('Email trimmed:', JSON.stringify(trimmedEmail));
+        console.log('Email char codes:', trimmedEmail.split('').map(c => c.charCodeAt(0)));
+
+        // Validate email format before attempting signup
+        if (!trimmedEmail) {
+            setError('Please enter your email address');
+            return;
+        }
+
+        if (!isValidEmail(trimmedEmail)) {
+            setError(`Invalid email format: "${trimmedEmail}"\nPlease enter a valid email address (e.g., example@email.com)`);
+            return;
+        }
+
+        if (!password) {
+            setError('Please enter a password');
+            return;
+        }
+
+        if (password.length < 6) {
+            setError('Password must be at least 6 characters long');
+            return;
+        }
+
         setIsSubmitting(true);
         try {
-            await onComplete(email, password, username, selectedHobbies, selectedFields, true);
+            console.log('Attempting signup with validated email:', { email: trimmedEmail, username: trimmedUsername });
+            await onComplete(trimmedEmail, password, trimmedUsername, selectedHobbies, selectedFields, true);
         } catch (err: any) {
-            setError(err.message);
+            // Show the exact email we tried to use in the error
+            setError(`${err.message}\nAttempted email: '${trimmedEmail}'`);
             setIsSubmitting(false);
             // If error is account related, might need to go back, but let's stay on traits for now so they don't lose selection
         }

@@ -19,16 +19,21 @@ export default function App() {
     Inter_700Bold,
   });
 
+  console.log('App starting. Fonts loaded:', fontsLoaded, 'Font error:', fontError);
+
   const onLayoutRootView = useCallback(async () => {
+    console.log('onLayoutRootView triggered. fontsLoaded:', fontsLoaded);
     if (fontsLoaded || fontError) {
       // Small delay to ensure layout is ready before hiding splash
       setTimeout(async () => {
+        console.log('Hiding splash screen');
         await SplashScreen.hideAsync();
       }, 50);
     }
   }, [fontsLoaded, fontError]);
 
   if (!fontsLoaded && !fontError) {
+    console.log('Waiting for fonts...');
     return null;
   }
 

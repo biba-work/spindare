@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, Dimensions, TouchableWithoutFeedback, Keyboard, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, Dimensions, TouchableWithoutFeedback, Keyboard, Image, ScrollView, ActivityIndicator } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -12,6 +13,7 @@ interface PostCreationScreenProps {
     imageUri?: string | null;
     onClose: () => void;
     onPost: (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => void;
+    isSubmitting?: boolean;
 }
 
 const SendIcon = ({ color }: { color: string }) => (
@@ -20,11 +22,8 @@ const SendIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-import { useTheme } from '../contexts/ThemeContext';
-
-export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost }: PostCreationScreenProps) => {
+export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost, isSubmitting = false }: PostCreationScreenProps) => {
     const { darkMode } = useTheme();
-    // ... rest of logic
     const [content, setContent] = useState('');
     const [imageUri, setImageUri] = useState(initialImageUri);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -38,7 +37,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
     }, []);
 
     const handleAction = (target: 'feed' | 'friend') => {
-        if (content.trim() || imageUri) {
+        if ((content.trim() || imageUri) && !isSubmitting) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             onPost(content, imageUri, target);
         }
@@ -69,7 +68,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                         <Animated.View style={[styles.container, darkMode && styles.containerDark, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
                             <View style={styles.header}>
-                                <Pressable onPress={onClose} hitSlop={20}>
+                                <Pressable onPress={onClose} hitSlop={20} disabled={isSubmitting}>
                                     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={darkMode ? "#FFF" : "#8E8E93"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <Path d="M19 12H5M12 19l-7-7 7-7" />
                                     </Svg>
@@ -92,7 +91,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                 {imageUri && (
                                     <View style={styles.imageWrapper}>
                                         <Image source={{ uri: imageUri }} style={styles.image} />
-                                        <Pressable style={styles.removeImageButton} onPress={removeImage}>
+                                        <Pressable style={styles.removeImageButton} onPress={removeImage} disabled={isSubmitting}>
                                             <View style={styles.removeIconWrapper}>
                                                 <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <Path d="M18 6L6 18M6 6l12 12" />
@@ -111,6 +110,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                         value={content}
                                         onChangeText={setContent}
                                         maxLength={300}
+                                        editable={!isSubmitting}
                                     />
                                 </View>
                             </ScrollView>
@@ -118,19 +118,23 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                             <View style={[styles.actionFooter, darkMode && styles.borderDark]}>
                                 <Pressable
                                     onPress={() => handleAction('friend')}
-                                    style={[styles.actionBtn, styles.secondaryBtn, darkMode && styles.secondaryBtnDark, !isReady && styles.disabledBtn]}
-                                    disabled={!isReady}
+                                    style={[styles.actionBtn, styles.secondaryBtn, darkMode && styles.secondaryBtnDark, (!isReady || isSubmitting) && styles.disabledBtn]}
+                                    disabled={!isReady || isSubmitting}
                                 >
-                                    <SendIcon color={isReady ? (darkMode ? "#FFF" : "#8E8E93") : "#AEAEB2"} />
-                                    <Text style={[styles.actionText, darkMode && styles.textDark, !isReady && styles.disabledText]}>SEND PRIVATELY</Text>
+                                    <SendIcon color={isReady && !isSubmitting ? (darkMode ? "#FFF" : "#8E8E93") : "#AEAEB2"} />
+                                    <Text style={[styles.actionText, darkMode && styles.textDark, (!isReady || isSubmitting) && styles.disabledText]}>SEND PRIVATELY</Text>
                                 </Pressable>
 
                                 <Pressable
                                     onPress={() => handleAction('feed')}
-                                    style={[styles.actionBtn, styles.primaryBtn, darkMode && styles.primaryBtnDark, !isReady && styles.disabledBtn]}
-                                    disabled={!isReady}
+                                    style={[styles.actionBtn, styles.primaryBtn, darkMode && styles.primaryBtnDark, (!isReady || isSubmitting) && styles.disabledBtn]}
+                                    disabled={!isReady || isSubmitting}
                                 >
-                                    <Text style={styles.primaryText}>POST TO FEED</Text>
+                                    {isSubmitting ? (
+                                        <ActivityIndicator color="#FAF9F6" />
+                                    ) : (
+                                        <Text style={styles.primaryText}>POST TO FEED</Text>
+                                    )}
                                 </Pressable>
                             </View>
                         </Animated.View>

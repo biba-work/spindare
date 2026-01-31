@@ -12,9 +12,12 @@ import {
     serverTimestamp,
     getDocs,
     limit,
-    where
+    where,
+    getDoc,
+    deleteDoc,
+    setDoc
 } from 'firebase/firestore';
-import * as FileSystem from 'expo-file-system/legacy';
+import { NotificationService } from './NotificationService';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 export interface Post {
@@ -37,10 +40,21 @@ export const PostService = {
     // Helper to upload image to Storage
     async uploadImage(uri: string): Promise<string> {
         try {
-            // Read file as base64 using legacy expo-file-system API (more stable)
-            // This bypasses the XHR/fetch 'Network request failed' error for local file:// URIs
-            const base64 = await FileSystem.readAsStringAsync(uri, {
-                encoding: FileSystem.EncodingType.Base64,
+            // Use fetch to read the file as a blob, then convert to base64
+            const response = await fetch(uri);
+            const blob = await response.blob();
+
+            // Convert blob to base64 using FileReader
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const result = reader.result as string;
+                    // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
+                    const base64Data = result.split(',')[1];
+                    resolve(base64Data);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
             });
 
             const filename = `posts/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
@@ -119,13 +133,89 @@ export const PostService = {
         });
     },
 
-    // Add a reaction to a post
-    async addReaction(postId: string, type: 'felt' | 'thought' | 'intrigued') {
-        const postRef = doc(db, 'posts', postId);
-        const updateField = `reactions.${type}`;
+    // Toggle a reaction to a post
+    async toggleReaction(postId: string, type: 'felt' | 'thought' | 'intrigued') {
+        const userId = auth.currentUser?.uid;
+        if (!userId) return;
 
-        await updateDoc(postRef, {
-            [updateField]: increment(1)
+        const postRef = doc(db, 'posts', postId);
+        const likeRef = doc(db, 'posts', postId, 'likes', userId);
+
+        try {
+            const likeDoc = await getDoc(likeRef);
+
+            if (likeDoc.exists()) {
+                const data = likeDoc.data();
+                const existingType = data.type;
+
+                if (existingType === type) {
+                    // Remove reaction (unlike)
+                    await deleteDoc(likeRef);
+                    await updateDoc(postRef, {
+                        [`reactions.${type}`]: increment(-1)
+                    });
+                } else {
+                    // Change reaction type
+                    await updateDoc(likeRef, { type });
+                    await updateDoc(postRef, {
+                        [`reactions.${existingType}`]: increment(-1),
+                        [`reactions.${type}`]: increment(1)
+                    });
+                }
+            } else {
+                // Add new reaction
+                await setDoc(likeRef, { type, timestamp: serverTimestamp() });
+                await updateDoc(postRef, {
+                    [`reactions.${type}`]: increment(1)
+                });
+
+                // Send Notification
+                const postSnap = await getDoc(postRef);
+                if (postSnap.exists()) {
+                    const postData = postSnap.data();
+                    await NotificationService.sendNotification(postData.userId, 'reaction', `reacted with ${type} to your post`, postId);
+                }
+            }
+        } catch (e) {
+            console.error("Error toggling reaction", e);
+        }
+    },
+
+    // Add a comment
+    async addComment(postId: string, text: string) {
+        const user = auth.currentUser;
+        if (!user) throw new Error("Must be logged in");
+
+        await addDoc(collection(db, 'posts', postId, 'comments'), {
+            userId: user.uid,
+            username: user.displayName || "Anonymous",
+            avatar: user.photoURL || null,
+            text,
+            timestamp: serverTimestamp()
+        });
+
+        // Send Notification
+        const postRef = doc(db, 'posts', postId);
+        const postSnap = await getDoc(postRef);
+        if (postSnap.exists()) {
+            const postData = postSnap.data();
+            await NotificationService.sendNotification(postData.userId, 'comment', 'commented on your post', postId);
+        }
+    },
+
+    // Subscribe to comments
+    subscribeToComments(postId: string, callback: (comments: any[]) => void) {
+        const q = query(
+            collection(db, 'posts', postId, 'comments'),
+            orderBy('timestamp', 'asc')
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            const comments = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            callback(comments);
         });
     },
 

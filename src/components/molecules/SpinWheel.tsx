@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions, Animated, Platform, Image } from 'react-n
 import Svg, { G, Path, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const WHEEL_SIZE = width * 0.88;
@@ -15,7 +16,7 @@ interface SpinWheelProps {
     onPress?: () => void;
 }
 
-import { useTheme } from '../../contexts/ThemeContext';
+
 
 export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelProps) => {
     const { darkMode } = useTheme();

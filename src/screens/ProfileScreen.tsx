@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { UserProfile } from '../services/AIService';
 import { PostService } from '../services/PostService';
+import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Post } from '../services/PostService';
@@ -50,6 +51,36 @@ const SpinnerIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+// SPIND-style action icons
+const SendIcon = ({ color }: { color: string }) => (
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M22 2L11 13" />
+        <Path d="M22 2L15 22L11 13L2 9L22 2Z" />
+    </Svg>
+);
+
+const CameraIcon = ({ color }: { color: string }) => (
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+        <Circle cx="12" cy="13" r="4" />
+    </Svg>
+);
+
+const GalleryIcon = ({ color }: { color: string }) => (
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <Circle cx="8.5" cy="8.5" r="1.5" />
+        <Path d="M21 15l-5-5L5 21" />
+    </Svg>
+);
+
+const TextIcon = ({ color }: { color: string }) => (
+    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <Path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </Svg>
+);
+
 interface ProfileScreenProps {
     onBack: () => void;
     onLogout: () => void;
@@ -82,7 +113,7 @@ export const ProfileScreen = ({
     const [showSettings, setShowSettings] = useState(false);
 
     // Global Theme
-    const { darkMode, toggleDarkMode } = useTheme();
+    const { darkMode, toggleTheme } = useTheme();
 
     const [soundEffects, setSoundEffects] = useState(true);
     const [notifications, setNotifications] = useState(true);
@@ -111,6 +142,32 @@ export const ProfileScreen = ({
     const [mediaUri, setMediaUri] = useState<string | null>(null);
     const [textContent, setTextContent] = useState('');
     const [mediaAspectRatio, setMediaAspectRatio] = useState(1);
+
+    const [editUsername, setEditUsername] = useState(userProfile.username);
+
+    useEffect(() => {
+        setEditUsername(userProfile.username);
+    }, [userProfile.username]);
+
+    const handleSaveUsername = async () => {
+        const newUsername = editUsername.trim();
+        if (newUsername.length < 1) return;
+
+        try {
+            // Update in Firestore (profile + all posts)
+            await AuthService.updateUsername(newUsername);
+
+            // Update locally in parent component
+            onUpdateProfile({ username: newUsername });
+
+            if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert("Success", "Username updated! It may take a moment for changes to appear everywhere.");
+        } catch (error: any) {
+            console.error("Username update failed:", error);
+            Alert.alert("Error", `Could not update username: ${error.message || 'Unknown error'}`);
+            setEditUsername(userProfile.username); // Revert on error
+        }
+    };
 
     useEffect(() => {
         Animated.timing(fadeAnim, {
@@ -217,10 +274,26 @@ export const ProfileScreen = ({
         setSubmissionStep('input_text');
     };
 
-    const submitChallenge = () => {
-        // Here we would actually submit
-        Alert.alert("Submitted!", "Great job matching the challenge!");
-        closeSpinner();
+    const submitChallenge = async () => {
+        if (!spinResult) return;
+
+        try {
+            // Submit to Firestore
+            await PostService.createPost(
+                userProfile.username,
+                userProfile.photoURL || '',
+                spinResult,
+                textContent || 'Challenge completed! 🎯',
+                mediaUri
+            );
+
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert("Posted! 🎉", "Your challenge has been shared with the community!");
+            closeSpinner();
+        } catch (error: any) {
+            console.error("Post submission error:", error);
+            Alert.alert("Error", "Could not post your challenge. Please try again.");
+        }
     };
 
     const openSettings = () => {
@@ -421,7 +494,7 @@ export const ProfileScreen = ({
                                         <>
                                             <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Dark Mode</Text>
-                                                <Switch value={darkMode} onValueChange={toggleDarkMode} />
+                                                <Switch value={darkMode} onValueChange={toggleTheme} />
                                             </View>
                                             <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Notifications</Text>
@@ -430,6 +503,29 @@ export const ProfileScreen = ({
                                             <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Sound Effects</Text>
                                                 <Switch value={soundEffects} onValueChange={setSoundEffects} />
+                                            </View>
+
+                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
+
+                                            <View style={[styles.settingGroup, { paddingHorizontal: 0 }]}>
+                                                <Text style={[styles.sectionHeader, darkMode && styles.textDark, { paddingHorizontal: 20, marginBottom: 8 }]}>CHANGE USERNAME</Text>
+                                                <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 10 }}>
+                                                    <TextInput
+                                                        style={[styles.usernameInput, darkMode && styles.usernameInputDark]}
+                                                        placeholder="New username"
+                                                        placeholderTextColor={darkMode ? "#777" : "#CCC"}
+                                                        value={editUsername}
+                                                        onChangeText={setEditUsername}
+                                                        autoCapitalize="none"
+                                                    />
+                                                    <Pressable
+                                                        style={[styles.saveBtn, { opacity: editUsername.length < 1 ? 0.5 : 1 }]}
+                                                        disabled={editUsername.length < 1}
+                                                        onPress={handleSaveUsername}
+                                                    >
+                                                        <Text style={styles.saveBtnText}>Save</Text>
+                                                    </Pressable>
+                                                </View>
                                             </View>
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
@@ -556,26 +652,15 @@ export const ProfileScreen = ({
                                             <View style={styles.chooseContainer}>
                                                 <Text style={[styles.miniChallengeText, darkMode && styles.textDark]}>{spinResult}</Text>
 
-                                                <View style={styles.iconRow}>
-                                                    <Pressable onPress={handleCamera} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
-                                                            <Ionicons name="camera" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
-                                                        </View>
-                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Camera</Text>
+                                                <View style={styles.proofActionsRow}>
+                                                    <Pressable onPress={handleCamera} style={[styles.proofActionBtn, darkMode && styles.proofActionBtnDark]}>
+                                                        <CameraIcon color="#FAF9F6" />
                                                     </Pressable>
-
-                                                    <Pressable onPress={handleGallery} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
-                                                            <Ionicons name="images" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
-                                                        </View>
-                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Gallery</Text>
+                                                    <Pressable onPress={handleGallery} style={[styles.proofActionBtn, darkMode && styles.proofActionBtnDark]}>
+                                                        <GalleryIcon color="#FAF9F6" />
                                                     </Pressable>
-
-                                                    <Pressable onPress={handleTextAction} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
-                                                            <Ionicons name="text" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
-                                                        </View>
-                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Text</Text>
+                                                    <Pressable onPress={handleTextAction} style={[styles.proofActionBtn, darkMode && styles.proofActionBtnDark]}>
+                                                        <TextIcon color="#FAF9F6" />
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -1194,5 +1279,75 @@ const styles = StyleSheet.create({
     pageDescriptionDark: { color: '#8E8E93' },
     cardDark: { backgroundColor: '#2C2C2E' },
     secondaryBtnDark: { backgroundColor: '#3A3A3C' },
-    textDark: { color: '#FFF' },
+    // Username Edit
+    settingGroup: {
+        marginBottom: 24,
+    },
+    sectionHeader: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#8E8E93',
+        marginBottom: 12,
+        letterSpacing: 1.5,
+        textTransform: 'uppercase',
+    },
+    usernameInput: {
+        flex: 1,
+        height: 44,
+        backgroundColor: '#F2F2F7',
+        borderRadius: 10,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        color: '#1C1C1E',
+    },
+    usernameInputDark: {
+        backgroundColor: '#2C2C2E',
+        color: '#FFF',
+    },
+    saveBtn: {
+        backgroundColor: '#007AFF',
+        height: 44,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    saveBtnText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    // Icon circle for spinner action buttons
+    iconCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    chooseSubtitle: {
+        fontSize: 14,
+        color: '#8E8E93',
+        textAlign: 'center',
+        marginBottom: 20,
+        marginTop: -8,
+    },
+    // SPIND-style proof action buttons
+    proofActionsRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 8,
+    },
+    proofActionBtn: {
+        flex: 1,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#4A4A4A',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    proofActionBtnDark: {
+        backgroundColor: '#3A3A3C',
+    },
 });

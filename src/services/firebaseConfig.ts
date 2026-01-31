@@ -29,11 +29,11 @@ export const storage = getStorage(app);
 // Use a more robust Auth initialization for React Native
 let firebaseAuth: Auth;
 try {
-    firebaseAuth = getAuth(app);
-} catch (e) {
     firebaseAuth = initializeAuth(app, {
         persistence: getReactNativePersistence(ReactNativeAsyncStorage)
     });
+} catch (e) {
+    firebaseAuth = getAuth(app);
 }
 
 export const auth = firebaseAuth;

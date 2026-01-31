@@ -12,7 +12,11 @@ import {
     doc,
     getDoc,
     setDoc,
-    updateDoc
+    updateDoc,
+    query,
+    collection,
+    where,
+    getDocs
 } from 'firebase/firestore';
 import { UserProfile } from './AIService';
 
@@ -48,6 +52,7 @@ export const AuthService = {
 
     // Sign up new user and create Firestore record
     async signUp(email: string, pass: string, profile: Omit<UserProfile, 'xp' | 'level'>): Promise<UserProfile> {
+        console.log('AuthService.signUp received:', { email, pass, profile });
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
             const user = userCredential.user;
@@ -89,11 +94,54 @@ export const AuthService = {
     },
 
     async signInWithGoogle(): Promise<UserProfile> {
-        // NOTE: signInWithPopup is not available in React Native.
-        // For actual production, you'd use expo-auth-session or a similar library.
-        // For now, this is a placeholder to prevent crashes.
-        console.warn('Google Sign-in triggered. Full implementation requires native configuration.');
-        throw new Error('Google Sign-in not fully configured for native. Use Email login for testing.');
+        try {
+            // Import dynamically to avoid issues if module isn't installed
+            const { GoogleSignin, statusCodes } = await import('@react-native-google-signin/google-signin');
+            const { signInWithCredential, GoogleAuthProvider: FirebaseGoogleAuthProvider } = await import('firebase/auth');
+
+            // Configure Google Sign-In (only needs to be done once, but safe to call multiple times)
+            GoogleSignin.configure({
+                // Web client ID from your google-services.json (client_type: 3)
+                webClientId: '571702461891-1eu4tqotmi0dr8f6udq555bcp6cmb3n6.apps.googleusercontent.com',
+            });
+
+            // Check if user is already signed in
+            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+            // Trigger Google Sign-In
+            const signInResult = await GoogleSignin.signIn();
+
+            // Get the ID token
+            const idToken = signInResult.data?.idToken;
+            if (!idToken) {
+                throw new Error('No ID token received from Google');
+            }
+
+            // Create Firebase credential with Google ID token
+            const googleCredential = FirebaseGoogleAuthProvider.credential(idToken);
+
+            // Sign in to Firebase with the Google credential
+            const userCredential = await signInWithCredential(auth, googleCredential);
+            const user = userCredential.user;
+
+            // Handle the rest (check if profile exists, create if not)
+            return await this._handleSocialLogin(user);
+        } catch (error: any) {
+            console.error('Google Sign-In Error:', error);
+
+            // Handle specific error codes
+            const { statusCodes } = await import('@react-native-google-signin/google-signin').catch(() => ({ statusCodes: {} }));
+
+            if (error.code === statusCodes?.SIGN_IN_CANCELLED) {
+                throw new Error('Sign in was cancelled');
+            } else if (error.code === statusCodes?.IN_PROGRESS) {
+                throw new Error('Sign in is already in progress');
+            } else if (error.code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE) {
+                throw new Error('Play Services not available');
+            }
+
+            throw error;
+        }
     },
 
     async signInWithApple(): Promise<UserProfile> {
@@ -141,6 +189,31 @@ export const AuthService = {
         const user = auth.currentUser;
         if (user) {
             await updateDoc(doc(db, 'users', user.uid), { photoURL });
+        }
+    },
+
+    async updateUsername(username: string) {
+        const user = auth.currentUser;
+        if (user) {
+            // 1. Update User Profile
+            await updateDoc(doc(db, 'users', user.uid), { username });
+
+            // 2. Update all past posts by this user to reflect new username
+            // Note: In a production app with millions of posts, this would be a Cloud Function.
+            // For now, doing it client-side is fine for our scale.
+            try {
+                const postsQuery = query(collection(db, 'posts'), where("userId", "==", user.uid));
+                const postsSnap = await getDocs(postsQuery);
+
+                const updatePromises = postsSnap.docs.map(postDoc =>
+                    updateDoc(doc(db, 'posts', postDoc.id), { author: username })
+                );
+
+                await Promise.all(updatePromises);
+            } catch (error) {
+                console.error("Error updating posts with new username:", error);
+                // We don't throw here to avoid failing the profile update if post update fails
+            }
         }
     },
 

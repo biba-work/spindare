@@ -1,54 +1,58 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Appearance } from 'react-native';
 
-type ThemeContextType = {
+interface ThemeContextType {
     darkMode: boolean;
-    toggleDarkMode: () => void;
-};
+    toggleTheme: () => void;
+}
 
 const ThemeContext = createContext<ThemeContextType>({
     darkMode: false,
-    toggleDarkMode: () => { },
+    toggleTheme: () => { },
 });
 
+export const useTheme = () => useContext(ThemeContext);
+
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const [darkMode, setDarkMode] = useState(false);
+    const systemScheme = useColorScheme();
+    const [darkMode, setDarkMode] = useState(false); // Default to false initially
+    const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
-        loadMode();
+        const loadTheme = async () => {
+            try {
+                const savedTheme = await AsyncStorage.getItem('user_theme_preference');
+                if (savedTheme !== null) {
+                    setDarkMode(savedTheme === 'dark');
+                } else {
+                    setDarkMode(systemScheme === 'dark');
+                }
+            } catch (error) {
+                console.error("Failed to load theme preference", error);
+                setDarkMode(systemScheme === 'dark');
+            } finally {
+                setIsLoaded(true);
+            }
+        };
+        loadTheme();
     }, []);
 
-    const loadMode = async () => {
-        try {
-            const storedMode = await AsyncStorage.getItem('darkMode');
-            if (storedMode !== null) {
-                setDarkMode(storedMode === 'true');
-            } else {
-                // Default to system preference if nothing stored
-                const colorScheme = Appearance.getColorScheme();
-                // setDarkMode(colorScheme === 'dark'); // Optional: respect system
-            }
-        } catch (e) {
-            console.error('Failed to load theme mode', e);
-        }
+    const toggleTheme = () => {
+        setDarkMode((prev) => {
+            const newMode = !prev;
+            AsyncStorage.setItem('user_theme_preference', newMode ? 'dark' : 'light')
+                .catch(e => console.error("Failed to save theme preference", e));
+            return newMode;
+        });
     };
 
-    const toggleDarkMode = async () => {
-        try {
-            const newMode = !darkMode;
-            setDarkMode(newMode);
-            await AsyncStorage.setItem('darkMode', newMode.toString());
-        } catch (e) {
-            console.error('Failed to save theme mode', e);
-        }
-    };
+    // Prevent rendering children until theme is loaded to avoid flash
+    if (!isLoaded) return null;
 
     return (
-        <ThemeContext.Provider value={{ darkMode, toggleDarkMode }}>
+        <ThemeContext.Provider value={{ darkMode, toggleTheme }}>
             {children}
         </ThemeContext.Provider>
     );
 };
-
-export const useTheme = () => useContext(ThemeContext);

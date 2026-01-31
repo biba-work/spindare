@@ -5,12 +5,16 @@ import { FeedScreen } from './FeedScreen';
 import { FriendsListScreen } from './FriendsListScreen';
 import { OnboardingScreen } from './OnboardingScreen';
 import { ProfileScreen } from './ProfileScreen';
+import { MessagesScreen } from './MessagesScreen';
+import { ChatScreen } from './ChatScreen';
 import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
 import { UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
 import { AuthService } from '../services/AuthService';
 import { Post, PostService } from '../services/PostService';
 import { auth } from '../services/firebaseConfig';
+import { ChatService } from '../services/ChatService';
+import { Channel as StreamChannel } from 'stream-chat';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -78,7 +82,12 @@ export const MainFeedScreen = () => {
     const [isPosting, setIsPosting] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [viewingProfile, setViewingProfile] = useState<{ userId: string; username: string; avatar: string } | null>(null);
-    const [searchResults, setSearchResults] = useState<{ users: UserProfile[], posts: Post[] }>({ users: [], posts: [] });
+    const [searchResults, setSearchResults] = useState<{ users: (UserProfile & { uid?: string })[], posts: Post[] }>({ users: [], posts: [] });
+
+    // Chat/Messages state
+    const [isMessagesVisible, setIsMessagesVisible] = useState(false);
+    const [activeChat, setActiveChat] = useState<StreamChannel | null>(null);
+
 
     // Animations
     const searchExpandAnim = useRef(new Animated.Value(0)).current;
@@ -93,11 +102,27 @@ export const MainFeedScreen = () => {
     const isMiniHeaderHapticTriggered = useRef(false);
 
     useEffect(() => {
+        console.log('MainFeedScreen useEffect starting auth listener...');
         const unsubscribeAuth = AuthService.onSessionChange(async (user, profile) => {
+            console.log('Auth state changed. User:', user?.uid, 'Profile exists:', !!profile);
             if (user && profile) {
                 setUserProfile(profile);
                 setIsAuthenticated(true);
+                console.log('Seeding fake data...');
                 PostService.seedFakeData();
+
+                // Connect to Stream Chat
+                try {
+                    console.log('Connecting to Stream Chat...');
+                    await ChatService.connectUser(
+                        user.uid,
+                        profile.username,
+                        profile.photoURL
+                    );
+                    console.log('Stream Chat connected');
+                } catch (err) {
+                    console.log('Stream Chat connection deferred:', err);
+                }
 
                 const now = Date.now();
                 const lastTs = profile.lastSpinTimestamp || 0;
@@ -110,12 +135,17 @@ export const MainFeedScreen = () => {
                     setSpinsLeft(profile.spinsLeft);
                 }
             } else {
+                console.log('No user or profile found');
                 setIsAuthenticated(false);
+                // Disconnect from Stream Chat
+                ChatService.disconnectUser().catch(() => { });
             }
+            console.log('Setting isLoading to false');
             setIsLoading(false);
         });
 
         const unsubscribeFeed = PostService.subscribeToFeed((updatedPosts) => {
+            console.log('Feed updated, post count:', updatedPosts.length);
             setPosts(updatedPosts);
         });
 
@@ -371,6 +401,15 @@ export const MainFeedScreen = () => {
                     onScroll={onScroll}
                     contentContainerStyle={{ paddingTop: 60 + insets.top }}
                     onProfilePress={handleProfilePress}
+                    onChallengeAction={(challenge, action) => {
+                        // Route to existing media handling
+                        if (action === 'send') {
+                            setChallenge(challenge);
+                            setIsSharing(true);
+                        } else {
+                            handleMediaAction(action, challenge);
+                        }
+                    }}
                 />
             </View>
 
@@ -400,11 +439,65 @@ export const MainFeedScreen = () => {
                 {isPosting && <PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={hidePostCreator} onPost={handlePostSubmit} />}
             </Animated.View>
 
-            <GenericOverlay visible={overlayType !== null} type={overlayType || 'saved'} onClose={hideOverlay} data={overlayType === 'saved' ? savedChallenges : []} onAction={handleOverlayAction} animation={overlayAnim} />
+            <GenericOverlay
+                visible={overlayType !== null}
+                type={overlayType || 'saved'}
+                onClose={hideOverlay}
+                data={overlayType === 'saved' ? savedChallenges : []}
+                onAction={handleOverlayAction}
+                animation={overlayAnim}
+                onOpenMessages={() => {
+                    hideOverlay();
+                    setIsMessagesVisible(true);
+                }}
+            />
+
+            {/* Messages Screen */}
+            {isMessagesVisible && (
+                <View style={styles.fullOverlay}>
+                    <MessagesScreen
+                        onBack={() => setIsMessagesVisible(false)}
+                        onOpenChat={(channel) => {
+                            setActiveChat(channel);
+                            setIsMessagesVisible(false);
+                        }}
+                    />
+                </View>
+            )}
+
+            {/* Chat Screen */}
+            {activeChat && (
+                <View style={styles.fullOverlay}>
+                    <ChatScreen
+                        channel={activeChat}
+                        onBack={() => setActiveChat(null)}
+                    />
+                </View>
+            )}
 
             {viewingProfile && (
                 <View style={styles.fullOverlay}>
-                    <UserProfileView userId={viewingProfile.userId} username={viewingProfile.username} avatar={viewingProfile.avatar} onBack={() => setViewingProfile(null)} />
+                    <UserProfileView
+                        userId={viewingProfile.userId}
+                        username={viewingProfile.username}
+                        avatar={viewingProfile.avatar}
+                        onBack={() => setViewingProfile(null)}
+                        onStartChat={async () => {
+                            if (!auth.currentUser) return;
+                            try {
+                                const channel = await ChatService.getOrCreateDMChannel(
+                                    auth.currentUser.uid,
+                                    viewingProfile.userId,
+                                    viewingProfile.username,
+                                    viewingProfile.avatar
+                                );
+                                setViewingProfile(null);
+                                setActiveChat(channel);
+                            } catch (err) {
+                                console.error('Failed to start chat:', err);
+                            }
+                        }}
+                    />
                 </View>
             )}
         </View>

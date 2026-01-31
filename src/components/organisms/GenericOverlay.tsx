@@ -5,6 +5,8 @@ import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
+import { NotificationService, Notification } from '../../services/NotificationService';
+import { formatDistanceToNow } from 'date-fns';
 
 const { width, height } = Dimensions.get('window');
 
@@ -51,6 +53,12 @@ const InboxIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const MessageIcon = ({ color }: { color: string }) => (
+    <Svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+    </Svg>
+);
+
 interface OverlayProps {
     visible: boolean;
     type: 'saved' | 'notifications';
@@ -58,13 +66,8 @@ interface OverlayProps {
     data: string[];
     onAction: (item: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     animation: Animated.Value;
+    onOpenMessages?: () => void;
 }
-
-const MOCK_NOTIFS = [
-    { id: '1', type: 'reaction', user: 'Zef_F', content: 'reacted with Felt to your post', time: '2m' },
-    { id: '2', type: 'connection', user: 'lucas_c', content: 'sent you a connection request', time: '1h' },
-    { id: '3', type: 'challenge', user: 'Emma_K', content: 'completed your challenge', time: '3h' },
-];
 
 const MOCK_CHALLENGES = {
     new: [
@@ -76,34 +79,48 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages }: OverlayProps) => {
     const { darkMode } = useTheme();
-    const [subTab, setSubTab] = useState<'notifs' | 'inbox'>('notifs');
+    const [subTab, setSubTab] = useState<'notifs' | 'inbox' | 'messages'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+
+    React.useEffect(() => {
+        if (visible && type === 'notifications') {
+            const unsubscribe = NotificationService.subscribeToNotifications(setNotifications);
+            return () => unsubscribe();
+        }
+    }, [visible, type]);
 
     if (!visible) return null;
 
-    const handleTabSwitch = (tab: 'notifs' | 'inbox') => {
+    const handleTabSwitch = (tab: 'notifs' | 'inbox' | 'messages') => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setSubTab(tab);
+        if (tab === 'messages' && onOpenMessages) {
+            onOpenMessages();
+        } else {
+            setSubTab(tab);
+        }
     };
 
     const renderNotificationsPanel = () => {
         if (subTab === 'notifs') {
             return (
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {MOCK_NOTIFS.map((notif, index) => (
+                    {notifications.map((notif) => (
                         <Pressable key={notif.id} style={[styles.notifCard, darkMode && styles.notifCardDark]}>
-                            <View style={styles.notifDot} />
+                            <View style={[styles.notifDot, notif.read && { backgroundColor: 'transparent' }]} />
                             <View style={styles.notifContent}>
                                 <Text style={[styles.notifText, darkMode && styles.notifTextDark]}>
-                                    <Text style={[styles.notifUser, darkMode && styles.notifUserDark]}>@{notif.user}</Text> {notif.content}
+                                    <Text style={[styles.notifUser, darkMode && styles.notifUserDark]}>@{notif.fromUsername}</Text> {notif.content}
                                 </Text>
-                                <Text style={styles.notifTime}>{notif.time}</Text>
+                                <Text style={styles.notifTime}>
+                                    {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate ? notif.timestamp.toDate() : new Date(), { addSuffix: true }) : 'just now'}
+                                </Text>
                             </View>
                         </Pressable>
                     ))}
-                    {MOCK_NOTIFS.length === 0 && (
+                    {notifications.length === 0 && (
                         <View style={styles.emptyState}>
                             <BellIcon color={darkMode ? "#555" : "#D1D1D1"} />
                             <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>All caught up!</Text>
@@ -195,6 +212,10 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                             <Pressable onPress={() => handleTabSwitch('inbox')} style={[styles.tab, darkMode && styles.tabDark, subTab === 'inbox' && (darkMode ? styles.activeTabDark : styles.activeTab)]}>
                                 <InboxIcon color={subTab === 'inbox' ? (darkMode ? "#FFF" : "#4A4A4A") : "#AEAEB2"} />
                                 <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'inbox' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>SPIND</Text>
+                            </Pressable>
+                            <Pressable onPress={() => handleTabSwitch('messages')} style={[styles.tab, darkMode && styles.tabDark, subTab === 'messages' && (darkMode ? styles.activeTabDark : styles.activeTab)]}>
+                                <MessageIcon color={subTab === 'messages' ? (darkMode ? "#FFF" : "#4A4A4A") : "#AEAEB2"} />
+                                <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'messages' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>Messages</Text>
                             </Pressable>
                         </View>
                     )}

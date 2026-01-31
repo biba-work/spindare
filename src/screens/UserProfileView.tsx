@@ -6,6 +6,8 @@ import { FeedScreen } from './FeedScreen';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
+import { SocialService } from '../services/SocialService';
+import { auth } from '../services/firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -23,30 +25,69 @@ const UserPlusIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const ChatIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+    </Svg>
+);
+
 interface UserProfileViewProps {
     userId: string;
     username: string;
     avatar: string;
     onBack: () => void;
+    onStartChat: () => void;
 }
 
-export const UserProfileView = ({ userId, username, avatar, onBack }: UserProfileViewProps) => {
+export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat }: UserProfileViewProps) => {
     const { darkMode } = useTheme();
     const [posts, setPosts] = useState<Post[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const [stats, setStats] = useState({ followers: 0, following: 0 });
 
     useEffect(() => {
         const unsubscribe = PostService.subscribeToUserPosts(userId, (userPosts) => {
             setPosts(userPosts);
         });
+
+        // Social Sync
+        const syncSocial = async () => {
+            const [isFollowing, s] = await Promise.all([
+                SocialService.checkIsFollowing(userId),
+                SocialService.getFollowStats(userId)
+            ]);
+            setIsConnected(isFollowing);
+            setStats(s);
+        };
+        syncSocial();
+
         return () => unsubscribe();
     }, [userId]);
 
-    const handleConnect = () => {
+    const handleConnect = async () => {
+        if (!auth.currentUser) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setIsConnected(!isConnected);
-        // TODO: Implement Firebase connection logic
+
+        // Optimistic Update
+        const newStatus = !isConnected;
+        setIsConnected(newStatus);
+        setStats(prev => ({ ...prev, followers: prev.followers + (newStatus ? 1 : -1) }));
+
+        try {
+            if (newStatus) {
+                await SocialService.followUser(userId);
+            } else {
+                await SocialService.unfollowUser(userId);
+            }
+        } catch (e) {
+            // Revert on error
+            console.error(e);
+            setIsConnected(!newStatus);
+            setStats(prev => ({ ...prev, followers: prev.followers + (newStatus ? -1 : 1) }));
+        }
     };
+
+
 
     const totalReactions = posts.reduce((sum, post) =>
         sum + post.reactions.felt + post.reactions.thought + post.reactions.intrigued, 0
@@ -91,23 +132,38 @@ export const UserProfileView = ({ userId, username, avatar, onBack }: UserProfil
                         <Text style={[styles.username, darkMode && styles.textDark]}>@{username}</Text>
                         <Text style={[styles.identityLabel, darkMode && styles.identityLabelDark]}>{identityLabel}</Text>
 
-                        <Pressable
-                            onPress={handleConnect}
-                            style={[
-                                styles.connectBtn,
-                                darkMode && styles.connectBtnDark,
-                                isConnected && (darkMode ? styles.connectedBtnDark : styles.connectedBtn)
-                            ]}
-                        >
-                            {!isConnected && <UserPlusIcon color={darkMode ? "#1C1C1E" : "#FAF9F6"} />}
-                            <Text style={[
-                                styles.connectBtnText,
-                                darkMode && styles.connectBtnTextDark,
-                                isConnected && (darkMode ? styles.connectedBtnTextDark : styles.connectedBtnText)
-                            ]}>
-                                {isConnected ? 'CONNECTED' : 'CONNECT'}
-                            </Text>
-                        </Pressable>
+                        <View style={styles.actionButtons}>
+                            <Pressable
+                                onPress={handleConnect}
+                                style={[
+                                    styles.connectBtn,
+                                    darkMode && styles.connectBtnDark,
+                                    isConnected && (darkMode ? styles.connectedBtnDark : styles.connectedBtn)
+                                ]}
+                            >
+                                {!isConnected && <UserPlusIcon color={darkMode ? "#1C1C1E" : "#FAF9F6"} />}
+                                <Text style={[
+                                    styles.connectBtnText,
+                                    darkMode && styles.connectBtnTextDark,
+                                    isConnected && (darkMode ? styles.connectedBtnTextDark : styles.connectedBtnText)
+                                ]}>
+                                    {isConnected ? 'CONNECTED' : 'CONNECT'}
+                                </Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    onStartChat();
+                                }}
+                                style={[
+                                    styles.messageBtn,
+                                    darkMode && styles.messageBtnDark
+                                ]}
+                            >
+                                <ChatIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                            </Pressable>
+                        </View>
 
                         <View style={styles.statsRow}>
                             <View style={styles.statItem}>
@@ -119,6 +175,15 @@ export const UserProfileView = ({ userId, username, avatar, onBack }: UserProfil
                                 <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                 <Text style={styles.statLabel}>Reactions</Text>
                             </View>
+                            {auth.currentUser?.uid === userId && (
+                                <>
+                                    <View style={[styles.statDivider, darkMode && styles.statDividerDark]} />
+                                    <View style={styles.statItem}>
+                                        <Text style={[styles.statValue, darkMode && styles.textDark]}>{stats.followers}</Text>
+                                        <Text style={styles.statLabel}>Followers</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
                     </View>
 
@@ -217,16 +282,23 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     identityLabelDark: { color: '#A7BBC7' },
+    actionButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 32,
+    },
     connectBtn: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        paddingHorizontal: 32,
+        paddingHorizontal: 24,
         paddingVertical: 14,
         borderRadius: 24,
         backgroundColor: '#4A4A4A',
-        marginBottom: 32,
+        maxWidth: 200,
         shadowColor: '#4A4A4A',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
@@ -259,6 +331,20 @@ const styles = StyleSheet.create({
         color: '#4A4A4A',
     },
     connectedBtnTextDark: { color: '#FFF' },
+    messageBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#FAF9F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#4A4A4A',
+    },
+    messageBtnDark: {
+        backgroundColor: '#1C1C1E',
+        borderColor: '#FFF',
+    },
     statsRow: {
         flexDirection: 'row',
         alignItems: 'center',

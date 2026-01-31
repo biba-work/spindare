@@ -4,39 +4,54 @@ import { UserProfile } from './AIService';
 import { Post } from './PostService';
 
 export const SearchService = {
-    async searchUsers(text: string): Promise<UserProfile[]> {
-        const cleanText = text.trim();
+    async searchUsers(text: string): Promise<(UserProfile & { uid?: string })[]> {
+        const cleanText = text.trim().toLowerCase();
         if (!cleanText) return [];
+
         try {
             const usersRef = collection(db, 'users');
-            const q = query(
-                usersRef,
-                where('username', '>=', cleanText),
-                where('username', '<=', cleanText + '\uf8ff'),
-                limit(5)
+
+            // Try using a lowercase indexed field first (if you have 'usernameLower' in DB)
+            // Fallback: just get all users and filter client-side (fine for small apps)
+            const snapshot = await getDocs(usersRef);
+
+            const allUsers = snapshot.docs.map(doc => ({
+                uid: doc.id,
+                ...(doc.data() as UserProfile)
+            }));
+
+            // Filter client-side for partial match (case-insensitive)
+            const filtered = allUsers.filter(u =>
+                u.username?.toLowerCase().includes(cleanText)
             );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => doc.data() as UserProfile);
+
+            return filtered.slice(0, 10); // Limit results to 10
         } catch (error) {
             console.error("Search Users Error:", error);
-            // Fallback for demo if offline/no index
             return [];
         }
     },
 
     async searchChallenges(text: string): Promise<Post[]> {
-        const cleanText = text.trim();
+        const cleanText = text.trim().toLowerCase();
         if (!cleanText) return [];
+
         try {
             const postsRef = collection(db, 'posts');
-            const q = query(
-                postsRef,
-                where('challenge', '>=', cleanText),
-                where('challenge', '<=', cleanText + '\uf8ff'),
-                limit(5)
+            const snapshot = await getDocs(postsRef);
+
+            const allPosts = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...(doc.data() as Omit<Post, 'id'>)
+            }));
+
+            // Filter client-side for partial match on challenge (case-insensitive)
+            const filtered = allPosts.filter(p =>
+                p.challenge?.toLowerCase().includes(cleanText) ||
+                p.content?.toLowerCase().includes(cleanText)
             );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+
+            return filtered.slice(0, 15); // Limit results to 15
         } catch (error) {
             console.error("Search Challenges Error:", error);
             return [];
