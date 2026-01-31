@@ -194,7 +194,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                             </Pressable>
                             <Pressable onPress={() => handleTabSwitch('inbox')} style={[styles.tab, darkMode && styles.tabDark, subTab === 'inbox' && (darkMode ? styles.activeTabDark : styles.activeTab)]}>
                                 <InboxIcon color={subTab === 'inbox' ? (darkMode ? "#FFF" : "#4A4A4A") : "#AEAEB2"} />
-                                <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'inbox' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>Inbox</Text>
+                                <Text style={[styles.tabLabel, darkMode && styles.tabLabelDark, subTab === 'inbox' && (darkMode ? styles.activeTabLabelDark : styles.activeTabLabel)]}>SPIND</Text>
                             </Pressable>
                         </View>
                     )}

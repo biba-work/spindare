@@ -333,11 +333,6 @@ export const ProfileScreen = ({
                                     <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
                                 </View>
-                                <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
-                                <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userProfile.level || 1}</Text>
-                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Level</Text>
-                                </View>
                             </View>
                         </View>
 
@@ -510,7 +505,7 @@ export const ProfileScreen = ({
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
                                             <View style={styles.versionInfo}>
-                                                <Text style={[styles.versionText, darkMode && styles.textDark]}>Spindare v0.61.38</Text>
+                                                <Text style={[styles.versionText, darkMode && styles.textDark]}>Spindare v0.61.59</Text>
                                                 <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
                                             </View>
                                         </>
@@ -525,9 +520,9 @@ export const ProfileScreen = ({
                 {showSpinner && (
                     <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: spinnerAnim }] }]}>
                         <Pressable style={styles.spinnerModalBg} onPress={closeSpinner}>
-                            <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill}>
+                            <BlurView intensity={90} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill}>
                                 <SafeAreaView style={styles.spinnerModalContainer}>
-                                    <View style={styles.spinnerModal}>
+                                    <View style={[styles.spinnerModal, darkMode && styles.cardDark]}>
                                         {submissionStep === 'idle' && (
                                             <View style={styles.spinWheelContainer}>
                                                 <SpinWheel
@@ -541,12 +536,12 @@ export const ProfileScreen = ({
                                         {submissionStep === 'result' && spinResult && (
                                             <Animated.View style={styles.resultContainer}>
                                                 <Text style={styles.resultLabel}>CHALLENGE UNLOCKED</Text>
-                                                <Text style={styles.resultText}>{spinResult}</Text>
+                                                <Text style={[styles.resultText, darkMode && styles.textDark]}>{spinResult}</Text>
 
                                                 <View style={styles.actionRow}>
-                                                    <Pressable onPress={() => { onShare?.(); }} style={styles.actionBtnSecondary}>
-                                                        <Ionicons name="share-outline" size={24} color="#1C1C1E" />
-                                                        <Text style={styles.actionBtnTextSecondary}>Share</Text>
+                                                    <Pressable onPress={() => { onShare?.(); }} style={[styles.actionBtnSecondary, darkMode && styles.secondaryBtnDark]}>
+                                                        <Ionicons name="share-outline" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
+                                                        <Text style={[styles.actionBtnTextSecondary, darkMode && styles.textDark]}>Share</Text>
                                                     </Pressable>
 
                                                     <Pressable onPress={handleActionChoose} style={styles.actionBtnPrimary}>
@@ -559,28 +554,28 @@ export const ProfileScreen = ({
 
                                         {submissionStep === 'choose' && (
                                             <View style={styles.chooseContainer}>
-                                                <Text style={styles.miniChallengeText}>{spinResult}</Text>
+                                                <Text style={[styles.miniChallengeText, darkMode && styles.textDark]}>{spinResult}</Text>
 
                                                 <View style={styles.iconRow}>
                                                     <Pressable onPress={handleCamera} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
-                                                            <Ionicons name="camera" size={24} color="#1C1C1E" />
+                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
+                                                            <Ionicons name="camera" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
                                                         </View>
-                                                        <Text style={styles.iconBtnText}>Camera</Text>
+                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Camera</Text>
                                                     </Pressable>
 
                                                     <Pressable onPress={handleGallery} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
-                                                            <Ionicons name="images" size={24} color="#1C1C1E" />
+                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
+                                                            <Ionicons name="images" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
                                                         </View>
-                                                        <Text style={styles.iconBtnText}>Gallery</Text>
+                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Gallery</Text>
                                                     </Pressable>
 
                                                     <Pressable onPress={handleTextAction} style={styles.iconBtn}>
-                                                        <View style={[styles.navBtn, { backgroundColor: '#F0F0F0' }]}>
-                                                            <Ionicons name="text" size={24} color="#1C1C1E" />
+                                                        <View style={[styles.navBtn, { backgroundColor: darkMode ? '#3A3A3C' : '#F0F0F0' }]}>
+                                                            <Ionicons name="text" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
                                                         </View>
-                                                        <Text style={styles.iconBtnText}>Text</Text>
+                                                        <Text style={[styles.iconBtnText, darkMode && styles.textDark]}>Text</Text>
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -607,13 +602,14 @@ export const ProfileScreen = ({
                                             </View>
                                         )}
 
+
                                         {submissionStep === 'input_text' && (
                                             <View style={{ width: '100%' }}>
                                                 <TextInput
-                                                    style={styles.textInputArea}
+                                                    style={[styles.textInputArea, darkMode && { backgroundColor: '#2C2C2E', color: '#FFF' }]}
                                                     multiline
                                                     placeholder="Write your response..."
-                                                    placeholderTextColor="#8E8E93"
+                                                    placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
                                                     value={textContent}
                                                     onChangeText={setTextContent}
                                                     autoFocus
@@ -1196,4 +1192,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.1)',
     },
     pageDescriptionDark: { color: '#8E8E93' },
+    cardDark: { backgroundColor: '#2C2C2E' },
+    secondaryBtnDark: { backgroundColor: '#3A3A3C' },
+    textDark: { color: '#FFF' },
 });
