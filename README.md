@@ -1,5 +1,5 @@
 
-# Spindare 🌀 `v0.61.60-pre-alpha`
+# Spindare 🌀 `v0.61.6-4pre-alpha`
 
 **The Anti-Scroll Social Experiment.** Spindare is a reaction-algorithm-based platform designed to turn digital intent
 into physical action. Built by a tight-knit team of three, we are redefining social connection
@@ -25,7 +25,7 @@ Spindare isn't a gallery; it’s a gauntlet. We believe social media should make
 
 ## 🛠 Project Progress
 
-### Currently in v0.37.1
+### Currently in v0.61.64
 
 * ✅ **Active Reveal Logic:** Feed access is strictly gated by challenge completion.
 * ✅ **Challenge Persistence:** Added "Save for Later" functionality for challenges.
@@ -55,6 +55,6 @@ Spindare isn't a gallery; it’s a gauntlet. We believe social media should make
 ```
 SDK: 55.0.2
 Runtime: exposdk:55.0.2
-Version: 0.61.60 (Pre-Alpha)
+Version: 0.61.64 (Pre-Alpha)
 
 
