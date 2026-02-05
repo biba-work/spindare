@@ -145,7 +145,7 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
     );
 };
 
-export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean }) => {
+export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut, isImagePost }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean, isImagePost?: boolean }) => {
     const { darkMode } = useTheme();
     const scale = useRef(new Animated.Value(1)).current;
     const opacity = useRef(new Animated.Value(1)).current;
@@ -158,9 +158,9 @@ export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }
                 useNativeDriver: true
             }).start();
         } else {
-            opacity.setValue(1);
+            opacity.setValue(isImagePost ? 0.75 : 1);
         }
-    }, [fadeOut]);
+    }, [fadeOut, isImagePost]);
 
     const handlePress = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

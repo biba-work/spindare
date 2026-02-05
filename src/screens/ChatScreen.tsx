@@ -9,8 +9,10 @@ import {
     KeyboardAvoidingView,
     Platform,
     Image,
-    ActivityIndicator
+    ActivityIndicator,
+    ImageBackground
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { auth } from '../services/firebaseConfig';
@@ -196,77 +198,87 @@ export const ChatScreen = ({ channel, onBack }: ChatScreenProps) => {
     };
 
     return (
-        <SafeAreaView style={[styles.container, darkMode && styles.containerDark]} edges={['top']}>
-            {/* Header */}
-            <View style={[styles.header, darkMode && styles.headerDark]}>
-                <Pressable onPress={onBack} style={styles.backBtn}>
-                    <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
-                </Pressable>
-                <View style={styles.headerCenter}>
-                    <Image source={{ uri: chatAvatar }} style={styles.headerAvatar} />
-                    <Text style={[styles.headerName, darkMode && styles.textDark]} numberOfLines={1}>
-                        {chatName}
-                    </Text>
-                </View>
-                <View style={styles.placeholder} />
-            </View>
-
-            {/* Messages */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
-                </View>
-            ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    renderItem={renderMessage}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
-                    showsVerticalScrollIndicator={false}
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-                />
-            )}
-
-            {/* Input */}
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={0}
+        <View style={{ flex: 1 }}>
+            <ImageBackground
+                source={require('../../assets/guest_1.jpg')}
+                style={StyleSheet.absoluteFill}
+                blurRadius={Platform.OS === 'ios' ? 40 : 10}
             >
-                <View style={[styles.inputContainer, darkMode && styles.inputContainerDark, { paddingBottom: insets.bottom + 8 }]}>
-                    <TextInput
-                        style={[styles.input, darkMode && styles.inputDark]}
-                        placeholder="Type a message..."
-                        placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
-                        value={inputText}
-                        onChangeText={setInputText}
-                        multiline
-                        maxLength={500}
-                    />
-                    <Pressable
-                        onPress={sendMessage}
-                        style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
-                        disabled={!inputText.trim() || sending}
+                <LinearGradient
+                    colors={darkMode ? ['rgba(28,28,30,0.85)', 'rgba(28,28,30,0.95)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.95)']}
+                    style={StyleSheet.absoluteFill}
+                />
+                <SafeAreaView style={styles.container} edges={['top']}>
+                    {/* Header */}
+                    <View style={[styles.header, darkMode && styles.headerDark]}>
+                        <Pressable onPress={onBack} style={styles.backBtn}>
+                            <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
+                        </Pressable>
+                        <View style={styles.headerCenter}>
+                            <Image source={{ uri: chatAvatar }} style={styles.headerAvatar} />
+                            <Text style={[styles.headerName, darkMode && styles.textDark]} numberOfLines={1}>
+                                {chatName}
+                            </Text>
+                        </View>
+                        <View style={styles.placeholder} />
+                    </View>
+
+                    {/* Messages */}
+                    {loading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
+                        </View>
+                    ) : (
+                        <FlatList
+                            ref={flatListRef}
+                            data={messages}
+                            renderItem={renderMessage}
+                            keyExtractor={(item) => item.id}
+                            contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
+                            showsVerticalScrollIndicator={false}
+                            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                        />
+                    )}
+
+                    {/* Input */}
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        keyboardVerticalOffset={0}
                     >
-                        {sending ? (
-                            <ActivityIndicator size="small" color="#FFF" />
-                        ) : (
-                            <SendIcon color="#FFF" />
-                        )}
-                    </Pressable>
-                </View>
-            </KeyboardAvoidingView>
-        </SafeAreaView>
+                        <View style={[styles.inputContainer, darkMode && styles.inputContainerDark, { paddingBottom: insets.bottom + 8 }]}>
+                            <TextInput
+                                style={[styles.input, darkMode && styles.inputDark]}
+                                placeholder="Type a message..."
+                                placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
+                                value={inputText}
+                                onChangeText={setInputText}
+                                multiline
+                                maxLength={500}
+                            />
+                            <Pressable
+                                onPress={sendMessage}
+                                style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
+                                disabled={!inputText.trim() || sending}
+                            >
+                                {sending ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <SendIcon color="#FFF" />
+                                )}
+                            </Pressable>
+                        </View>
+                    </KeyboardAvoidingView>
+                </SafeAreaView>
+            </ImageBackground>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAF9F6',
     },
     containerDark: {
-        backgroundColor: '#1C1C1E',
     },
     header: {
         flexDirection: 'row',
@@ -397,11 +409,11 @@ const styles = StyleSheet.create({
         paddingTop: 12,
         borderTopWidth: 1,
         borderTopColor: 'rgba(0,0,0,0.05)',
-        backgroundColor: '#FAF9F6',
+        backgroundColor: 'rgba(255,255,255,0.9)',
     },
     inputContainerDark: {
         borderTopColor: 'rgba(255,255,255,0.1)',
-        backgroundColor: '#1C1C1E',
+        backgroundColor: 'rgba(28,28,30,0.95)',
     },
     input: {
         flex: 1,

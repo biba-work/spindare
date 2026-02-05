@@ -15,7 +15,8 @@ import {
     where,
     getDoc,
     deleteDoc,
-    setDoc
+    setDoc,
+    getCountFromServer
 } from 'firebase/firestore';
 import { NotificationService } from './NotificationService';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
@@ -34,6 +35,7 @@ export interface Post {
         thought: number;
         intrigued: number;
     };
+    spinCount?: number;
 }
 
 export const PostService = {
@@ -82,6 +84,16 @@ export const PostService = {
             finalMediaUrl = await this.uploadImage(mediaUri);
         }
 
+        // Calculate functional Spin Count (how many people have done this challenge)
+        let count = 1; // Default to 1 (this new post)
+        try {
+            const countQ = query(collection(db, 'posts'), where("challenge", "==", challenge));
+            const snapshot = await getCountFromServer(countQ);
+            count = snapshot.data().count + 1;
+        } catch (err) {
+            console.warn("Could not calculate spin count, defaulting to 1", err);
+        }
+
         const postData = {
             userId: user.uid,
             author: username,
@@ -94,7 +106,8 @@ export const PostService = {
                 felt: 0,
                 thought: 0,
                 intrigued: 0
-            }
+            },
+            spinCount: count
         };
 
         return await addDoc(collection(db, 'posts'), postData);
@@ -253,7 +266,8 @@ export const PostService = {
                     content: guest.content,
                     media: guest.media,
                     timestamp: serverTimestamp(),
-                    reactions: { felt: Math.floor(Math.random() * 20), thought: Math.floor(Math.random() * 10), intrigued: Math.floor(Math.random() * 5) }
+                    reactions: { felt: Math.floor(Math.random() * 20), thought: Math.floor(Math.random() * 10), intrigued: Math.floor(Math.random() * 5) },
+                    spinCount: Math.floor(Math.random() * 500)
                 });
             }
         }
@@ -262,7 +276,39 @@ export const PostService = {
         const q = query(collection(db, 'posts'), limit(1));
         const snap = await getDocs(q);
         if (!snap.empty) {
-            console.log("Feed already has data. Skipping seed.");
+            console.log("Feed data exists. Syncing real spin counts...");
+
+            // 1. Fetch all posts
+            const allPostsQ = query(collection(db, 'posts'));
+            const allSnap = await getDocs(allPostsQ);
+
+            // 2. Group posts by challenge
+            const challengeCounts: Record<string, number> = {};
+
+            allSnap.docs.forEach(d => {
+                const data = d.data();
+                if (data.challenge) {
+                    challengeCounts[data.challenge] = (challengeCounts[data.challenge] || 0) + 1;
+                }
+            });
+
+            // 3. Update all posts with the REAL count
+            const batchPromises = allSnap.docs.map(async (d) => {
+                const data = d.data();
+                if (data.challenge) {
+                    const realCount = challengeCounts[data.challenge] || 1;
+                    // Only update if different to save writes
+                    if (data.spinCount !== realCount) {
+                        await updateDoc(doc(db, 'posts', d.id), { spinCount: realCount });
+                    }
+                } else if (data.spinCount === undefined) {
+                    // Posts without challenges get 0
+                    await updateDoc(doc(db, 'posts', d.id), { spinCount: 0 });
+                }
+            });
+
+            await Promise.all(batchPromises);
+            console.log("Spin counts synced successfully!");
             return;
         }
 
@@ -275,7 +321,8 @@ export const PostService = {
                 challenge: "Silence Protocol",
                 content: "Spent 2 hours in total silence. The city sounds like a different beast when you stop contributing to the noise.",
                 media: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
-                reactions: { felt: 24, thought: 12, intrigued: 5 }
+                reactions: { felt: 24, thought: 12, intrigued: 5 },
+                spinCount: 1240
             },
             {
                 userId: "ai-faker-2",
@@ -284,7 +331,8 @@ export const PostService = {
                 challenge: "Unknown Path",
                 content: "Took the back alley near the industrial district. Found this street art I never knew existed. Beauty is everywhere.",
                 media: "https://images.unsplash.com/photo-1518107616385-ad308919634a?w=800&q=80",
-                reactions: { felt: 8, thought: 3, intrigued: 45 }
+                reactions: { felt: 8, thought: 3, intrigued: 45 },
+                spinCount: 856
             },
             {
                 userId: "ai-faker-3",
@@ -293,7 +341,8 @@ export const PostService = {
                 challenge: "Deep Memory",
                 content: "Wrote down the smell of my grandmother's kitchen. It's crazy how words can make you smell cinnamon and old books.",
                 media: null,
-                reactions: { felt: 56, thought: 89, intrigued: 2 }
+                reactions: { felt: 56, thought: 89, intrigued: 2 },
+                spinCount: 45
             }
         ];
 

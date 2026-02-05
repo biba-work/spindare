@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Image, ActivityIndicator, ImageBackground, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChatService, chatClient } from '../services/ChatService';
@@ -113,55 +114,65 @@ export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
     );
 
     return (
-        <SafeAreaView style={[styles.container, darkMode && styles.containerDark]} edges={['top']}>
-            <View style={[styles.header, darkMode && styles.headerDark]}>
-                <Pressable onPress={onBack} style={styles.backBtn}>
-                    <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
-                </Pressable>
-                <Text style={[styles.title, darkMode && styles.titleDark]}>MESSAGES</Text>
-                <View style={styles.placeholder} />
-            </View>
-
-            {loading ? (
-                <View style={styles.centerContent}>
-                    <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
-                    <Text style={[styles.loadingText, darkMode && styles.textDark]}>Loading messages...</Text>
-                </View>
-            ) : error ? (
-                <View style={styles.centerContent}>
-                    <Text style={[styles.errorText, darkMode && styles.textDark]}>{error}</Text>
-                    <Pressable onPress={loadChannels} style={styles.retryBtn}>
-                        <Text style={styles.retryText}>Retry</Text>
-                    </Pressable>
-                </View>
-            ) : channels.length === 0 ? (
-                <View style={styles.centerContent}>
-                    <MessageIcon color={darkMode ? "#555" : "#D1D1D1"} />
-                    <Text style={[styles.emptyTitle, darkMode && styles.textDark]}>No messages yet</Text>
-                    <Text style={styles.emptySubtitle}>
-                        Send a challenge to a friend to start chatting!
-                    </Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={channels}
-                    renderItem={renderChannelItem}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
+        <View style={{ flex: 1 }}>
+            <ImageBackground
+                source={require('../../assets/guest_1.jpg')}
+                style={StyleSheet.absoluteFill}
+                blurRadius={Platform.OS === 'ios' ? 40 : 10}
+            >
+                <LinearGradient
+                    colors={darkMode ? ['rgba(28,28,30,0.85)', 'rgba(28,28,30,0.95)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.95)']}
+                    style={StyleSheet.absoluteFill}
                 />
-            )}
-        </SafeAreaView>
+                <SafeAreaView style={styles.container} edges={['top']}>
+                    <View style={[styles.header, darkMode && styles.headerDark]}>
+                        <Pressable onPress={onBack} style={styles.backBtn}>
+                            <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
+                        </Pressable>
+                        <Text style={[styles.title, darkMode && styles.titleDark]}>MESSAGES</Text>
+                        <View style={styles.placeholder} />
+                    </View>
+
+                    {loading ? (
+                        <View style={styles.centerContent}>
+                            <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
+                            <Text style={[styles.loadingText, darkMode && styles.textDark]}>Loading messages...</Text>
+                        </View>
+                    ) : error ? (
+                        <View style={styles.centerContent}>
+                            <Text style={[styles.errorText, darkMode && styles.textDark]}>{error}</Text>
+                            <Pressable onPress={loadChannels} style={styles.retryBtn}>
+                                <Text style={styles.retryText}>Retry</Text>
+                            </Pressable>
+                        </View>
+                    ) : channels.length === 0 ? (
+                        <View style={styles.centerContent}>
+                            <MessageIcon color={darkMode ? "#555" : "#D1D1D1"} />
+                            <Text style={[styles.emptyTitle, darkMode && styles.textDark]}>No messages yet</Text>
+                            <Text style={styles.emptySubtitle}>
+                                Send a challenge to a friend to start chatting!
+                            </Text>
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={channels}
+                            renderItem={renderChannelItem}
+                            keyExtractor={(item) => item.id}
+                            contentContainerStyle={styles.listContent}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    )}
+                </SafeAreaView>
+            </ImageBackground>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FAF9F6',
     },
     containerDark: {
-        backgroundColor: '#1C1C1E',
     },
     header: {
         flexDirection: 'row',

@@ -320,9 +320,9 @@ const styles = StyleSheet.create({
         padding: 18,
         marginBottom: 12,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.8)',
+        backgroundColor: 'rgba(255,255,255,0.6)',
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(255,255,255,0.4)',
     },
     notifDot: {
         width: 8,
@@ -364,10 +364,10 @@ const styles = StyleSheet.create({
     inboxCard: {
         padding: 20,
         borderRadius: 24,
-        backgroundColor: 'rgba(255,255,255,0.9)',
+        backgroundColor: 'rgba(255,255,255,0.65)',
         marginBottom: 14,
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(255,255,255,0.4)',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.03,
@@ -436,10 +436,10 @@ const styles = StyleSheet.create({
     savedCard: {
         padding: 20,
         borderRadius: 24,
-        backgroundColor: 'rgba(255,255,255,0.9)',
+        backgroundColor: 'rgba(255,255,255,0.65)',
         marginBottom: 14,
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(255,255,255,0.4)',
     },
     savedText: {
         color: '#4A4A4A',
@@ -516,8 +516,8 @@ const styles = StyleSheet.create({
         color: '#FFF',
     },
     inboxCardDark: {
-        backgroundColor: 'rgba(44,44,46,0.9)',
-        borderColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(44,44,46,0.6)',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     inboxFromDark: {
         color: '#FFF',
@@ -526,8 +526,8 @@ const styles = StyleSheet.create({
         color: '#E5E5EA',
     },
     savedCardDark: {
-        backgroundColor: 'rgba(44,44,46,0.9)',
-        borderColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(44,44,46,0.6)',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     savedTextDark: {
         color: '#E5E5EA',

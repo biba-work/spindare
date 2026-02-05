@@ -62,6 +62,14 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
     const [showChallengeMenu, setShowChallengeMenu] = useState(false);
     const reactionAnim = useRef(new Animated.Value(1)).current;
 
+    const formattedSpinCount = React.useMemo(() => {
+        const count = post.spinCount || 0;
+        if (count >= 1000) {
+            return `${(count / 1000).toFixed(1)}K`;
+        }
+        return count.toString();
+    }, [post.spinCount]);
+
     const handleSelect = async (type: 'felt' | 'thought' | 'intrigued') => {
         if (isReacted) return;
 
@@ -102,34 +110,40 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
         }
     };
 
-    const renderReactions = () => (
-        <>
-            <ReactionItem
-                type="felt"
-                count={post.reactions.felt + (selected === 'felt' ? 1 : 0)}
-                active={selected === 'felt'}
-                onSelect={() => handleSelect('felt')}
-                isOwner={isOwner}
-                fadeOut={isReacted}
-            />
-            <ReactionItem
-                type="thought"
-                count={post.reactions.thought + (selected === 'thought' ? 1 : 0)}
-                active={selected === 'thought'}
-                onSelect={() => handleSelect('thought')}
-                isOwner={isOwner}
-                fadeOut={isReacted}
-            />
-            <ReactionItem
-                type="intrigued"
-                count={post.reactions.intrigued + (selected === 'intrigued' ? 1 : 0)}
-                active={selected === 'intrigued'}
-                onSelect={() => handleSelect('intrigued')}
-                isOwner={isOwner}
-                fadeOut={isReacted}
-            />
-        </>
-    );
+    const renderReactions = () => {
+        const isImagePost = !!(post.media && post.media.trim() !== '');
+        return (
+            <>
+                <ReactionItem
+                    type="felt"
+                    count={post.reactions.felt + (selected === 'felt' ? 1 : 0)}
+                    active={selected === 'felt'}
+                    onSelect={() => handleSelect('felt')}
+                    isOwner={isOwner}
+                    fadeOut={isReacted}
+                    isImagePost={isImagePost}
+                />
+                <ReactionItem
+                    type="thought"
+                    count={post.reactions.thought + (selected === 'thought' ? 1 : 0)}
+                    active={selected === 'thought'}
+                    onSelect={() => handleSelect('thought')}
+                    isOwner={isOwner}
+                    fadeOut={isReacted}
+                    isImagePost={isImagePost}
+                />
+                <ReactionItem
+                    type="intrigued"
+                    count={post.reactions.intrigued + (selected === 'intrigued' ? 1 : 0)}
+                    active={selected === 'intrigued'}
+                    onSelect={() => handleSelect('intrigued')}
+                    isOwner={isOwner}
+                    fadeOut={isReacted}
+                    isImagePost={isImagePost}
+                />
+            </>
+        );
+    };
 
     const handleChallengeAction = (action: 'send' | 'camera' | 'gallery' | 'text') => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -177,14 +191,24 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
                         {renderReactions()}
                     </Animated.View>
                     <View style={[styles.textOverlay, darkMode && styles.textOverlayDark, isReacted && { paddingRight: 24 }]}>
-                        {post.challenge && <Text style={styles.challengeLabel}>{post.challenge}</Text>}
+                        {post.challenge && (
+                            <View style={styles.challengeRow}>
+                                <Text style={[styles.challengeLabel, { marginBottom: 0 }]}>{post.challenge}</Text>
+                                <Text style={[styles.challengeLabel, { marginBottom: 0 }]}>{formattedSpinCount} Spins</Text>
+                            </View>
+                        )}
                         <Text style={[styles.contentText, darkMode && styles.contentTextDark]} numberOfLines={3}>{post.content}</Text>
                     </View>
                 </ImageViewer>
             ) : (
                 <View style={[styles.textOnlyPost, isReacted && { opacity: 0.6 }]}>
                     <View style={styles.textOnlyBody}>
-                        {post.challenge && <Text style={[styles.challengeLabel, { marginBottom: 8 }]}>{post.challenge}</Text>}
+                        {post.challenge && (
+                            <View style={styles.challengeRow}>
+                                <Text style={[styles.challengeLabel, { marginBottom: 0 }]}>{post.challenge}</Text>
+                                <Text style={[styles.challengeLabel, { marginBottom: 0 }]}>{formattedSpinCount} Spins</Text>
+                            </View>
+                        )}
                         <Text style={[styles.textOnlyContent, darkMode && styles.textOnlyContentDark]}>{post.content}</Text>
                     </View>
                     {!isReacted && (
@@ -270,7 +294,7 @@ export const FeedScreen = ({
     const { darkMode } = useTheme();
 
     return (
-        <View style={[styles.container, darkMode && styles.containerDark]}>
+        <View style={styles.container}>
             <FlatList
                 data={posts}
                 keyExtractor={(item) => item.id}
@@ -294,17 +318,27 @@ export const FeedScreen = ({
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FAF9F6' },
-    containerDark: { backgroundColor: '#1C1C1E' },
+    container: { flex: 1 },
+    containerDark: {},
     list: { paddingBottom: 100 },
     postCard: {
-        marginBottom: 32,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.08)',
-        paddingBottom: 32,
+        marginBottom: 24,
+        marginHorizontal: 16,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255,255,255,0.65)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.4)',
+        overflow: 'hidden',
+        // Shadow for depth
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
     },
     postCardDark: {
-        borderBottomColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(28,28,30,0.6)',
+        borderColor: 'rgba(255,255,255,0.1)',
+        shadowOpacity: 0.2,
     },
     header: {
         flexDirection: 'row',
@@ -360,7 +394,7 @@ const styles = StyleSheet.create({
     },
     reactionOverlay: {
         position: 'absolute',
-        right: 16,
+        right: 12,
         top: '15%',
         zIndex: 10,
     },
@@ -371,9 +405,9 @@ const styles = StyleSheet.create({
         right: 0,
         padding: 24,
         paddingRight: 80,
-        backgroundColor: 'rgba(250, 249, 246, 0.92)',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)', // Slightly more opaque for readability
         borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.05)',
+        borderTopColor: 'rgba(255,255,255,0.5)',
     },
     textOverlayDark: {
         backgroundColor: 'rgba(28, 28, 30, 0.92)',
@@ -386,6 +420,13 @@ const styles = StyleSheet.create({
         letterSpacing: 1.5,
         marginBottom: 8,
         textTransform: 'uppercase',
+    },
+    challengeRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+        width: '100%',
     },
     contentText: {
         color: '#2C2C2C',
@@ -432,6 +473,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         backgroundColor: 'rgba(0,0,0,0.05)',
         gap: 8,
+        marginBottom: 8, // Added margin below to fit better
     },
     challengeBtnDark: {
         backgroundColor: 'rgba(255,255,255,0.1)',
@@ -452,9 +494,10 @@ const styles = StyleSheet.create({
     },
     menuContainer: {
         width: width - 48,
-        backgroundColor: 'rgba(255,255,255,0.98)',
+        backgroundColor: '#FFF',
         borderRadius: 24,
         padding: 24,
+        paddingBottom: 32, // Increased padding bottom
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
@@ -463,7 +506,7 @@ const styles = StyleSheet.create({
         elevation: 10,
     },
     menuContainerDark: {
-        backgroundColor: 'rgba(44,44,46,0.98)',
+        backgroundColor: '#2C2C2E',
     },
     menuTitle: {
         fontSize: 18,

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Image, TextInput, Keyboard, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Image, TextInput, Keyboard, ScrollView, Platform, ImageBackground } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedScreen } from './FeedScreen';
 import { FriendsListScreen } from './FriendsListScreen';
@@ -24,6 +24,7 @@ import { UserProfileView } from './UserProfileView';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchService } from '../services/SearchService';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -296,219 +297,232 @@ export const MainFeedScreen = () => {
     );
 
     return (
-        <View style={[styles.container, darkMode && styles.containerDark]}>
-            <StatusBar style={darkMode ? "light" : "dark"} />
-            <Animated.View style={[styles.headerContainer, darkMode && styles.headerContainerDark, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
-                <SafeAreaView style={styles.safeArea} edges={['top']}>
-                    <View style={styles.header}>
-                        {!isSearching && (
-                            <View style={styles.leftActions}>
-                                <Pressable onPress={() => setIsProfileVisible(true)} style={styles.topBarPfpContainer}>
-                                    <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.topBarPfp} />
-                                </Pressable>
-                                <AppButton type="icon" onPress={() => showOverlay('saved')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
-                                    <SavedIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
-                                    {savedChallenges.length > 0 && (
-                                        <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
-                                            <Text style={styles.badgeText}>{savedChallenges.length}</Text>
-                                        </Animated.View>
-                                    )}
-                                </AppButton>
-                            </View>
-                        )}
-
-                        {!isSearching && <Text style={[styles.logo, darkMode && styles.logoDark]}>SPINDARE</Text>}
-
-                        <View style={[styles.rightActions, isSearching && { flex: 1, justifyContent: 'center' }]}>
-                            <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 32] }) }]}>
-                                {isSearching ? (
-                                    <View style={[styles.searchInner, darkMode && styles.searchInnerDark]}>
-                                        <TextInput
-                                            autoFocus
-                                            placeholder="Search"
-                                            placeholderTextColor={darkMode ? "#777" : "#C5C5C5"}
-                                            style={[styles.searchInput, darkMode && styles.searchInputDark]}
-                                            value={searchQuery}
-                                            onChangeText={setSearchQuery}
-                                        />
-                                        <Pressable onPress={() => toggleSearch(false)} style={styles.cancelBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                                            <Text style={styles.cancelText}>Cancel</Text>
+        <View style={{ flex: 1 }}>
+            <ImageBackground
+                source={require('../../assets/guest_1.jpg')}
+                style={StyleSheet.absoluteFill}
+                blurRadius={Platform.OS === 'ios' ? 40 : 10}
+            >
+                <LinearGradient
+                    colors={darkMode ? ['rgba(28,28,30,0.85)', 'rgba(28,28,30,0.95)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.9)']}
+                    style={StyleSheet.absoluteFill}
+                />
+                <SafeAreaView style={{ flex: 1 }} edges={['left', 'right']}>
+                    <StatusBar style={darkMode ? "light" : "dark"} />
+                    <Animated.View style={[styles.headerContainer, { transform: [{ translateY: headerVisible.interpolate({ inputRange: [0, 1], outputRange: [-150, 0] }) }] }]}>
+                        <BlurView intensity={Platform.OS === 'ios' ? 20 : 0} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                        <SafeAreaView edges={['top']}>
+                            <View style={styles.header}>
+                                {!isSearching && (
+                                    <View style={styles.leftActions}>
+                                        <Pressable onPress={() => setIsProfileVisible(true)} style={styles.topBarPfpContainer}>
+                                            <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.topBarPfp} />
                                         </Pressable>
+                                        <AppButton type="icon" onPress={() => showOverlay('saved')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                            <SavedIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                            {savedChallenges.length > 0 && (
+                                                <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
+                                                    <Text style={styles.badgeText}>{savedChallenges.length}</Text>
+                                                </Animated.View>
+                                            )}
+                                        </AppButton>
                                     </View>
-                                ) : (
-                                    <AppButton type="icon" onPress={() => toggleSearch(true)} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
-                                        <SearchIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
-                                    </AppButton>
                                 )}
-                            </Animated.View>
 
-                            {!isSearching && (
-                                <AppButton type="icon" onPress={() => showOverlay('notifications')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
-                                    <NotificationIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
-                                </AppButton>
+                                {!isSearching && <Text style={[styles.logo, darkMode && styles.logoDark]}>SPINDARE</Text>}
+
+                                <View style={[styles.rightActions, isSearching && { flex: 1, justifyContent: 'center' }]}>
+                                    <Animated.View style={[styles.searchOuter, { width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [48, width - 32] }) }]}>
+                                        {isSearching ? (
+                                            <View style={[styles.searchInner, darkMode && styles.searchInnerDark]}>
+                                                <TextInput
+                                                    autoFocus
+                                                    placeholder="Search"
+                                                    placeholderTextColor={darkMode ? "#777" : "#C5C5C5"}
+                                                    style={[styles.searchInput, darkMode && styles.searchInputDark]}
+                                                    value={searchQuery}
+                                                    onChangeText={setSearchQuery}
+                                                />
+                                                <Pressable onPress={() => toggleSearch(false)} style={styles.cancelBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                                                    <Text style={styles.cancelText}>Cancel</Text>
+                                                </Pressable>
+                                            </View>
+                                        ) : (
+                                            <AppButton type="icon" onPress={() => toggleSearch(true)} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                                <SearchIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                            </AppButton>
+                                        )}
+                                    </Animated.View>
+
+                                    {!isSearching && (
+                                        <AppButton type="icon" onPress={() => showOverlay('notifications')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
+                                            <NotificationIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                        </AppButton>
+                                    )}
+                                </View>
+                            </View>
+
+                            {/* Search Results */}
+                            {isSearching && searchQuery.length >= 2 && (searchResults.users.length > 0 || searchResults.posts.length > 0) && (
+                                <View style={[styles.searchResultsContainer, darkMode && styles.searchResultsContainerDark]}>
+                                    <ScrollView keyboardShouldPersistTaps="handled">
+                                        {searchResults.users.length > 0 && (
+                                            <View style={styles.resultSection}>
+                                                <Text style={[styles.resultSectionTitle, darkMode && styles.textDark]}>USERS</Text>
+                                                {searchResults.users.map(u => (
+                                                    <Pressable key={u.username} onPress={() => handleProfilePress(u.uid || '', u.username, u.photoURL || '')} style={styles.resultItem}>
+                                                        <Image source={{ uri: u.photoURL || Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri }} style={styles.resultAvatar} />
+                                                        <Text style={[styles.resultText, darkMode && styles.textDark]}>@{u.username}</Text>
+                                                    </Pressable>
+                                                ))}
+                                            </View>
+                                        )}
+                                        {searchResults.posts.length > 0 && (
+                                            <View style={styles.resultSection}>
+                                                <Text style={[styles.resultSectionTitle, darkMode && styles.textDark]}>CHALLENGES</Text>
+                                                {searchResults.posts.map(p => (
+                                                    <Pressable key={p.id} onPress={() => { setChallenge(p.challenge); showPostCreator(); }} style={styles.resultItem}>
+                                                        <Text style={[styles.resultText, darkMode && styles.textDark]} numberOfLines={1}>{p.challenge}</Text>
+                                                    </Pressable>
+                                                ))}
+                                            </View>
+                                        )}
+                                    </ScrollView>
+                                </View>
                             )}
-                        </View>
+                        </SafeAreaView>
+                    </Animated.View>
+
+                    {/* Mini Header Slide Popup */}
+                    <Animated.View style={[styles.miniHeader, { opacity: miniHeaderVisible, transform: [{ translateY: miniHeaderVisible.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }] }]}>
+                        <BlurView intensity={80} tint={darkMode ? "dark" : "light"} style={[styles.miniBlurWrapper, { paddingTop: insets.top }, darkMode && { borderBottomColor: 'rgba(255,255,255,0.1)' }]}>
+                            <View style={styles.miniHeaderContent}>
+                                <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
+                                    <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.miniPfp} />
+                                </Pressable>
+                                <Text style={[styles.miniUsername, darkMode && styles.textDark]}>@{userProfile.username}</Text>
+                            </View>
+                        </BlurView>
+                    </Animated.View>
+
+                    <View style={styles.content}>
+                        <FeedScreen
+                            posts={posts}
+                            currentUserId={auth.currentUser?.uid}
+                            ListHeaderComponent={renderHeader}
+                            onScroll={onScroll}
+                            contentContainerStyle={{ paddingTop: 60 + insets.top }}
+                            onProfilePress={handleProfilePress}
+                            onChallengeAction={(challenge, action) => {
+                                // Route to existing media handling
+                                if (action === 'send') {
+                                    setChallenge(challenge);
+                                    setIsSharing(true);
+                                } else {
+                                    handleMediaAction(action, challenge);
+                                }
+                            }}
+                        />
                     </View>
 
-                    {/* Search Results */}
-                    {isSearching && searchQuery.length >= 2 && (searchResults.users.length > 0 || searchResults.posts.length > 0) && (
-                        <View style={[styles.searchResultsContainer, darkMode && styles.searchResultsContainerDark]}>
-                            <ScrollView keyboardShouldPersistTaps="handled">
-                                {searchResults.users.length > 0 && (
-                                    <View style={styles.resultSection}>
-                                        <Text style={[styles.resultSectionTitle, darkMode && styles.textDark]}>USERS</Text>
-                                        {searchResults.users.map(u => (
-                                            <Pressable key={u.username} onPress={() => handleProfilePress(u.uid || '', u.username, u.photoURL || '')} style={styles.resultItem}>
-                                                <Image source={{ uri: u.photoURL || Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri }} style={styles.resultAvatar} />
-                                                <Text style={[styles.resultText, darkMode && styles.textDark]}>@{u.username}</Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-                                {searchResults.posts.length > 0 && (
-                                    <View style={styles.resultSection}>
-                                        <Text style={[styles.resultSectionTitle, darkMode && styles.textDark]}>CHALLENGES</Text>
-                                        {searchResults.posts.map(p => (
-                                            <Pressable key={p.id} onPress={() => { setChallenge(p.challenge); showPostCreator(); }} style={styles.resultItem}>
-                                                <Text style={[styles.resultText, darkMode && styles.textDark]} numberOfLines={1}>{p.challenge}</Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-                            </ScrollView>
+                    <View style={styles.footer}>
+                        <Text style={styles.versionText}>SPINDARE V0.61.64 (PRE-ALPHA TESTING)</Text>
+                    </View>
+
+                    {isProfileVisible && (
+                        <View style={styles.fullOverlay}>
+                            <ProfileScreen
+                                onBack={() => setIsProfileVisible(false)}
+                                onLogout={handleLogout}
+                                spinsLeft={spinsLeft}
+                                setSpinsLeft={updateSpins}
+                                activeChallenge={challenge}
+                                onChallengeReceived={setChallenge}
+                                userProfile={userProfile}
+                                onUpdateProfile={handleUpdateProfile}
+                                onShare={() => setIsSharing(true)}
+                                onOpenCamera={() => { setIsProfileVisible(false); handleMediaAction('camera', challenge || ''); }}
+                            />
+                        </View>
+                    )}
+                    {isSharing && <View style={[styles.fullOverlay, { zIndex: 6000 }]}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
+
+                    <Animated.View style={[styles.fullOverlay, { transform: [{ translateY: postTransitionAnim }] }]}>
+                        {isPosting && <PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={hidePostCreator} onPost={handlePostSubmit} />}
+                    </Animated.View>
+
+                    <GenericOverlay
+                        visible={overlayType !== null}
+                        type={overlayType || 'saved'}
+                        onClose={hideOverlay}
+                        data={overlayType === 'saved' ? savedChallenges : []}
+                        onAction={handleOverlayAction}
+                        animation={overlayAnim}
+                        onOpenMessages={() => {
+                            hideOverlay();
+                            setIsMessagesVisible(true);
+                        }}
+                    />
+
+                    {/* Messages Screen */}
+                    {isMessagesVisible && (
+                        <View style={styles.fullOverlay}>
+                            <MessagesScreen
+                                onBack={() => setIsMessagesVisible(false)}
+                                onOpenChat={(channel) => {
+                                    setActiveChat(channel);
+                                    setIsMessagesVisible(false);
+                                }}
+                            />
+                        </View>
+                    )}
+
+                    {/* Chat Screen */}
+                    {activeChat && (
+                        <View style={styles.fullOverlay}>
+                            <ChatScreen
+                                channel={activeChat}
+                                onBack={() => setActiveChat(null)}
+                            />
+                        </View>
+                    )}
+
+                    {viewingProfile && (
+                        <View style={styles.fullOverlay}>
+                            <UserProfileView
+                                userId={viewingProfile.userId}
+                                username={viewingProfile.username}
+                                avatar={viewingProfile.avatar}
+                                onBack={() => setViewingProfile(null)}
+                                onStartChat={async () => {
+                                    if (!auth.currentUser) return;
+                                    try {
+                                        const channel = await ChatService.getOrCreateDMChannel(
+                                            auth.currentUser.uid,
+                                            viewingProfile.userId,
+                                            viewingProfile.username,
+                                            viewingProfile.avatar
+                                        );
+                                        setViewingProfile(null);
+                                        setActiveChat(channel);
+                                    } catch (err) {
+                                        console.error('Failed to start chat:', err);
+                                    }
+                                }}
+                            />
                         </View>
                     )}
                 </SafeAreaView>
-            </Animated.View>
-
-            {/* Mini Header Slide Popup */}
-            <Animated.View style={[styles.miniHeader, { opacity: miniHeaderVisible, transform: [{ translateY: miniHeaderVisible.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }] }]}>
-                <BlurView intensity={80} tint={darkMode ? "dark" : "light"} style={[styles.miniBlurWrapper, { paddingTop: insets.top }, darkMode && { borderBottomColor: 'rgba(255,255,255,0.1)' }]}>
-                    <View style={styles.miniHeaderContent}>
-                        <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
-                            <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.miniPfp} />
-                        </Pressable>
-                        <Text style={[styles.miniUsername, darkMode && styles.textDark]}>@{userProfile.username}</Text>
-                    </View>
-                </BlurView>
-            </Animated.View>
-
-            <View style={styles.content}>
-                <FeedScreen
-                    posts={posts}
-                    currentUserId={auth.currentUser?.uid}
-                    ListHeaderComponent={renderHeader}
-                    onScroll={onScroll}
-                    contentContainerStyle={{ paddingTop: 60 + insets.top }}
-                    onProfilePress={handleProfilePress}
-                    onChallengeAction={(challenge, action) => {
-                        // Route to existing media handling
-                        if (action === 'send') {
-                            setChallenge(challenge);
-                            setIsSharing(true);
-                        } else {
-                            handleMediaAction(action, challenge);
-                        }
-                    }}
-                />
-            </View>
-
-            <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.61.64 (PRE-ALPHA TESTING)</Text>
-            </View>
-
-            {isProfileVisible && (
-                <View style={styles.fullOverlay}>
-                    <ProfileScreen
-                        onBack={() => setIsProfileVisible(false)}
-                        onLogout={handleLogout}
-                        spinsLeft={spinsLeft}
-                        setSpinsLeft={updateSpins}
-                        activeChallenge={challenge}
-                        onChallengeReceived={setChallenge}
-                        userProfile={userProfile}
-                        onUpdateProfile={handleUpdateProfile}
-                        onShare={() => setIsSharing(true)}
-                        onOpenCamera={() => { setIsProfileVisible(false); handleMediaAction('camera', challenge || ''); }}
-                    />
-                </View>
-            )}
-            {isSharing && <View style={[styles.fullOverlay, { zIndex: 6000 }]}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
-
-            <Animated.View style={[styles.fullOverlay, { transform: [{ translateY: postTransitionAnim }] }]}>
-                {isPosting && <PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={hidePostCreator} onPost={handlePostSubmit} />}
-            </Animated.View>
-
-            <GenericOverlay
-                visible={overlayType !== null}
-                type={overlayType || 'saved'}
-                onClose={hideOverlay}
-                data={overlayType === 'saved' ? savedChallenges : []}
-                onAction={handleOverlayAction}
-                animation={overlayAnim}
-                onOpenMessages={() => {
-                    hideOverlay();
-                    setIsMessagesVisible(true);
-                }}
-            />
-
-            {/* Messages Screen */}
-            {isMessagesVisible && (
-                <View style={styles.fullOverlay}>
-                    <MessagesScreen
-                        onBack={() => setIsMessagesVisible(false)}
-                        onOpenChat={(channel) => {
-                            setActiveChat(channel);
-                            setIsMessagesVisible(false);
-                        }}
-                    />
-                </View>
-            )}
-
-            {/* Chat Screen */}
-            {activeChat && (
-                <View style={styles.fullOverlay}>
-                    <ChatScreen
-                        channel={activeChat}
-                        onBack={() => setActiveChat(null)}
-                    />
-                </View>
-            )}
-
-            {viewingProfile && (
-                <View style={styles.fullOverlay}>
-                    <UserProfileView
-                        userId={viewingProfile.userId}
-                        username={viewingProfile.username}
-                        avatar={viewingProfile.avatar}
-                        onBack={() => setViewingProfile(null)}
-                        onStartChat={async () => {
-                            if (!auth.currentUser) return;
-                            try {
-                                const channel = await ChatService.getOrCreateDMChannel(
-                                    auth.currentUser.uid,
-                                    viewingProfile.userId,
-                                    viewingProfile.username,
-                                    viewingProfile.avatar
-                                );
-                                setViewingProfile(null);
-                                setActiveChat(channel);
-                            } catch (err) {
-                                console.error('Failed to start chat:', err);
-                            }
-                        }}
-                    />
-                </View>
-            )}
+            </ImageBackground>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FAF9F6' },
-    containerDark: { backgroundColor: '#1C1C1E' },
-    headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, overflow: 'hidden', backgroundColor: '#FAF9F6' },
-    headerContainerDark: { backgroundColor: '#1C1C1E', borderBottomColor: 'rgba(255,255,255,0.1)' },
+    container: { flex: 1 },
+    containerDark: {},
+    headerContainer: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2000, overflow: 'hidden' },
+    headerContainerDark: { borderBottomColor: 'rgba(255,255,255,0.1)' },
     safeArea: { zIndex: 100 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: 60 },
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -528,6 +542,7 @@ const styles = StyleSheet.create({
     cancelBtn: { paddingHorizontal: 12 },
     cancelText: { color: '#8E8E93', fontSize: 12, fontWeight: '500' },
     content: { flex: 1 },
+    // Removed solid background from miniHeader
     miniHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 3000, overflow: 'hidden' },
     miniUsername: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: -0.2 },
     textDark: { color: '#FFF' },
@@ -539,8 +554,8 @@ const styles = StyleSheet.create({
     miniHeaderContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 8, gap: 10 },
     miniPfpWrapper: { width: 32, height: 32, borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
     miniPfp: { width: '100%', height: '100%' },
-    searchResultsContainer: { backgroundColor: '#FAF9F6', maxHeight: 400, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 16, paddingBottom: 20 },
-    searchResultsContainerDark: { backgroundColor: '#1C1C1E', borderTopColor: 'rgba(255,255,255,0.1)' },
+    searchResultsContainer: { backgroundColor: 'rgba(255,255,255,0.95)', maxHeight: 400, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingHorizontal: 16, paddingBottom: 20 },
+    searchResultsContainerDark: { backgroundColor: 'rgba(28,28,30,0.95)', borderTopColor: 'rgba(255,255,255,0.1)' },
     resultSection: { marginTop: 16 },
     resultSectionTitle: { fontSize: 10, color: '#8E8E93', fontWeight: '700', letterSpacing: 1, marginBottom: 8 },
     resultItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },

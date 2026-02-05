@@ -718,8 +718,8 @@ export const ProfileScreen = ({
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#FAF9F6' },
-    containerDark: { backgroundColor: '#1C1C1E' },
+    container: { flex: 1 },
+    containerDark: {},
     safeArea: { flex: 1 },
     header: {
         flexDirection: 'row',
@@ -903,9 +903,9 @@ const styles = StyleSheet.create({
         height: (width - 64) / 3,
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: '#FFF',
+        backgroundColor: 'rgba(255,255,255,0.5)',
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     gridImage: {
         width: '100%',
@@ -927,13 +927,13 @@ const styles = StyleSheet.create({
     },
     listItem: {
         borderRadius: 20,
-        backgroundColor: '#FFF',
+        backgroundColor: 'rgba(255,255,255,0.6)',
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(255,255,255,0.4)',
     },
     listItemDark: {
-        backgroundColor: '#2C2C2E',
+        backgroundColor: 'rgba(28,28,30,0.6)',
         borderColor: 'rgba(255,255,255,0.1)',
     },
     listImage: {
