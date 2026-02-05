@@ -1,5 +1,5 @@
 
-# Spindare 🌀 `v0.61.32-pre-alpha`
+# Spindare 🌀 `v0.61.64-pre-alpha`
 
 **The Anti-Scroll Social Experiment.** Spindare is a reaction-algorithm-based platform designed to turn digital intent
 into physical action. Built by a tight-knit team of three, we are redefining social connection
@@ -18,16 +18,14 @@ Spindare isn't a gallery; it’s a gauntlet. We believe social media should make
 
 1. **The Spin:** AI-driven challenges optimized for your "DNA" (Character & Interests).
 2. **The Action:** Complete the challenge. Take the photo. Write the reflection.
-3. **The Unlock:** The community feed remains **LOCKED** until you finish your first Daily Spin. No participation, no consumption.
-4. **The Reaction:** Engage with others through three distinct emotional pillars: **Felt**, **Thought**, and **Intrigued**.
-
+3. **The Reaction:** Engage with others through three distinct emotional pillars: **Felt**, **Thought**, and **Intrigued**.
+4. **The Messaging** Be able to communticate freely with any Active Users with the ability to **GHOST** people on command 
 ---
 
 ## 🛠 Project Progress
 
-### Currently in v0.37.1
+### Currently in v0.61.64
 
-* ✅ **Active Reveal Logic:** Feed access is strictly gated by challenge completion.
 * ✅ **Challenge Persistence:** Added "Save for Later" functionality for challenges.
 * ✅ **Multi-Medium Posts:** Support for Camera, Gallery, and Just Text responses.
 * ✅ **The Reaction Trinity:** Initial implementation of Felt, Thought, and Intrigued.
@@ -53,8 +51,8 @@ Spindare isn't a gallery; it’s a gauntlet. We believe social media should make
 
 # Current Environment
 ```
-SDK: 55.0.0
-Runtime: exposdk:55.0.0
-Version: 0.61.32 (Pre-Alpha)
+SDK: 55.0.2
+Runtime: exposdk:55.0.2
+Version: 0.61.64 (Pre-Alpha)
 
 

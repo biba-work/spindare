@@ -1,5 +1,5 @@
 
-# Security Policy: Spindare `v0.37.1`
+# Security Policy: Spindare `v0.6.64`
 
 ## 🛡 Vision on Data & Privacy
 
