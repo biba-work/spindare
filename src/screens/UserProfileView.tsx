@@ -43,6 +43,7 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
     const { darkMode } = useTheme();
     const [posts, setPosts] = useState<Post[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const [isRequested, setIsRequested] = useState(false);
     const [stats, setStats] = useState({ followers: 0, following: 0 });
 
     useEffect(() => {
@@ -52,11 +53,13 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
 
         // Social Sync
         const syncSocial = async () => {
-            const [isFollowing, s] = await Promise.all([
+            const [isFollowing, isReq, s] = await Promise.all([
                 SocialService.checkIsFollowing(userId),
+                SocialService.checkIsRequested(userId),
                 SocialService.getFollowStats(userId)
             ]);
             setIsConnected(isFollowing);
+            setIsRequested(isReq);
             setStats(s);
         };
         syncSocial();
@@ -68,22 +71,35 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
         if (!auth.currentUser) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-        // Optimistic Update
-        const newStatus = !isConnected;
-        setIsConnected(newStatus);
-        setStats(prev => ({ ...prev, followers: prev.followers + (newStatus ? 1 : -1) }));
-
-        try {
-            if (newStatus) {
-                await SocialService.followUser(userId);
-            } else {
-                await SocialService.unfollowUser(userId);
+        if (isConnected || isRequested) {
+            // Unfollow or Cancel Request
+            setIsConnected(false);
+            setIsRequested(false);
+            if (isConnected) {
+                setStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
             }
-        } catch (e) {
-            // Revert on error
-            console.error(e);
-            setIsConnected(!newStatus);
-            setStats(prev => ({ ...prev, followers: prev.followers + (newStatus ? -1 : 1) }));
+
+            try {
+                await SocialService.unfollowUser(userId);
+            } catch (e) {
+                console.error(e);
+                // Revert
+                if (isConnected) setIsConnected(true);
+                if (isRequested) setIsRequested(true);
+            }
+        } else {
+            // Attempt Connect
+            try {
+                const status = await SocialService.followUser(userId);
+                if (status === 'connected') {
+                    setIsConnected(true);
+                    setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
+                } else {
+                    setIsRequested(true);
+                }
+            } catch (e) {
+                console.error(e);
+            }
         }
     };
 
@@ -133,36 +149,84 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
                         <Text style={[styles.identityLabel, darkMode && styles.identityLabelDark]}>{identityLabel}</Text>
 
                         <View style={styles.actionButtons}>
-                            <Pressable
-                                onPress={handleConnect}
-                                style={[
-                                    styles.connectBtn,
-                                    darkMode && styles.connectBtnDark,
-                                    isConnected && (darkMode ? styles.connectedBtnDark : styles.connectedBtn)
-                                ]}
-                            >
-                                {!isConnected && <UserPlusIcon color={darkMode ? "#1C1C1E" : "#FAF9F6"} />}
-                                <Text style={[
-                                    styles.connectBtnText,
-                                    darkMode && styles.connectBtnTextDark,
-                                    isConnected && (darkMode ? styles.connectedBtnTextDark : styles.connectedBtnText)
-                                ]}>
-                                    {isConnected ? 'CONNECTED' : 'CONNECT'}
-                                </Text>
-                            </Pressable>
+                            {!isConnected && !isRequested ? (
+                                <Pressable
+                                    onPress={handleConnect}
+                                    style={[
+                                        styles.spinBtn,
+                                        darkMode && styles.spinBtnDark
+                                    ]}
+                                >
+                                    <UserPlusIcon color={darkMode ? "#1C1C1E" : "#FAF9F6"} />
+                                    <Text style={[
+                                        styles.spinBtnText,
+                                        darkMode && styles.spinBtnTextDark
+                                    ]}>
+                                        CONNECT
+                                    </Text>
+                                </Pressable>
+                            ) : isRequested ? (
+                                <Pressable
+                                    onPress={handleConnect}
+                                    style={[
+                                        styles.spinBtn,
+                                        darkMode && styles.spinBtnDark,
+                                        styles.connectedBtn,
+                                        darkMode && styles.connectedBtnDark
+                                    ]}
+                                >
+                                    <Text style={[
+                                        styles.spinBtnText,
+                                        darkMode && styles.spinBtnTextDark,
+                                        styles.connectedBtnText,
+                                        darkMode && styles.connectedBtnTextDark
+                                    ]}>
+                                        REQUESTED
+                                    </Text>
+                                </Pressable>
+                            ) : (
+                                <View
+                                    style={[
+                                        styles.spinBtn,
+                                        darkMode && styles.spinBtnDark,
+                                        styles.connectedBtn,
+                                        darkMode && styles.connectedBtnDark,
+                                        { paddingHorizontal: 20, justifyContent: 'space-between', gap: 0 }
+                                    ]}
+                                >
+                                    <Pressable
+                                        onPress={handleConnect}
+                                        style={{ flexDirection: 'row', alignItems: 'center' }}
+                                    >
+                                        <Text style={[
+                                            styles.spinBtnText,
+                                            darkMode && styles.spinBtnTextDark,
+                                            styles.connectedBtnText,
+                                            darkMode && styles.connectedBtnTextDark
+                                        ]}>
+                                            CONNECTED
+                                        </Text>
+                                    </Pressable>
 
-                            <Pressable
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    onStartChat();
-                                }}
-                                style={[
-                                    styles.messageBtn,
-                                    darkMode && styles.messageBtnDark
-                                ]}
-                            >
-                                <ChatIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
-                            </Pressable>
+                                    <View style={{
+                                        width: 1,
+                                        height: 20,
+                                        backgroundColor: darkMode ? '#FFF' : '#4A4A4A',
+                                        marginHorizontal: 16,
+                                        opacity: 0.2
+                                    }} />
+
+                                    <Pressable
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            onStartChat();
+                                        }}
+                                        hitSlop={15}
+                                    >
+                                        <ChatIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                                    </Pressable>
+                                </View>
+                            )}
                         </View>
 
                         <View style={styles.statsRow}>
@@ -241,7 +305,7 @@ const styles = StyleSheet.create({
     placeholder: { width: 32 },
     profileSection: {
         alignItems: 'center',
-        paddingVertical: 40,
+        paddingVertical: 20,
         paddingHorizontal: 24,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
@@ -253,7 +317,7 @@ const styles = StyleSheet.create({
         borderRadius: 50,
         padding: 3,
         backgroundColor: '#FAF9F6',
-        marginBottom: 16,
+        marginBottom: 8,
         borderWidth: 2,
         borderColor: 'rgba(0,0,0,0.06)',
     },
@@ -278,7 +342,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '500',
         letterSpacing: 0.5,
-        marginBottom: 20,
+        marginBottom: 8,
         textTransform: 'uppercase',
     },
     identityLabelDark: { color: '#A7BBC7' },
@@ -286,51 +350,53 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        marginBottom: 32,
+        marginBottom: 16,
     },
-    connectBtn: {
-        flex: 1,
+    spinBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
-        paddingHorizontal: 24,
+        gap: 10,
+        paddingHorizontal: 28,
         paddingVertical: 14,
-        borderRadius: 24,
+        borderRadius: 28,
         backgroundColor: '#4A4A4A',
-        maxWidth: 200,
+        minWidth: 160,
         shadowColor: '#4A4A4A',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.25,
         shadowRadius: 12,
+        flex: 1, // Allow it to flex
+        maxWidth: 240, // Limit width like Spin Button
     },
-    connectBtnDark: {
+    spinBtnDark: {
         backgroundColor: '#FFF',
-        shadowOpacity: 0,
+    },
+    spinBtnText: {
+        color: '#FAF9F6',
+        fontSize: 13,
+        fontWeight: '700',
+        letterSpacing: 1.5,
+    },
+    spinBtnTextDark: {
+        color: '#1C1C1E',
     },
     connectedBtn: {
-        backgroundColor: '#FAF9F6',
+        backgroundColor: 'transparent',
         borderWidth: 2,
         borderColor: '#4A4A4A',
         shadowOpacity: 0,
     },
     connectedBtnDark: {
         backgroundColor: 'transparent',
-        borderWidth: 2,
         borderColor: '#FFF',
-        shadowOpacity: 0,
     },
-    connectBtnText: {
-        color: '#FAF9F6',
-        fontSize: 13,
-        fontWeight: '700',
-        letterSpacing: 1.5,
-    },
-    connectBtnTextDark: { color: '#1C1C1E' },
     connectedBtnText: {
         color: '#4A4A4A',
     },
-    connectedBtnTextDark: { color: '#FFF' },
+    connectedBtnTextDark: {
+        color: '#FFF',
+    },
     messageBtn: {
         width: 48,
         height: 48,
@@ -355,7 +421,7 @@ const styles = StyleSheet.create({
     },
     statValue: {
         color: '#2C2C2C',
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '700',
         marginBottom: 4,
     },

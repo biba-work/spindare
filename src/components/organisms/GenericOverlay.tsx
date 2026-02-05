@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import { NotificationService, Notification } from '../../services/NotificationService';
+import { SocialService } from '../../services/SocialService';
 import { formatDistanceToNow } from 'date-fns';
 
 const { width, height } = Dimensions.get('window');
@@ -61,12 +62,13 @@ const MessageIcon = ({ color }: { color: string }) => (
 
 interface OverlayProps {
     visible: boolean;
-    type: 'saved' | 'notifications';
+    type: 'saved' | 'notifications' | 'spind';
     onClose: () => void;
-    data: string[];
+    data: string[] | Notification[];
     onAction: (item: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     animation: Animated.Value;
     onOpenMessages?: () => void;
+    onViewProfile?: (userId: string, username: string, avatar: string) => void;
 }
 
 const MOCK_CHALLENGES = {
@@ -79,16 +81,21 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
     const { darkMode } = useTheme();
     const [subTab, setSubTab] = useState<'notifs' | 'inbox' | 'messages'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [requests, setRequests] = useState<any[]>([]);
 
     React.useEffect(() => {
         if (visible && type === 'notifications') {
-            const unsubscribe = NotificationService.subscribeToNotifications(setNotifications);
-            return () => unsubscribe();
+            const notifUnsub = NotificationService.subscribeToNotifications(setNotifications);
+            const reqUnsub = SocialService.subscribeToRequests(setRequests);
+            return () => {
+                notifUnsub();
+                reqUnsub();
+            }
         }
     }, [visible, type]);
 
@@ -104,15 +111,74 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
     };
 
     const renderNotificationsPanel = () => {
+        const challengeNotifs = notifications.filter(n => n.type === 'challenge');
+        const generalNotifs = notifications.filter(n => n.type !== 'challenge');
+
         if (subTab === 'notifs') {
             return (
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {notifications.map((notif) => (
+                    {/* Connection Requests Section */}
+                    {requests.length > 0 && (
+                        <View style={{ marginBottom: 24 }}>
+                            <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>FOLLOW REQUESTS</Text>
+                            {/* ... existing request mapping code ... */}
+                            {requests.map((req) => (
+                                <View key={req.id} style={[styles.notifCard, darkMode && styles.notifCardDark, { flexDirection: 'column' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                        <Pressable
+                                            onPress={() => { if (onViewProfile) onViewProfile(req.id, req.username, req.photoURL || ''); onClose(); }}
+                                            style={styles.notifAvatarContainer}
+                                        >
+                                            <Image
+                                                source={{ uri: req.photoURL || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                                style={styles.notifAvatar}
+                                            />
+                                        </Pressable>
+                                        <Text style={[styles.notifText, darkMode && styles.notifTextDark, { flex: 1, marginBottom: 0 }]}>
+                                            <Text
+                                                onPress={() => { if (onViewProfile) onViewProfile(req.id, req.username, req.photoURL || ''); onClose(); }}
+                                                style={[styles.notifUser, darkMode && styles.notifUserDark]}
+                                            >
+                                                @{req.username}
+                                            </Text> wants to connect
+                                        </Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', gap: 10, paddingLeft: 46 }}>
+                                        <Pressable
+                                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); SocialService.acceptConnectionRequest(req.id); }}
+                                            style={[styles.acceptBtn, { flex: 1, height: 36, backgroundColor: '#4A4A4A' }]}
+                                        >
+                                            <Text style={styles.acceptBtnText}>CONFIRM</Text>
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); SocialService.declineConnectionRequest(req.id); }}
+                                            style={[styles.acceptBtn, { flex: 1, height: 36, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#AEAEB2' }]}
+                                        >
+                                            <Text style={[styles.acceptBtnText, { color: darkMode ? '#AEAEB2' : '#8E8E93' }]}>DELETE</Text>
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {generalNotifs.map((notif) => (
                         <Pressable key={notif.id} style={[styles.notifCard, darkMode && styles.notifCardDark]}>
-                            <View style={[styles.notifDot, notif.read && { backgroundColor: 'transparent' }]} />
+                            <Pressable
+                                onPress={() => { if (onViewProfile && notif.fromUserId) onViewProfile(notif.fromUserId, notif.fromUsername, notif.fromAvatar || ''); onClose(); }}
+                                style={styles.notifAvatarContainer}
+                            >
+                                <Image
+                                    source={{ uri: notif.fromAvatar || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                    style={styles.notifAvatar}
+                                />
+                            </Pressable>
                             <View style={styles.notifContent}>
                                 <Text style={[styles.notifText, darkMode && styles.notifTextDark]}>
-                                    <Text style={[styles.notifUser, darkMode && styles.notifUserDark]}>@{notif.fromUsername}</Text> {notif.content}
+                                    <Text
+                                        onPress={() => { if (onViewProfile && notif.fromUserId) onViewProfile(notif.fromUserId, notif.fromUsername, notif.fromAvatar || ''); onClose(); }}
+                                        style={[styles.notifUser, darkMode && styles.notifUserDark]}
+                                    >@{notif.fromUsername}</Text> {notif.content}
                                 </Text>
                                 <Text style={styles.notifTime}>
                                     {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate ? notif.timestamp.toDate() : new Date(), { addSuffix: true }) : 'just now'}
@@ -120,10 +186,10 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                             </View>
                         </Pressable>
                     ))}
-                    {notifications.length === 0 && (
+                    {generalNotifs.length === 0 && requests.length === 0 && (
                         <View style={styles.emptyState}>
                             <BellIcon color={darkMode ? "#555" : "#D1D1D1"} />
-                            <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>All caught up!</Text>
+                            <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>No new notifications</Text>
                         </View>
                     )}
                 </ScrollView>
@@ -134,58 +200,55 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.sectionHeader}>
                     <View style={styles.sectionBadge}>
-                        <Text style={styles.sectionBadgeText}>{MOCK_CHALLENGES.new.length}</Text>
+                        <Text style={styles.sectionBadgeText}>{challengeNotifs.length}</Text>
                     </View>
-                    <Text style={styles.sectionTitle}>NEW CHALLENGES</Text>
+                    <Text style={styles.sectionTitle}>CHALLENGES</Text>
                 </View>
 
-                {MOCK_CHALLENGES.new.map(c => (
-                    <View key={c.id} style={[styles.inboxCard, darkMode && styles.inboxCardDark]}>
+                {challengeNotifs.map(notif => (
+                    <View key={notif.id} style={[styles.inboxCard, darkMode && styles.inboxCardDark]}>
                         <View style={styles.inboxHeader}>
-                            <Text style={[styles.inboxFrom, darkMode && styles.inboxFromDark]}>@{c.from}</Text>
-                            <Text style={styles.inboxTime}>{c.time}</Text>
+                            <Text style={[styles.inboxFrom, darkMode && styles.inboxFromDark]}>
+                                {notif.fromUsername === 'You' ? 'You sent a challenge' : `@${notif.fromUsername}`}
+                            </Text>
+                            <Text style={styles.inboxTime}>
+                                {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate ? notif.timestamp.toDate() : new Date(), { addSuffix: true }) : 'just now'}
+                            </Text>
                         </View>
-                        <Text style={[styles.inboxChallenge, darkMode && styles.inboxChallengeDark]}>"{c.challenge}"</Text>
+                        <Text style={[styles.inboxChallenge, darkMode && styles.inboxChallengeDark]}>
+                            "{notif.targetId || notif.content}"
+                        </Text>
 
-                        {activeProofId === c.id ? (
-                            <View style={styles.proofActions}>
-                                <Pressable onPress={() => onAction(c.challenge, 'camera')} style={styles.proofBtn}>
-                                    <CameraIcon color="#FAF9F6" />
+                        {/* Only show actions if it's NOT a sent message (i.e. if I received it) */}
+                        {notif.fromUsername !== 'You' && (
+                            activeProofId === notif.id ? (
+                                <View style={styles.proofActions}>
+                                    <Pressable onPress={() => onAction(notif.targetId || '', 'camera')} style={styles.proofBtn}>
+                                        <CameraIcon color="#FAF9F6" />
+                                    </Pressable>
+                                    <Pressable onPress={() => onAction(notif.targetId || '', 'gallery')} style={styles.proofBtn}>
+                                        <GalleryIcon color="#FAF9F6" />
+                                    </Pressable>
+                                    <Pressable onPress={() => onAction(notif.targetId || '', 'text')} style={styles.proofBtn}>
+                                        <TextIcon color="#FAF9F6" />
+                                    </Pressable>
+                                </View>
+                            ) : (
+                                <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setActiveProofId(notif.id); }} style={styles.acceptBtn}>
+                                    <Text style={styles.acceptBtnText}>ACCEPT CHALLENGE</Text>
                                 </Pressable>
-                                <Pressable onPress={() => onAction(c.challenge, 'gallery')} style={styles.proofBtn}>
-                                    <GalleryIcon color="#FAF9F6" />
-                                </Pressable>
-                                <Pressable onPress={() => onAction(c.challenge, 'text')} style={styles.proofBtn}>
-                                    <TextIcon color="#FAF9F6" />
-                                </Pressable>
-                            </View>
-                        ) : (
-                            <Pressable onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setActiveProofId(c.id); }} style={styles.acceptBtn}>
-                                <Text style={styles.acceptBtnText}>ACCEPT CHALLENGE</Text>
-                            </Pressable>
+                            )
                         )}
                     </View>
                 ))}
 
-                <View style={[styles.sectionHeader, { marginTop: 32 }]}>
-                    <View style={[styles.sectionBadge, { backgroundColor: '#F0F0F0' }]}>
-                        <Text style={[styles.sectionBadgeText, { color: '#8E8E93' }]}>{MOCK_CHALLENGES.pending.length}</Text>
+                {challengeNotifs.length === 0 && (
+                    <View style={styles.emptyState}>
+                        <InboxIcon color={darkMode ? "#555" : "#D1D1D1"} />
+                        <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>No active challenges</Text>
+                        <Text style={styles.emptySubtext}>Spin the wheel to send some!</Text>
                     </View>
-                    <Text style={styles.sectionTitle}>PENDING</Text>
-                </View>
-
-                {MOCK_CHALLENGES.pending.map(c => (
-                    <View key={c.id} style={[styles.inboxCard, { opacity: 0.6 }, darkMode && styles.inboxCardDark]}>
-                        <View style={styles.inboxHeader}>
-                            <Text style={[styles.inboxFrom, darkMode && styles.inboxFromDark]}>@{c.from}</Text>
-                            <View style={styles.statusPill}>
-                                <Text style={styles.statusText}>{c.status}</Text>
-                            </View>
-                        </View>
-                        <Text style={[styles.inboxChallenge, darkMode && styles.inboxChallengeDark]}>"{c.challenge}"</Text>
-                        <Text style={styles.inboxTime}>{c.time}</Text>
-                    </View>
-                ))}
+                )}
             </ScrollView>
         );
     };
@@ -199,7 +262,9 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                         <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                             <Text style={[styles.closeText, darkMode && styles.closeTextDark]}>Close</Text>
                         </Pressable>
-                        <Text style={[styles.title, darkMode && styles.titleDark]}>{type === 'saved' ? 'SAVED' : 'ACTIVITY'}</Text>
+                        <Text style={[styles.title, darkMode && styles.titleDark]}>
+                            {type === 'saved' ? 'KEPT' : type === 'spind' ? 'SPIND' : 'ACTIVITY'}
+                        </Text>
                         <View style={styles.placeholder} />
                     </View>
 
@@ -221,9 +286,9 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                     )}
 
                     <View style={styles.mainContent}>
-                        {type === 'saved' ? (
+                        {(type === 'saved' || type === 'spind') ? (
                             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                                {data.map((item, index) => (
+                                {(data as string[]).map((item, index) => (
                                     <View key={index} style={[styles.savedCard, darkMode && styles.savedCardDark]}>
                                         <Text style={[styles.savedText, darkMode && styles.savedTextDark]}>{item}</Text>
                                         <View style={styles.savedActions}>
@@ -331,6 +396,18 @@ const styles = StyleSheet.create({
         backgroundColor: '#A7BBC7',
         marginRight: 14,
         marginTop: 6,
+    },
+    notifAvatarContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        marginRight: 12,
+        backgroundColor: '#F0F0F0',
+        overflow: 'hidden',
+    },
+    notifAvatar: {
+        width: '100%',
+        height: '100%',
     },
     notifContent: { flex: 1 },
     notifText: { color: '#4A4A4A', fontSize: 14, lineHeight: 20, marginBottom: 6 },

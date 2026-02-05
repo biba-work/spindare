@@ -8,6 +8,8 @@ import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/in
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
 import { MainFeedScreen } from "./src/screens/MainFeedScreen";
 import { AppConfig } from "./src/config/AppConfig";
+import { NavigationContainer } from '@react-navigation/native';
+import { AppNavigator } from './src/navigation/AppNavigator';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,11 +46,9 @@ export default function App() {
           <View style={styles.deadzone} />
           <GestureHandlerRootView style={{ flex: 1 }}>
             <StatusBar style="light" />
-            {AppConfig.useRestructuredLayout ? (
-              <MainFeedScreen />
-            ) : (
-              <ChallengeScreen />
-            )}
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
           </GestureHandlerRootView>
         </View>
       </ThemeProvider>

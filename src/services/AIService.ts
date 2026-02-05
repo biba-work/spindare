@@ -14,6 +14,8 @@ export interface UserProfile {
     spinsLeft?: number;
     lastSpinTimestamp?: number;
     photoURL?: string;
+    connectionPrivacy?: 'open' | 'private';
+    uid?: string;
 }
 
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";

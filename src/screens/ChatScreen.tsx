@@ -1,30 +1,28 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Pressable,
-    FlatList,
-    TextInput,
-    KeyboardAvoidingView,
-    Platform,
-    Image,
-    ActivityIndicator,
-    ImageBackground
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useLayoutEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ImageBackground, Platform, ActivityIndicator, Pressable, Image, KeyboardAvoidingView } from 'react-native';
+import { GiftedChat, IMessage, Bubble, InputToolbar, Send, Time, Composer, BubbleProps, InputToolbarProps, SendProps, TimeProps, ComposerProps } from 'react-native-gifted-chat';
+import { collection, addDoc, orderBy, query, onSnapshot, serverTimestamp, doc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { auth, db } from '../services/firebaseConfig';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { auth } from '../services/firebaseConfig';
-import { Channel as StreamChannel, MessageResponse, Event } from 'stream-chat';
-import Svg, { Path } from 'react-native-svg';
-import { formatDistanceToNow } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { SocialService } from '../services/SocialService';
+import { Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
-// Icons
+// --- Icons ---
 const BackIcon = ({ color }: { color: string }) => (
     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <Path d="M15 18l-6-6 6-6" />
+    </Svg>
+);
+
+const OptionsIcon = ({ color }: { color: string }) => (
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="12" r="1" />
+        <Circle cx="12" cy="5" r="1" />
+        <Circle cx="12" cy="19" r="1" />
     </Svg>
 );
 
@@ -35,170 +33,227 @@ const SendIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-interface ChatScreenProps {
-    channel: StreamChannel;
+// --- Types ---
+export interface UserProfileChat {
+    _id: string; // Using _id to match GiftedChat requirement
+    name: string;
+    avatar: string;
+}
+
+export interface ChatScreenProps {
+    otherUser: UserProfileChat;
+    currentUser: UserProfileChat;
     onBack: () => void;
 }
 
-interface MessageItem {
-    id: string;
-    text: string;
-    userId: string;
-    userName: string;
-    userImage: string;
-    createdAt: Date;
-    isOwn: boolean;
-    isChallenge: boolean;
-    challenge?: string;
-}
-
-export const ChatScreen = ({ channel, onBack }: ChatScreenProps) => {
+export const ChatScreen = ({ otherUser, currentUser, onBack }: ChatScreenProps) => {
+    const [messages, setMessages] = useState<IMessage[]>([]);
     const { darkMode } = useTheme();
     const insets = useSafeAreaInsets();
-    const [messages, setMessages] = useState<MessageItem[]>([]);
-    const [inputText, setInputText] = useState('');
-    const [sending, setSending] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const flatListRef = useRef<FlatList>(null);
-    const currentUserId = auth.currentUser?.uid;
+    const [isLoading, setIsLoading] = useState(true);
+    const [isGhosted, setIsGhosted] = useState(false);
+    const [iHaveGhosted, setIHaveGhosted] = useState(false);
 
-    // Get other user's info for header
-    const members = Object.values(channel.state.members);
-    const otherMember = members.find(m => m.user_id !== currentUserId);
-    const chatName = otherMember?.user?.name || (channel.data as any)?.name || 'Chat';
-    const chatAvatar = otherMember?.user?.image as string || `https://ui-avatars.com/api/?name=${encodeURIComponent(chatName)}&background=random`;
+    // Generate Conversation ID: uid1_uid2 sorted alphabetically
+    const conversationId = [currentUser._id, otherUser._id].sort().join('_');
+
+    useLayoutEffect(() => {
+        setIsLoading(true);
+        const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+        const q = query(messagesRef, orderBy('createdAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const loadedMessages = snapshot.docs.map(doc => {
+                const data = doc.data();
+                // Convert Firestore Timestamp to Date
+                const createdAt = data.createdAt instanceof Timestamp
+                    ? data.createdAt.toDate()
+                    : new Date(); // Fallback for pending writes
+
+                return {
+                    _id: doc.id,
+                    text: data.text,
+                    createdAt: createdAt,
+                    user: data.user,
+                } as IMessage;
+            });
+            setMessages(loadedMessages);
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [conversationId]);
 
     useEffect(() => {
-        // Load initial messages
-        loadMessages();
+        checkGhostStatus();
+    }, []);
 
-        // Listen for new messages
-        const handleNewMessage = (event: Event) => {
-            if (event.message) {
-                const msg = event.message;
-                const newMessage: MessageItem = {
-                    id: msg.id,
-                    text: msg.text || '',
-                    userId: msg.user?.id || '',
-                    userName: msg.user?.name || 'Unknown',
-                    userImage: msg.user?.image as string || '',
-                    createdAt: new Date(msg.created_at || Date.now()),
-                    isOwn: msg.user?.id === currentUserId,
-                    isChallenge: msg.attachments?.some(a => a.type === 'challenge') || false,
-                    challenge: (msg.attachments?.find(a => a.type === 'challenge') as any)?.challenge,
-                };
-                setMessages(prev => [...prev, newMessage]);
-
-                // Scroll to bottom
-                setTimeout(() => {
-                    flatListRef.current?.scrollToEnd({ animated: true });
-                }, 100);
-            }
-        };
-
-        channel.on('message.new', handleNewMessage);
-
-        // Mark as read
-        channel.markRead();
-
-        return () => {
-            channel.off('message.new', handleNewMessage);
-        };
-    }, [channel]);
-
-    const loadMessages = async () => {
-        try {
-            setLoading(true);
-
-            const response = await channel.query({
-                messages: { limit: 50 },
-            });
-
-            const loadedMessages: MessageItem[] = (response.messages || []).map((msg: MessageResponse) => ({
-                id: msg.id,
-                text: msg.text || '',
-                userId: msg.user?.id || '',
-                userName: msg.user?.name || 'Unknown',
-                userImage: msg.user?.image as string || '',
-                createdAt: new Date(msg.created_at || Date.now()),
-                isOwn: msg.user?.id === currentUserId,
-                isChallenge: msg.attachments?.some(a => a.type === 'challenge') || false,
-                challenge: (msg.attachments?.find(a => a.type === 'challenge') as any)?.challenge as string | undefined,
-            }));
-
-            setMessages(loadedMessages);
-
-            // Scroll to bottom after loading
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: false });
-            }, 100);
-        } catch (error) {
-            console.error('Error loading messages:', error);
-        } finally {
-            setLoading(false);
-        }
+    const checkGhostStatus = async () => {
+        const ghostedByMe = await SocialService.checkIsGhosted(otherUser._id);
+        const ghostedByThem = await SocialService.checkIsGhostedBy(otherUser._id);
+        setIHaveGhosted(ghostedByMe);
+        setIsGhosted(ghostedByThem);
     };
 
-    const sendMessage = async () => {
-        if (!inputText.trim() || sending) return;
-
-        try {
-            setSending(true);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-            await channel.sendMessage({
-                text: inputText.trim(),
-            });
-
-            setInputText('');
-        } catch (error) {
-            console.error('Error sending message:', error);
-        } finally {
-            setSending(false);
-        }
-    };
-
-    const renderMessage = ({ item, index }: { item: MessageItem; index: number }) => {
-        const showAvatar = !item.isOwn && (index === 0 || messages[index - 1]?.userId !== item.userId);
-
-        return (
-            <View style={[
-                styles.messageContainer,
-                item.isOwn ? styles.ownMessage : styles.otherMessage,
-            ]}>
-                {!item.isOwn && showAvatar && (
-                    <Image source={{ uri: item.userImage || chatAvatar }} style={styles.messageAvatar} />
-                )}
-                {!item.isOwn && !showAvatar && <View style={styles.avatarPlaceholder} />}
-
-                <View style={[
-                    styles.messageBubble,
-                    item.isOwn
-                        ? [styles.ownBubble, darkMode && styles.ownBubbleDark]
-                        : [styles.otherBubble, darkMode && styles.otherBubbleDark],
-                    item.isChallenge && styles.challengeBubble,
-                ]}>
-                    {item.isChallenge && (
-                        <View style={styles.challengeHeader}>
-                            <Text style={styles.challengeLabel}>🎯 CHALLENGE</Text>
-                        </View>
-                    )}
-                    <Text style={[
-                        styles.messageText,
-                        item.isOwn ? styles.ownMessageText : [styles.otherMessageText, darkMode && styles.otherMessageTextDark],
-                    ]}>
-                        {item.text}
-                    </Text>
-                    <Text style={[styles.messageTime, item.isOwn && styles.ownMessageTime]}>
-                        {formatDistanceToNow(item.createdAt, { addSuffix: true })}
-                    </Text>
-                </View>
-            </View>
+    const handleGhostPress = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Alert.alert(
+            "Ghost User?",
+            "Once you ghost someone, it will not be possible to contact you anymore.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Ghost",
+                    style: "destructive",
+                    onPress: async () => {
+                        await SocialService.ghostUser(otherUser._id);
+                        setIHaveGhosted(true);
+                        // Optionally navigate back or show confirmation
+                        onBack();
+                    }
+                }
+            ]
         );
     };
 
+    const onSend = useCallback(async (newMessages: IMessage[] = []) => {
+        const msg = newMessages[0];
+        if (!msg) return;
+
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        // 1. Add to sub-collection
+        const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+        await addDoc(messagesRef, {
+            text: msg.text,
+            createdAt: serverTimestamp(),
+            user: msg.user,
+        });
+
+        // 2. Update conversation metadata
+        const conversationRef = doc(db, 'conversations', conversationId);
+        await setDoc(conversationRef, {
+            participants: [currentUser._id, otherUser._id],
+            lastMessage: msg.text,
+            lastMessageTimestamp: serverTimestamp(),
+            users: {
+                [currentUser._id]: currentUser,
+                [otherUser._id]: otherUser
+            }
+        }, { merge: true });
+
+    }, [conversationId, currentUser, otherUser]);
+
+    // --- Custom UI Renderers for Glassmorphism ---
+
+    const renderBubble = useCallback((props: BubbleProps<IMessage>) => {
+        const { ...rest } = props;
+        return (
+            <Bubble
+                {...rest}
+                wrapperStyle={{
+                    left: {
+                        backgroundColor: darkMode ? '#2C2C2E' : '#E5E5EA',
+                        borderRadius: 18,
+                        padding: 4,
+                        borderBottomLeftRadius: 4,
+                        maxWidth: '80%', // Limit width
+                    },
+                    right: {
+                        backgroundColor: '#4A4A4A',
+                        borderRadius: 18,
+                        padding: 4,
+                        borderBottomRightRadius: 4,
+                        maxWidth: '80%', // Limit width
+                        // Fix for dark mode dark bubble
+                        ...(darkMode ? { backgroundColor: '#3A3A3C' } : {})
+                    },
+                }}
+                textStyle={{
+                    left: {
+                        color: darkMode ? '#FFF' : '#1C1C1E',
+                    },
+                    right: {
+                        color: '#FFF',
+                    }
+                }}
+            />
+        );
+    }, [darkMode]);
+
+    const renderInputToolbar = useCallback((props: InputToolbarProps<IMessage>) => {
+        const { ...rest } = props;
+        return (
+            <InputToolbar
+                {...rest}
+                containerStyle={{
+                    backgroundColor: darkMode ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.9)',
+                    borderTopWidth: 1,
+                    borderTopColor: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                    paddingTop: 8,
+                    paddingBottom: insets.bottom + 8, // Handle safe area manually
+                }}
+                primaryStyle={{ alignItems: 'center' }}
+            />
+        );
+    }, [darkMode, insets.bottom]);
+
+    const renderComposer = useCallback((props: ComposerProps) => {
+        const { ...rest } = props;
+        return (
+            <Composer
+                {...rest}
+                textInputStyle={{
+                    color: darkMode ? '#FFF' : '#1C1C1E',
+                    backgroundColor: darkMode ? '#2C2C2E' : '#F2F2F7',
+                    borderRadius: 20,
+                    paddingHorizontal: 12,
+                    paddingTop: 8,
+                    paddingBottom: 8,
+                    marginRight: 10,
+                    marginLeft: 10,
+                }}
+                placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
+            />
+        );
+    }, [darkMode]);
+
+    const renderSend = useCallback((props: SendProps<IMessage>) => {
+        const { ...rest } = props;
+        return (
+            <Send
+                {...rest}
+                containerStyle={{
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    marginRight: 10,
+                    marginBottom: 0,
+                    alignSelf: 'center'
+                }}
+            >
+                <View style={[styles.sendBtn, (!props.text || props.text.trim().length === 0) && styles.sendBtnDisabled]}>
+                    <SendIcon color="#FFF" />
+                </View>
+            </Send>
+        );
+    }, []);
+
+    const renderTime = useCallback((props: TimeProps<IMessage>) => {
+        const { ...rest } = props;
+        return (
+            <Time
+                {...rest}
+                timeTextStyle={{
+                    left: { color: 'rgba(0,0,0,0.4)' },
+                    right: { color: 'rgba(255,255,255,0.6)' },
+                }}
+            />
+        );
+    }, []);
+
     return (
-        <View style={{ flex: 1 }}>
+        <View style={styles.container}>
+            {/* Background */}
             <ImageBackground
                 source={require('../../assets/guest_1.jpg')}
                 style={StyleSheet.absoluteFill}
@@ -208,67 +263,64 @@ export const ChatScreen = ({ channel, onBack }: ChatScreenProps) => {
                     colors={darkMode ? ['rgba(28,28,30,0.85)', 'rgba(28,28,30,0.95)'] : ['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.95)']}
                     style={StyleSheet.absoluteFill}
                 />
-                <SafeAreaView style={styles.container} edges={['top']}>
-                    {/* Header */}
-                    <View style={[styles.header, darkMode && styles.headerDark]}>
-                        <Pressable onPress={onBack} style={styles.backBtn}>
-                            <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
-                        </Pressable>
-                        <View style={styles.headerCenter}>
-                            <Image source={{ uri: chatAvatar }} style={styles.headerAvatar} />
-                            <Text style={[styles.headerName, darkMode && styles.textDark]} numberOfLines={1}>
-                                {chatName}
-                            </Text>
-                        </View>
-                        <View style={styles.placeholder} />
+
+                {/* Custom Header */}
+                <View style={[styles.header, { marginTop: insets.top }, darkMode && styles.headerDark]}>
+                    <Pressable onPress={onBack} style={styles.backBtn} hitSlop={10}>
+                        <BackIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
+                    </Pressable>
+                    <View style={styles.headerCenter}>
+                        <Image source={{ uri: otherUser.avatar }} style={styles.headerAvatar} />
+                        <Text style={[styles.headerName, darkMode && styles.textDark]} numberOfLines={1}>
+                            {otherUser.name}
+                        </Text>
                     </View>
+                    <Pressable onPress={handleGhostPress} style={styles.backBtn} hitSlop={10}>
+                        <OptionsIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
+                    </Pressable>
+                </View>
 
-                    {/* Messages */}
-                    {loading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
+                {/* Loading State */}
+                {isLoading && (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
+                    </View>
+                )}
+
+                {/* Gifted Chat wrapped in KeyboardAvoidingView for robustness */}
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+                    enabled
+                >
+                    <GiftedChat
+                        messages={messages}
+                        onSend={messages => onSend(messages)}
+                        user={{
+                            _id: currentUser._id,
+                            name: currentUser.name,
+                            avatar: currentUser.avatar,
+                        }}
+                        renderBubble={renderBubble}
+                        renderInputToolbar={renderInputToolbar}
+                        renderComposer={renderComposer}
+                        renderSend={renderSend}
+                        renderTime={renderTime}
+                        showAvatarForEveryMessage={false}
+                        showUserAvatar={false}
+                        alwaysShowSend
+                        scrollToBottom
+                        maxInputLength={500}
+                        alignTop={false}
+                        bottomOffset={insets.bottom > 0 ? -insets.bottom : 0}
+                    />
+                    {iHaveGhosted && (
+                        <View style={[styles.ghostBanner, darkMode && styles.ghostBannerDark]}>
+                            <Text style={styles.ghostText}>You have ghosted this user.</Text>
                         </View>
-                    ) : (
-                        <FlatList
-                            ref={flatListRef}
-                            data={messages}
-                            renderItem={renderMessage}
-                            keyExtractor={(item) => item.id}
-                            contentContainerStyle={[styles.messagesContent, { paddingBottom: 16 }]}
-                            showsVerticalScrollIndicator={false}
-                            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-                        />
                     )}
-
-                    {/* Input */}
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        keyboardVerticalOffset={0}
-                    >
-                        <View style={[styles.inputContainer, darkMode && styles.inputContainerDark, { paddingBottom: insets.bottom + 8 }]}>
-                            <TextInput
-                                style={[styles.input, darkMode && styles.inputDark]}
-                                placeholder="Type a message..."
-                                placeholderTextColor={darkMode ? "#8E8E93" : "#AEAEB2"}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                multiline
-                                maxLength={500}
-                            />
-                            <Pressable
-                                onPress={sendMessage}
-                                style={[styles.sendBtn, (!inputText.trim() || sending) && styles.sendBtnDisabled]}
-                                disabled={!inputText.trim() || sending}
-                            >
-                                {sending ? (
-                                    <ActivityIndicator size="small" color="#FFF" />
-                                ) : (
-                                    <SendIcon color="#FFF" />
-                                )}
-                            </Pressable>
-                        </View>
-                    </KeyboardAvoidingView>
-                </SafeAreaView>
+                </KeyboardAvoidingView>
             </ImageBackground>
         </View>
     );
@@ -278,8 +330,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    containerDark: {
-    },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -288,6 +338,7 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
+        zIndex: 10,
     },
     headerDark: {
         borderBottomColor: 'rgba(255,255,255,0.1)',
@@ -320,125 +371,41 @@ const styles = StyleSheet.create({
         width: 32,
     },
     loadingContainer: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    messagesContent: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
-    },
-    messageContainer: {
-        flexDirection: 'row',
-        marginBottom: 8,
-        alignItems: 'flex-end',
-    },
-    ownMessage: {
-        justifyContent: 'flex-end',
-    },
-    otherMessage: {
-        justifyContent: 'flex-start',
-    },
-    messageAvatar: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        marginRight: 8,
-    },
-    avatarPlaceholder: {
-        width: 36,
-    },
-    messageBubble: {
-        maxWidth: '75%',
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 18,
-    },
-    ownBubble: {
-        backgroundColor: '#4A4A4A',
-        borderBottomRightRadius: 4,
-    },
-    ownBubbleDark: {
-        backgroundColor: '#3A3A3C',
-    },
-    otherBubble: {
-        backgroundColor: '#E5E5EA',
-        borderBottomLeftRadius: 4,
-    },
-    otherBubbleDark: {
-        backgroundColor: '#2C2C2E',
-    },
-    challengeBubble: {
-        backgroundColor: '#007AFF',
-    },
-    challengeHeader: {
-        marginBottom: 6,
-    },
-    challengeLabel: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: 'rgba(255,255,255,0.8)',
-        letterSpacing: 1,
-    },
-    messageText: {
-        fontSize: 15,
-        lineHeight: 20,
-    },
-    ownMessageText: {
-        color: '#FFF',
-    },
-    otherMessageText: {
-        color: '#1C1C1E',
-    },
-    otherMessageTextDark: {
-        color: '#FFF',
-    },
-    messageTime: {
-        fontSize: 10,
-        color: 'rgba(0,0,0,0.4)',
-        marginTop: 4,
-        textAlign: 'right',
-    },
-    ownMessageTime: {
-        color: 'rgba(255,255,255,0.6)',
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.05)',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-    },
-    inputContainerDark: {
-        borderTopColor: 'rgba(255,255,255,0.1)',
-        backgroundColor: 'rgba(28,28,30,0.95)',
-    },
-    input: {
-        flex: 1,
-        backgroundColor: '#F2F2F7',
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 16,
-        maxHeight: 100,
-        color: '#1C1C1E',
-    },
-    inputDark: {
-        backgroundColor: '#2C2C2E',
-        color: '#FFF',
+        zIndex: 5,
     },
     sendBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: '#4A4A4A',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: 10,
     },
     sendBtnDisabled: {
         opacity: 0.5,
+        backgroundColor: '#AEAEB2'
     },
+    ghostBanner: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#F2F2F7',
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderTopWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+    },
+    ghostBannerDark: {
+        backgroundColor: '#1C1C1E',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    ghostText: {
+        color: '#8E8E93',
+        fontWeight: '600',
+    }
 });

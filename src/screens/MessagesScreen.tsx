@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, Image, ActivityIndicator, ImageBackground, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { ChatService, chatClient } from '../services/ChatService';
-import { auth } from '../services/firebaseConfig';
-import Svg, { Path, Circle } from 'react-native-svg';
-import { Channel as StreamChannel } from 'stream-chat';
+import { auth, db } from '../services/firebaseConfig';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import Svg, { Path } from 'react-native-svg';
 import { formatDistanceToNow } from 'date-fns';
 
 // Icons
@@ -22,96 +21,85 @@ const MessageIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-interface MessagesScreenProps {
-    onBack: () => void;
-    onOpenChat: (channel: StreamChannel) => void;
-}
-
-interface ChannelPreview {
-    id: string;
-    channel: StreamChannel;
+interface ChatUser {
+    _id: string;
     name: string;
     avatar: string;
+}
+
+interface MessagesScreenProps {
+    onBack: () => void;
+    onOpenChat: (user: ChatUser) => void;
+}
+
+interface ConversationPreview {
+    id: string;
+    otherUser: ChatUser;
     lastMessage: string;
-    lastMessageTime: Date | null;
-    unreadCount: number;
+    lastMessageTime: Date;
 }
 
 export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
     const { darkMode } = useTheme();
-    const [channels, setChannels] = useState<ChannelPreview[]>([]);
+    const [conversations, setConversations] = useState<ConversationPreview[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const currentUser = auth.currentUser;
 
     useEffect(() => {
-        loadChannels();
-    }, []);
+        if (!currentUser) return;
 
-    const loadChannels = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+        // Query conversations where current user is a participant
+        const q = query(
+            collection(db, 'conversations'),
+            where('participants', 'array-contains', currentUser.uid)
+        );
 
-            const userChannels = await ChatService.getUserChannels();
-            const currentUserId = auth.currentUser?.uid;
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const loadedConversations: ConversationPreview[] = [];
 
-            const channelPreviews: ChannelPreview[] = userChannels.map(channel => {
-                // Get the other member's info for DM channels
-                const members = Object.values(channel.state.members);
-                const otherMember = members.find(m => m.user_id !== currentUserId);
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                const users = data.users || {};
 
-                const lastMessage = channel.state.messages[channel.state.messages.length - 1];
+                // Find the "other" user
+                const otherUserId = data.participants.find((uid: string) => uid !== currentUser.uid);
+                const otherUserProfile = users[otherUserId];
 
-                return {
-                    id: channel.id || channel.cid,
-                    channel: channel,
-                    name: otherMember?.user?.name || (channel.data as any)?.name || 'Chat',
-                    avatar: otherMember?.user?.image as string || `https://ui-avatars.com/api/?name=Chat&background=random`,
-                    lastMessage: lastMessage?.text || 'No messages yet',
-                    lastMessageTime: lastMessage?.created_at ? new Date(lastMessage.created_at) : null,
-                    unreadCount: channel.countUnread(),
-                };
+                if (otherUserProfile) {
+                    loadedConversations.push({
+                        id: doc.id,
+                        otherUser: {
+                            _id: otherUserId,
+                            name: otherUserProfile.name || 'Unknown',
+                            avatar: otherUserProfile.avatar || ''
+                        },
+                        lastMessage: data.lastMessage || 'Sent an attachment',
+                        lastMessageTime: data.lastMessageTimestamp instanceof Timestamp
+                            ? data.lastMessageTimestamp.toDate()
+                            : new Date()
+                    });
+                }
             });
 
-            setChannels(channelPreviews);
-        } catch (err: any) {
-            console.error('Error loading channels:', err);
-            setError(err.message || 'Failed to load messages');
-        } finally {
+            // Sort client-side to avoid needing a composite index immediately
+            loadedConversations.sort((a, b) => b.lastMessageTime.getTime() - a.lastMessageTime.getTime());
+            setConversations(loadedConversations);
             setLoading(false);
-        }
-    };
+        }, (error) => {
+            console.error("Error fetching conversations:", error);
+            setLoading(false);
+        });
 
-    const renderChannelItem = ({ item }: { item: ChannelPreview }) => (
-        <Pressable
-            style={[styles.channelItem, darkMode && styles.channelItemDark]}
-            onPress={() => onOpenChat(item.channel)}
-        >
-            <Image source={{ uri: item.avatar }} style={styles.avatar} />
-            <View style={styles.channelInfo}>
-                <View style={styles.channelHeader}>
-                    <Text style={[styles.channelName, darkMode && styles.textDark]} numberOfLines={1}>
-                        {item.name}
-                    </Text>
-                    {item.lastMessageTime && (
-                        <Text style={styles.timeText}>
-                            {formatDistanceToNow(item.lastMessageTime, { addSuffix: true })}
-                        </Text>
-                    )}
-                </View>
-                <View style={styles.messageRow}>
-                    <Text style={[styles.lastMessage, darkMode && styles.lastMessageDark]} numberOfLines={1}>
-                        {item.lastMessage}
-                    </Text>
-                    {item.unreadCount > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                        </View>
-                    )}
-                </View>
-            </View>
-        </Pressable>
-    );
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const renderItem = useCallback(({ item }: { item: ConversationPreview }) => (
+        <ConversationItem
+            item={item}
+            onPress={() => onOpenChat(item.otherUser)}
+            darkMode={darkMode}
+        />
+    ), [darkMode, onOpenChat]);
 
     return (
         <View style={{ flex: 1 }}>
@@ -136,16 +124,8 @@ export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
                     {loading ? (
                         <View style={styles.centerContent}>
                             <ActivityIndicator size="large" color={darkMode ? "#FFF" : "#4A4A4A"} />
-                            <Text style={[styles.loadingText, darkMode && styles.textDark]}>Loading messages...</Text>
                         </View>
-                    ) : error ? (
-                        <View style={styles.centerContent}>
-                            <Text style={[styles.errorText, darkMode && styles.textDark]}>{error}</Text>
-                            <Pressable onPress={loadChannels} style={styles.retryBtn}>
-                                <Text style={styles.retryText}>Retry</Text>
-                            </Pressable>
-                        </View>
-                    ) : channels.length === 0 ? (
+                    ) : conversations.length === 0 ? (
                         <View style={styles.centerContent}>
                             <MessageIcon color={darkMode ? "#555" : "#D1D1D1"} />
                             <Text style={[styles.emptyTitle, darkMode && styles.textDark]}>No messages yet</Text>
@@ -155,11 +135,14 @@ export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
                         </View>
                     ) : (
                         <FlatList
-                            data={channels}
-                            renderItem={renderChannelItem}
+                            data={conversations}
+                            renderItem={renderItem}
                             keyExtractor={(item) => item.id}
                             contentContainerStyle={styles.listContent}
                             showsVerticalScrollIndicator={false}
+                            initialNumToRender={10}
+                            windowSize={5}
+                            maxToRenderPerBatch={10}
                         />
                     )}
                 </SafeAreaView>
@@ -168,12 +151,35 @@ export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
     );
 };
 
+const ConversationItem = React.memo(({ item, onPress, darkMode }: { item: ConversationPreview, onPress: () => void, darkMode: boolean }) => (
+    <Pressable
+        style={[styles.channelItem, darkMode && styles.channelItemDark]}
+        onPress={onPress}
+    >
+        <Image
+            source={{ uri: item.otherUser.avatar || `https://ui-avatars.com/api/?name=${item.otherUser.name}` }}
+            style={styles.avatar}
+        />
+        <View style={styles.channelInfo}>
+            <View style={styles.channelHeader}>
+                <Text style={[styles.channelName, darkMode && styles.textDark]} numberOfLines={1}>
+                    {item.otherUser.name}
+                </Text>
+                <Text style={styles.timeText}>
+                    {formatDistanceToNow(item.lastMessageTime, { addSuffix: true })}
+                </Text>
+            </View>
+            <View style={styles.messageRow}>
+                <Text style={[styles.lastMessage, darkMode && styles.lastMessageDark]} numberOfLines={1}>
+                    {item.lastMessage}
+                </Text>
+            </View>
+        </View>
+    </Pressable>
+));
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    containerDark: {
-    },
+    container: { flex: 1 },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -183,51 +189,21 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
     },
-    headerDark: {
-        borderBottomColor: 'rgba(255,255,255,0.1)',
-    },
-    backBtn: {
-        padding: 4,
-    },
+    headerDark: { borderBottomColor: 'rgba(255,255,255,0.1)' },
+    backBtn: { padding: 4 },
     title: {
         fontSize: 12,
         fontWeight: '700',
         letterSpacing: 2,
         color: '#4A4A4A',
     },
-    titleDark: {
-        color: '#FFF',
-    },
-    placeholder: {
-        width: 32,
-    },
+    titleDark: { color: '#FFF' },
+    placeholder: { width: 32 },
     centerContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 40,
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: '#8E8E93',
-    },
-    errorText: {
-        fontSize: 14,
-        color: '#FF3B30',
-        textAlign: 'center',
-        marginBottom: 16,
-    },
-    retryBtn: {
-        paddingHorizontal: 24,
-        paddingVertical: 10,
-        backgroundColor: '#4A4A4A',
-        borderRadius: 20,
-    },
-    retryText: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '600',
     },
     emptyTitle: {
         fontSize: 18,
@@ -235,15 +211,14 @@ const styles = StyleSheet.create({
         color: '#4A4A4A',
         marginTop: 16,
     },
+    textDark: { color: '#FFF' },
     emptySubtitle: {
         fontSize: 14,
         color: '#8E8E93',
         marginTop: 8,
         textAlign: 'center',
     },
-    listContent: {
-        paddingVertical: 8,
-    },
+    listContent: { paddingVertical: 8 },
     channelItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -252,9 +227,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
     },
-    channelItemDark: {
-        borderBottomColor: 'rgba(255,255,255,0.08)',
-    },
+    channelItemDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
     avatar: {
         width: 50,
         height: 50,
@@ -277,9 +250,6 @@ const styles = StyleSheet.create({
         color: '#1C1C1E',
         flex: 1,
     },
-    textDark: {
-        color: '#FFF',
-    },
     timeText: {
         fontSize: 12,
         color: '#8E8E93',
@@ -294,22 +264,5 @@ const styles = StyleSheet.create({
         color: '#8E8E93',
         flex: 1,
     },
-    lastMessageDark: {
-        color: '#AEAEB2',
-    },
-    unreadBadge: {
-        backgroundColor: '#007AFF',
-        borderRadius: 10,
-        minWidth: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: 6,
-        marginLeft: 8,
-    },
-    unreadText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: '700',
-    },
+    lastMessageDark: { color: '#AEAEB2' },
 });

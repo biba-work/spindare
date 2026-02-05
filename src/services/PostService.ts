@@ -352,5 +352,74 @@ export const PostService = {
                 timestamp: serverTimestamp()
             });
         }
+    },
+
+    // Subscribe to Kept Challenges
+    subscribeToKeptChallenges(userId: string, callback: (kept: { id: string, challenge: string, postId: string }[]) => void) {
+        const q = query(
+            collection(db, 'users', userId, 'kept_challenges'),
+            orderBy('timestamp', 'desc')
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            const kept = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as { id: string, challenge: string, postId: string }));
+            callback(kept);
+        });
+    },
+
+    // Toggle Keep Challenge (Per Post)
+    async toggleKeptChallenge(userId: string, postId: string, challenge: string) {
+        // Create a unique reference based on Post ID
+        const q = query(collection(db, 'users', userId, 'kept_challenges'), where('postId', '==', postId));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+            // Already kept -> Remove it
+            const docId = snapshot.docs[0].id;
+            await deleteDoc(doc(db, 'users', userId, 'kept_challenges', docId));
+            return false; // Not kept anymore
+        } else {
+            // Not kept -> Add it
+            await addDoc(collection(db, 'users', userId, 'kept_challenges'), {
+                postId,
+                challenge,
+                timestamp: serverTimestamp()
+            });
+            return true; // Now kept
+        }
+    },
+
+    // Record Sent/Spind Challenge
+    async recordSpindChallenge(userId: string, postId: string, challenge: string) {
+        // Check if already sent/spind (optional, but prevents duplicates)
+        const q = query(collection(db, 'users', userId, 'spind_challenges'), where('postId', '==', postId));
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            await addDoc(collection(db, 'users', userId, 'spind_challenges'), {
+                postId,
+                challenge,
+                timestamp: serverTimestamp()
+            });
+        }
+    },
+
+    // Subscribe to Spind Challenges
+    subscribeToSpindChallenges(userId: string, callback: (spind: { id: string, challenge: string, postId: string }[]) => void) {
+        const q = query(
+            collection(db, 'users', userId, 'spind_challenges'),
+            orderBy('timestamp', 'desc')
+        );
+
+        return onSnapshot(q, (snapshot) => {
+            const spind = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            } as { id: string, challenge: string, postId: string }));
+            callback(spind);
+        });
     }
 };

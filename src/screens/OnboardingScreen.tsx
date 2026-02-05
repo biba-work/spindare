@@ -25,6 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { HobbyType, StudyFieldType } from '../services/AIService';
 import { AppButton } from '../components/atoms/AppButton';
 import { AuthService } from '../services/AuthService';
+import { SpindareLogo } from '../components/atoms/SpindareLogo';
 
 const { width, height } = Dimensions.get('window');
 
@@ -263,7 +264,7 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
     const renderWelcome = () => (
         <View style={styles.fullScreenCenter}>
             <View style={styles.logoContainer}>
-                <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+                <SpindareLogo size={60} />
             </View>
 
             <Text style={styles.brandTitle}>SPINDARE</Text>

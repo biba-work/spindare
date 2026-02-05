@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground, Image as NativeImage } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { UserProfile } from '../services/AIService';
+import { SocialService } from '../services/SocialService';
 import { PostService } from '../services/PostService';
 import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
@@ -90,7 +92,7 @@ interface ProfileScreenProps {
     onChallengeReceived: (challenge: string) => void;
     userProfile: UserProfile;
     onUpdateProfile: (updates: Partial<UserProfile>) => void;
-    onShare?: () => void;
+    onShare?: (challengeText: string) => void;
     onOpenCamera?: () => void;
 }
 
@@ -117,8 +119,9 @@ export const ProfileScreen = ({
 
     const [soundEffects, setSoundEffects] = useState(true);
     const [notifications, setNotifications] = useState(true);
-    const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main');
+    const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help' | 'blocked'>('main');
     const [userPosts, setUserPosts] = useState<Post[]>([]);
+    const [blockedUsers, setBlockedUsers] = useState<{ id: string, name: string, username: string, photoURL?: string }[]>([]);
 
     const [showSpinner, setShowSpinner] = useState(false);
     const [spinResult, setSpinResult] = useState<string | null>(null);
@@ -143,7 +146,32 @@ export const ProfileScreen = ({
     const [textContent, setTextContent] = useState('');
     const [mediaAspectRatio, setMediaAspectRatio] = useState(1);
 
+    const [connectionPrivacy, setConnectionPrivacy] = useState<'open' | 'private'>(userProfile.connectionPrivacy || 'open');
+
     const [editUsername, setEditUsername] = useState(userProfile.username);
+
+    // Fetch blocked users when page opens
+    useEffect(() => {
+        if (settingsPage === 'blocked') {
+            loadBlockedUsers();
+        }
+    }, [settingsPage]);
+
+    const loadBlockedUsers = async () => {
+        const users = await SocialService.getGhostedUsers();
+        setBlockedUsers(users);
+    };
+
+    const handleUnghost = async (targetId: string) => {
+        try {
+            await SocialService.unghostUser(targetId);
+            setBlockedUsers(prev => prev.filter(u => u.id !== targetId));
+            if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+            console.error("Failed to unghost:", error);
+            Alert.alert("Error", "Could not unblock user.");
+        }
+    };
 
     useEffect(() => {
         setEditUsername(userProfile.username);
@@ -376,7 +404,7 @@ export const ProfileScreen = ({
                                 <Image
                                     source={{
                                         uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL)
-                                            ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
+                                            ? NativeImage.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
                                             : userProfile.photoURL
                                     }}
                                     style={styles.pfp}
@@ -482,7 +510,10 @@ export const ProfileScreen = ({
                                         </Pressable>
                                     )}
                                     <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>
-                                        {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
+                                        {settingsPage === 'main' ? 'Settings' :
+                                            settingsPage === 'privacy' ? 'Privacy & Security' :
+                                                settingsPage === 'blocked' ? 'Blocked Users' :
+                                                    'Help & Support'}
                                     </Text>
                                     <Pressable onPress={closeSettings} style={styles.closeBtn}>
                                         <Text style={[styles.closeBtnText, darkMode && styles.closeBtnTextDark]}>Done</Text>
@@ -549,10 +580,48 @@ export const ProfileScreen = ({
                                         <>
                                             <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Manage your privacy and security settings</Text>
 
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Private Account</Text>
-                                                <Switch value={false} onValueChange={() => { }} />
+                                            <View style={[styles.settingGroup, { marginBottom: 32 }]}>
+                                                <Text style={[styles.sectionHeader, darkMode && styles.textDark, { paddingHorizontal: 0, marginBottom: 16 }]}>CONNECTION PRIVACY</Text>
+
+                                                <Pressable
+                                                    onPress={() => {
+                                                        if (soundEffects) Haptics.selectionAsync();
+                                                        setConnectionPrivacy('open');
+                                                        AuthService.updateConnectionPrivacy('open');
+                                                    }}
+                                                    style={[styles.settingItem, darkMode && styles.settingItemDark, { borderBottomWidth: 0, paddingVertical: 12 }]}
+                                                >
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                        <View style={{ width: 20, alignItems: 'center' }}>
+                                                            {connectionPrivacy === 'open' && <Ionicons name="checkmark" size={20} color={darkMode ? "#FFF" : "#4A4A4A"} />}
+                                                        </View>
+                                                        <View>
+                                                            <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Open Connection</Text>
+                                                            <Text style={{ fontSize: 12, color: '#8E8E93', marginTop: 2 }}>Anyone can connect with you automatically</Text>
+                                                        </View>
+                                                    </View>
+                                                </Pressable>
+
+                                                <Pressable
+                                                    onPress={() => {
+                                                        if (soundEffects) Haptics.selectionAsync();
+                                                        setConnectionPrivacy('private');
+                                                        AuthService.updateConnectionPrivacy('private');
+                                                    }}
+                                                    style={[styles.settingItem, darkMode && styles.settingItemDark, { borderBottomWidth: 0, paddingVertical: 12 }]}
+                                                >
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                        <View style={{ width: 20, alignItems: 'center' }}>
+                                                            {connectionPrivacy === 'private' && <Ionicons name="checkmark" size={20} color={darkMode ? "#FFF" : "#4A4A4A"} />}
+                                                        </View>
+                                                        <View>
+                                                            <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Private Connection Requests</Text>
+                                                            <Text style={{ fontSize: 12, color: '#8E8E93', marginTop: 2 }}>You must approve connection requests</Text>
+                                                        </View>
+                                                    </View>
+                                                </Pressable>
                                             </View>
+
                                             <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Show Activity Status</Text>
                                                 <Switch value={true} onValueChange={() => { }} />
@@ -560,8 +629,8 @@ export const ProfileScreen = ({
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Blocked Users</Text>
+                                            <Pressable onPress={() => setSettingsPage('blocked')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Blocked/Ghosted Users</Text>
                                             </Pressable>
                                             <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Data & Storage</Text>
@@ -606,6 +675,44 @@ export const ProfileScreen = ({
                                             </View>
                                         </>
                                     )}
+
+                                    {settingsPage === 'blocked' && (
+                                        <>
+                                            <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>
+                                                People you have ghosted (blocked). They cannot contact you.
+                                            </Text>
+
+                                            {blockedUsers.length === 0 ? (
+                                                <View style={styles.emptyState}>
+                                                    <Text style={[styles.emptyText, darkMode && styles.textDark]}>No ghosted users</Text>
+                                                    <Text style={styles.emptySubtext}>You haven't ghosted anyone yet.</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={styles.listContainer}>
+                                                    {blockedUsers.map(user => (
+                                                        <View key={user.id} style={[styles.settingItem, darkMode && styles.settingItemDark]}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                                                <Image
+                                                                    source={{ uri: user.photoURL || NativeImage.resolveAssetSource(require('../../assets/guest_1.jpg')).uri }}
+                                                                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#EEE' }}
+                                                                />
+                                                                <View>
+                                                                    <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>{user.name}</Text>
+                                                                    <Text style={{ fontSize: 12, color: '#8E8E93' }}>{user.username}</Text>
+                                                                </View>
+                                                            </View>
+                                                            <Pressable
+                                                                onPress={() => handleUnghost(user.id)}
+                                                                style={[styles.saveBtn, { backgroundColor: '#FF3B30', height: 32, paddingHorizontal: 12 }]}
+                                                            >
+                                                                <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600' }}>Un-ghost</Text>
+                                                            </Pressable>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
+                                        </>
+                                    )}
                                 </ScrollView>
                             </SafeAreaView>
                         </BlurView>
@@ -635,14 +742,14 @@ export const ProfileScreen = ({
                                                 <Text style={[styles.resultText, darkMode && styles.textDark]}>{spinResult}</Text>
 
                                                 <View style={styles.actionRow}>
-                                                    <Pressable onPress={() => { onShare?.(); }} style={[styles.actionBtnSecondary, darkMode && styles.secondaryBtnDark]}>
-                                                        <Ionicons name="share-outline" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
-                                                        <Text style={[styles.actionBtnTextSecondary, darkMode && styles.textDark]}>Share</Text>
+                                                    <Pressable onPress={handleActionChoose} style={styles.actionBtnPrimary}>
+                                                        <Ionicons name="checkmark" size={24} color="#FFF" />
+                                                        <Text style={styles.actionBtnTextPrimary}>Do It</Text>
                                                     </Pressable>
 
-                                                    <Pressable onPress={handleActionChoose} style={styles.actionBtnPrimary}>
-                                                        <Ionicons name="camera-outline" size={24} color="#FFF" />
-                                                        <Text style={styles.actionBtnTextPrimary}>Do It</Text>
+                                                    <Pressable onPress={() => { if (spinResult && onShare) onShare(spinResult); }} style={[styles.actionBtnSecondary, darkMode && styles.secondaryBtnDark]}>
+                                                        <Ionicons name="paper-plane-outline" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
+                                                        <Text style={[styles.actionBtnTextSecondary, darkMode && styles.textDark]}>Send</Text>
                                                     </Pressable>
                                                 </View>
                                             </Animated.View>
@@ -713,7 +820,7 @@ export const ProfileScreen = ({
                     </Animated.View>
                 )}
             </ImageBackground>
-        </View>
+        </View >
     );
 };
 
@@ -743,7 +850,7 @@ const styles = StyleSheet.create({
     textDark: { color: '#FAF9F6' },
     profileSection: {
         alignItems: 'center',
-        paddingVertical: 40,
+        paddingVertical: 20,
         paddingHorizontal: 24,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(0,0,0,0.05)',
@@ -755,7 +862,7 @@ const styles = StyleSheet.create({
         width: 110,
         height: 110,
         borderRadius: 55,
-        marginBottom: 20,
+        marginBottom: 12,
         position: 'relative',
     },
     pfp: {
@@ -788,16 +895,16 @@ const styles = StyleSheet.create({
     },
     username: {
         color: '#2C2C2C',
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: '700',
-        marginBottom: 6,
+        marginBottom: 4,
         letterSpacing: -0.6,
     },
     bio: {
         color: '#8E8E93',
         fontSize: 14,
         fontWeight: '500',
-        marginBottom: 24,
+        marginBottom: 12,
     },
     bioDark: { color: '#AEAEB2' },
     spinBtn: {
@@ -808,7 +915,7 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 28,
         backgroundColor: '#4A4A4A',
-        marginBottom: 32,
+        marginBottom: 16,
         shadowColor: '#4A4A4A',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.25,
@@ -836,20 +943,20 @@ const styles = StyleSheet.create({
     statsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 32,
+        gap: 24,
     },
     statItem: {
         alignItems: 'center',
     },
     statValue: {
         color: '#2C2C2C',
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '700',
         marginBottom: 4,
     },
     statLabel: {
         color: '#8E8E93',
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: '600',
         textTransform: 'uppercase',
         letterSpacing: 1,

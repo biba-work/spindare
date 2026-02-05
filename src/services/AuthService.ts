@@ -217,6 +217,13 @@ export const AuthService = {
         }
     },
 
+    async updateConnectionPrivacy(privacy: 'open' | 'private') {
+        const user = auth.currentUser;
+        if (user) {
+            await updateDoc(doc(db, 'users', user.uid), { connectionPrivacy: privacy });
+        }
+    },
+
     // Reactive session listener
     onSessionChange(callback: (user: User | null, profile: UserProfile | null) => void) {
         return onAuthStateChanged(auth, async (user) => {
