@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import { NotificationService, Notification } from '../../services/NotificationService';
+import { SocialService } from '../../services/SocialService';
 import { formatDistanceToNow } from 'date-fns';
 
 const { width, height } = Dimensions.get('window');
@@ -67,6 +68,7 @@ interface OverlayProps {
     onAction: (item: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     animation: Animated.Value;
     onOpenMessages?: () => void;
+    onViewProfile?: (userId: string, username: string, avatar: string) => void;
 }
 
 const MOCK_CHALLENGES = {
@@ -79,16 +81,23 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
     const { darkMode } = useTheme();
     const [subTab, setSubTab] = useState<'notifs' | 'inbox' | 'messages'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [requests, setRequests] = useState<any[]>([]);
 
     React.useEffect(() => {
         if (visible && type === 'notifications') {
-            const unsubscribe = NotificationService.subscribeToNotifications(setNotifications);
-            return () => unsubscribe();
+            const notifUnsub = NotificationService.subscribeToNotifications(setNotifications);
+            const reqUnsub = SocialService.subscribeToRequests(setRequests);
+            // Mark all as read when opening
+            NotificationService.markAllAsRead();
+            return () => {
+                notifUnsub();
+                reqUnsub();
+            };
         }
     }, [visible, type]);
 
@@ -105,14 +114,82 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
 
     const renderNotificationsPanel = () => {
         if (subTab === 'notifs') {
+            // Separate connection requests from general notifications
+            const connectionRequests = requests || [];
+            const generalNotifs = notifications.filter(n => n.type !== 'follow' || !connectionRequests.some(r => r.id === n.fromUserId));
+
             return (
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {notifications.map((notif) => (
+                    {/* Connection Requests */}
+                    {connectionRequests.length > 0 && (
+                        <View style={{ marginBottom: 20 }}>
+                            <Text style={[styles.sectionTitle, { marginBottom: 12 }]}>CONNECTION REQUESTS</Text>
+                            {connectionRequests.map((req) => (
+                                <View key={req.id} style={[styles.notifCard, darkMode && styles.notifCardDark, { flexDirection: 'column' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                        <Pressable
+                                            onPress={() => { if (onViewProfile) onViewProfile(req.id, req.username, req.photoURL || ''); onClose(); }}
+                                            style={styles.notifAvatarContainer}
+                                        >
+                                            <Image
+                                                source={{ uri: req.photoURL || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                                style={styles.notifAvatar}
+                                            />
+                                        </Pressable>
+                                        <Text style={[styles.notifText, darkMode && styles.notifTextDark, { flex: 1, marginBottom: 0 }]}>
+                                            <Text
+                                                onPress={() => { if (onViewProfile) onViewProfile(req.id, req.username, req.photoURL || ''); onClose(); }}
+                                                style={[styles.notifUser, darkMode && styles.notifUserDark]}
+                                            >
+                                                @{req.username}
+                                            </Text> wants to connect
+                                        </Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                                        <Pressable
+                                            onPress={async () => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                await SocialService.acceptConnectionRequest(req.id);
+                                            }}
+                                            style={[styles.acceptBtn, { flex: 1 }]}
+                                        >
+                                            <Text style={styles.acceptBtnText}>ACCEPT</Text>
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={async () => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                                await SocialService.declineConnectionRequest(req.id);
+                                            }}
+                                            style={[styles.acceptBtn, { flex: 1, backgroundColor: darkMode ? '#3A3A3C' : '#E5E5EA' }]}
+                                        >
+                                            <Text style={[styles.acceptBtnText, { color: darkMode ? '#FFF' : '#4A4A4A' }]}>DECLINE</Text>
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    )}
+
+                    {/* General Notifications with Avatars */}
+                    {generalNotifs.map((notif) => (
                         <Pressable key={notif.id} style={[styles.notifCard, darkMode && styles.notifCardDark]}>
-                            <View style={[styles.notifDot, notif.read && { backgroundColor: 'transparent' }]} />
+                            <Pressable
+                                onPress={() => { if (onViewProfile && notif.fromUserId) onViewProfile(notif.fromUserId, notif.fromUsername, notif.fromAvatar || ''); onClose(); }}
+                                style={styles.notifAvatarContainer}
+                            >
+                                <Image
+                                    source={{ uri: notif.fromAvatar || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                    style={styles.notifAvatar}
+                                />
+                            </Pressable>
                             <View style={styles.notifContent}>
                                 <Text style={[styles.notifText, darkMode && styles.notifTextDark]}>
-                                    <Text style={[styles.notifUser, darkMode && styles.notifUserDark]}>@{notif.fromUsername}</Text> {notif.content}
+                                    <Text
+                                        onPress={() => { if (onViewProfile && notif.fromUserId) onViewProfile(notif.fromUserId, notif.fromUsername, notif.fromAvatar || ''); onClose(); }}
+                                        style={[styles.notifUser, darkMode && styles.notifUserDark]}
+                                    >
+                                        @{notif.fromUsername}
+                                    </Text> {notif.content}
                                 </Text>
                                 <Text style={styles.notifTime}>
                                     {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate ? notif.timestamp.toDate() : new Date(), { addSuffix: true }) : 'just now'}
@@ -120,7 +197,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                             </View>
                         </Pressable>
                     ))}
-                    {notifications.length === 0 && (
+                    {generalNotifs.length === 0 && connectionRequests.length === 0 && (
                         <View style={styles.emptyState}>
                             <BellIcon color={darkMode ? "#555" : "#D1D1D1"} />
                             <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>All caught up!</Text>
@@ -323,6 +400,19 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.8)',
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.04)',
+    },
+    notifAvatarContainer: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginRight: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.06)',
+    },
+    notifAvatar: {
+        width: '100%',
+        height: '100%',
     },
     notifDot: {
         width: 8,

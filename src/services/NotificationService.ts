@@ -1,5 +1,5 @@
 import { db, auth } from './firebaseConfig';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc, updateDoc, getDoc, writeBatch, where, getDocs } from 'firebase/firestore';
 
 export type NotificationType = 'reaction' | 'follow' | 'challenge' | 'comment';
 
@@ -50,11 +50,34 @@ export const NotificationService = {
             limit(50)
         );
 
-        return onSnapshot(q, (snapshot) => {
-            const notifs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Notification[];
+        return onSnapshot(q, async (snapshot) => {
+            const notifs = await Promise.all(snapshot.docs.map(async (docSnap) => {
+                const data = docSnap.data();
+                // Fetch fresh user info to keep it synced
+                let fromUsername = data.fromUsername;
+                let fromAvatar = data.fromAvatar;
+
+                if (data.fromUserId) {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', data.fromUserId));
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            fromUsername = userData.username || fromUsername;
+                            fromAvatar = userData.photoURL || fromAvatar;
+                        }
+                    } catch (e) {
+                        console.error("Error fetching notification user:", e);
+                    }
+                }
+
+                return {
+                    id: docSnap.id,
+                    ...data,
+                    fromUsername,
+                    fromAvatar,
+                } as Notification;
+            }));
+
             callback(notifs);
         });
     },
@@ -69,6 +92,31 @@ export const NotificationService = {
             });
         } catch (error) {
             console.error("Error marking notification as read:", error);
+        }
+    },
+
+    // Mark ALL notifications as read
+    async markAllAsRead() {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        try {
+            const q = query(
+                collection(db, 'users', user.uid, 'notifications'),
+                where('read', '==', false)
+            );
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) return;
+
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((docSnap) => {
+                batch.update(docSnap.ref, { read: true });
+            });
+
+            await batch.commit();
+        } catch (error) {
+            console.error("Error marking all as read:", error);
         }
     }
 };

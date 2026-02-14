@@ -450,6 +450,10 @@ export const MainFeedScreen = () => {
                     hideOverlay();
                     setIsMessagesVisible(true);
                 }}
+                onViewProfile={(userId, username, avatar) => {
+                    hideOverlay();
+                    handleProfilePress(userId, username, avatar);
+                }}
             />
 
             {/* Messages Screen */}
