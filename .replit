@@ -44,3 +44,14 @@ externalPort = 3000
 deploymentTarget = "static"
 build = ["npx", "expo", "export", "--platform", "web", "--output-dir", "dist"]
 publicDir = "dist"
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_FIREBASE_API_KEY = "AIzaSyDzxfE9asNoXz3_R-409YShIv2Evjh3btE"
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN = "spindare-e5444.firebaseapp.com"
+EXPO_PUBLIC_FIREBASE_PROJECT_ID = "spindare-e5444"
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET = "spindare-e5444.firebasestorage.app"
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = "571702461891"
+EXPO_PUBLIC_FIREBASE_APP_ID = "1:571702461891:web:de22384c9df45d0685e976"
+EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID = "G-PY6KNY2LL3"
