@@ -59,8 +59,8 @@ export const MainFeedScreen = () => {
     const { darkMode } = useTheme();
 
     // State
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isAuthenticated, setIsAuthenticated] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile>({
         email: "rashica07@spindare.com",
         username: "rashica07",
@@ -135,10 +135,8 @@ export const MainFeedScreen = () => {
                     setSpinsLeft(profile.spinsLeft);
                 }
             } else {
-                console.log('No user or profile found');
-                setIsAuthenticated(false);
-                // Disconnect from Stream Chat
-                ChatService.disconnectUser().catch(() => { });
+                console.log('No Firebase session, running as rashica07');
+                // Keep authenticated with default profile
             }
             console.log('Setting isLoading to false');
             setIsLoading(false);
