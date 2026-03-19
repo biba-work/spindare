@@ -4,6 +4,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from 'expo-splash-screen';
+import * as SecureStore from 'expo-secure-store';
+import { ClerkProvider, ClerkLoaded } from '@clerk/clerk-expo';
+import { Show, SignInButton, SignUpButton, UserButton } from "./src/components/ClerkUI";
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
 import { MainFeedScreen } from "./src/screens/MainFeedScreen";
@@ -12,6 +15,37 @@ import { AppConfig } from "./src/config/AppConfig";
 SplashScreen.preventAutoHideAsync();
 
 import { ThemeProvider } from "./src/contexts/ThemeContext";
+
+const tokenCache = {
+  async getToken(key: string) {
+    try {
+      const item = await SecureStore.getItemAsync(key);
+      if (item) {
+        console.log(`${key} was used 🔐 \n`);
+      } else {
+        console.log("No values stored under key: " + key);
+      }
+      return item;
+    } catch (error) {
+      console.error("SecureStore get item error: ", error);
+      await SecureStore.deleteItemAsync(key);
+      return null;
+    }
+  },
+  async saveToken(key: string, value: string) {
+    try {
+      return SecureStore.setItemAsync(key, value);
+    } catch (err) {
+      return;
+    }
+  },
+};
+
+const publishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+if (!publishableKey) {
+  throw new Error("Missing Publishable Key. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env");
+}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -38,21 +72,36 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <View style={styles.container} onLayout={onLayoutRootView}>
-          <View style={styles.deadzone} />
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <StatusBar style="light" />
-            {AppConfig.useRestructuredLayout ? (
-              <MainFeedScreen />
-            ) : (
-              <ChallengeScreen />
-            )}
-          </GestureHandlerRootView>
-        </View>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <ClerkLoaded>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <View style={styles.container} onLayout={onLayoutRootView}>
+              <View style={styles.deadzone} />
+              <View style={styles.authHeader}>
+                <Show when="signed-out">
+                  <View style={{ flexDirection: 'row' }}>
+                    <SignInButton />
+                    <SignUpButton />
+                  </View>
+                </Show>
+                <Show when="signed-in">
+                  <UserButton />
+                </Show>
+              </View>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style="light" />
+                {AppConfig.useRestructuredLayout ? (
+                  <MainFeedScreen />
+                ) : (
+                  <ChallengeScreen />
+                )}
+              </GestureHandlerRootView>
+            </View>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </ClerkLoaded>
+    </ClerkProvider>
   );
 }
 
@@ -70,5 +119,14 @@ const styles = StyleSheet.create({
     height: 32,
     backgroundColor: '#1C1C26', // Dark blue-grayish color
     zIndex: 9999,
+  },
+  authHeader: {
+    height: 60,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C2C3E',
   }
 });
