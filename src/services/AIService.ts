@@ -20,6 +20,30 @@ const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+// Fallback pool used when Gemini is unavailable — pick one at random
+const FALLBACK_CHALLENGES = [
+    "Take a photo of something that reminds you of silence.",
+    "Write down one thing you've never told anyone.",
+    "Ask a stranger what their favourite memory is.",
+    "Walk for 10 minutes without looking at any screen.",
+    "Draw how you feel right now using only circles.",
+    "Find an interesting shadow and trace its outline with your finger.",
+    "Stare at the sky for exactly 60 seconds.",
+    "Write a letter you'll never send.",
+    "Eat your next meal with zero distractions, no phone.",
+    "Spend 2 hours in complete silence and notice what changes.",
+    "Touch five different textures in the next 5 minutes.",
+    "Photograph something broken that looks beautiful.",
+    "Close your eyes for 3 full minutes and only listen.",
+    "Go the entire day without checking how you look in a mirror.",
+    "Find the most interesting shadow near you and photograph it.",
+    "Do one thing today that scares you slightly.",
+    "Write down three things you're carrying that you haven't said out loud.",
+    "Stand in one spot outside for 10 minutes and observe.",
+    "Photograph the most overlooked object in your space.",
+    "Lie on the floor for 5 minutes. Notice the ceiling.",
+];
+
 const SYSTEM_PROMPT = `
 You are the Spindare AI, the core of the "Anti-Scroll" social experiment. 
 Your goal is to turn digital intent into physical action through "Active Reveal" challenges.
@@ -45,15 +69,16 @@ export const AIService = {
             const response = await result.response;
             const text = response.text().trim();
 
-            return text || "Take a photo of something that reminds you of silence.";
+            return text || FALLBACK_CHALLENGES[Math.floor(Math.random() * FALLBACK_CHALLENGES.length)];
         } catch (error) {
             console.error("Gemini Error:", error);
-            return "Take a photo of something that reminds you of silence.";
+            return FALLBACK_CHALLENGES[Math.floor(Math.random() * FALLBACK_CHALLENGES.length)];
         }
     },
 
-    analyzeCompletion: (challenge: string, profile: UserProfile) => {
-        // Simulated AI insight
+    // TODO: Replace with real Gemini analysis once completion media is uploaded.
+    // Currently returns a random placeholder string — NOT real AI analysis.
+    analyzeCompletion: (_challenge: string, _profile: UserProfile): string => {
         const insights = [
             "Your 'Adventurous' trait is growing. I noticed your speed.",
             "Visual creativity detected. Adding +5 bonus XP for composition.",

@@ -7,7 +7,6 @@ import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../contexts/ThemeContext';
 import { SocialService } from '../services/SocialService';
-import { auth } from '../services/firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -35,11 +34,23 @@ interface UserProfileViewProps {
     userId: string;
     username: string;
     avatar: string;
+    currentUserId: string;
+    currentUsername: string;
+    currentAvatar: string | null;
     onBack: () => void;
     onStartChat: () => void;
 }
 
-export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat }: UserProfileViewProps) => {
+export const UserProfileView = ({ 
+    userId, 
+    username, 
+    avatar, 
+    currentUserId,
+    currentUsername,
+    currentAvatar,
+    onBack, 
+    onStartChat 
+}: UserProfileViewProps) => {
     const { darkMode } = useTheme();
     const [posts, setPosts] = useState<Post[]>([]);
     const [isConnected, setIsConnected] = useState(false);
@@ -52,8 +63,9 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
 
         // Social Sync
         const syncSocial = async () => {
+            if (!currentUserId) return;
             const [isFollowing, s] = await Promise.all([
-                SocialService.checkIsFollowing(userId),
+                SocialService.checkIsFollowing(currentUserId, userId),
                 SocialService.getFollowStats(userId)
             ]);
             setIsConnected(isFollowing);
@@ -62,10 +74,10 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
         syncSocial();
 
         return () => unsubscribe();
-    }, [userId]);
+    }, [userId, currentUserId]);
 
     const handleConnect = async () => {
-        if (!auth.currentUser) return;
+        if (!currentUserId) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
         // Optimistic Update
@@ -75,9 +87,9 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
 
         try {
             if (newStatus) {
-                await SocialService.followUser(userId);
+                await SocialService.followUser(currentUserId, userId, currentUsername, currentAvatar);
             } else {
-                await SocialService.unfollowUser(userId);
+                await SocialService.unfollowUser(currentUserId, userId);
             }
         } catch (e) {
             // Revert on error
@@ -175,7 +187,7 @@ export const UserProfileView = ({ userId, username, avatar, onBack, onStartChat 
                                 <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                 <Text style={styles.statLabel}>Reactions</Text>
                             </View>
-                            {auth.currentUser?.uid === userId && (
+                            {currentUserId === userId && (
                                 <>
                                     <View style={[styles.statDivider, darkMode && styles.statDividerDark]} />
                                     <View style={styles.statItem}>

@@ -25,6 +25,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { HobbyType, StudyFieldType } from '../services/AIService';
 import { AppButton } from '../components/atoms/AppButton';
 import { AuthService } from '../services/AuthService';
+import { getFriendlyError } from '../utils/errorMessages';
+import { useSignIn, useSignUp, useOAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+
+// Warm up the browser for OAuth flows
+WebBrowser.maybeCompleteAuthSession();
 
 const { width, height } = Dimensions.get('window');
 
@@ -48,32 +54,30 @@ interface OnboardingProps {
 }
 
 export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
-    const [view, setView] = useState<'welcome' | 'login' | 'signup' | 'traits'>('welcome');
+    const { isLoaded: isSignInLoaded, signIn, setActive: setSignInActive } = useSignIn();
+    const { isLoaded: isSignUpLoaded, signUp, setActive: setSignUpActive } = useSignUp();
+    const { startOAuthFlow: startGoogleAuth } = useOAuth({ strategy: 'oauth_google' });
+    const { startOAuthFlow: startAppleAuth } = useOAuth({ strategy: 'oauth_apple' });
 
+    const [view, setView] = useState<'welcome' | 'login' | 'signup' | 'traits' | 'verify'>('welcome');
+    
     // Auth State
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [code, setCode] = useState('');
 
     // User Traits
     const [selectedHobbies, setSelectedHobbies] = useState<HobbyType[]>([]);
     const [selectedFields, setSelectedFields] = useState<StudyFieldType[]>([]);
 
-    // UI State
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Animations
     const fadeAnim = useRef(new Animated.Value(1)).current;
-    const slideAnim = useRef(new Animated.Value(0)).current;
 
-    useEffect(() => {
-        // Subtle background breathing animation could go here
-    }, []);
-
-    const switchView = (newView: 'welcome' | 'login' | 'signup' | 'traits') => {
+    const switchView = (newView: 'welcome' | 'login' | 'signup' | 'traits' | 'verify') => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        // Fade out
         Animated.timing(fadeAnim, {
             toValue: 0,
             duration: 200,
@@ -81,7 +85,6 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
         }).start(() => {
             setView(newView);
             setError(null);
-            // Fade in
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 300,
@@ -100,132 +103,138 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
         setSelectedFields(prev => prev.includes(field) ? prev.filter(l => l !== field) : [...prev, field]);
     };
 
+    const isValidEmail = (emailToCheck: string): boolean => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(emailToCheck);
+    };
+
     const handleSocialAuth = async (type: 'google' | 'apple') => {
+        if (!isSignInLoaded || !isSignUpLoaded) return;
         try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             setError(null);
             setIsSubmitting(true);
-            const profile = type === 'google' ? await AuthService.signInWithGoogle() : await AuthService.signInWithApple();
+            
+            const { createdSessionId, setActive, signUp: oauthSignUp } = type === 'google' 
+                ? await startGoogleAuth() 
+                : await startAppleAuth();
 
-            if (profile.hobbies.length === 0 || profile.studyFields.length === 0) {
-                // New user via social, needs onboarding
-                setEmail(profile.email);
-                setUsername(profile.username);
-                setIsSubmitting(false);
-                switchView('traits');
+            if (createdSessionId) {
+                setActive!({ session: createdSessionId });
+                // MainFeedScreen will handle profile
             } else {
-                // Existing user
-                await onComplete(profile.email, '', profile.username, profile.hobbies, profile.studyFields, false);
+                console.log("OAuth sign up in progress...");
+                setIsSubmitting(false);
             }
         } catch (err: any) {
-            setError(err.message);
+            console.error("OAuth Error:", err);
+            setError(getFriendlyError(err));
             setIsSubmitting(false);
         }
     };
 
     const handleSubmit = async (isLogin: boolean) => {
-        if (isSubmitting) return;
+        if (isSubmitting || !isSignInLoaded || !isSignUpLoaded) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
         if (isLogin) {
             // Login flow
             setIsSubmitting(true);
             try {
-                // We pass empty arrays for login, they will be fetched from profile
-                await onComplete(email.trim(), password, '', [], [], false);
+                const completeSignIn = await signIn.create({
+                    identifier: email.trim(),
+                    password,
+                });
+                await setSignInActive({ session: completeSignIn.createdSessionId });
             } catch (err: any) {
-                setError(err.message || 'Login failed');
+                setError(getFriendlyError(err));
                 setIsSubmitting(false);
             }
         } else {
-            // Signup flow -> Go to traits
+            // Signup flow -> Go to traits 
             const trimmedEmail = email.trim().toLowerCase();
-            const trimmedUsername = username.trim();
-
-            // Log for debugging
-            console.log('Signup Continue pressed with:', { email, trimmedEmail, username: trimmedUsername, password: password ? '[set]' : '[empty]' });
-
-            if (!trimmedEmail) {
-                setError('Please enter your email address');
+            if (!trimmedEmail || !password || password.length < 6 || !username.trim()) {
+                setError('Please fill all fields correctly (Password min 6 chars)');
                 return;
             }
-
-            // Basic email format check
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(trimmedEmail)) {
-                setError('Please enter a valid email address (e.g., example@email.com)');
-                return;
-            }
-
-            if (!password) {
-                setError('Please enter a password');
-                return;
-            }
-
-            if (password.length < 6) {
-                setError('Password must be at least 6 characters');
-                return;
-            }
-
-            if (!trimmedUsername) {
-                setError('Please enter a username');
-                return;
-            }
-
-            // Update the email state to the normalized version before switching
             setEmail(trimmedEmail);
             switchView('traits');
         }
     };
 
-    // Email validation regex
-    const isValidEmail = (emailToCheck: string): boolean => {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return emailRegex.test(emailToCheck);
-    };
-
     const handleFinalSignup = async () => {
-        if (isSubmitting) return;
+        if (isSubmitting || !isSignUpLoaded) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
         const trimmedEmail = email.trim().toLowerCase();
         const trimmedUsername = username.trim();
 
-        // Log exact characters for debugging
-        console.log('Email raw value:', JSON.stringify(email));
-        console.log('Email trimmed:', JSON.stringify(trimmedEmail));
-        console.log('Email char codes:', trimmedEmail.split('').map(c => c.charCodeAt(0)));
-
-        // Validate email format before attempting signup
-        if (!trimmedEmail) {
-            setError('Please enter your email address');
-            return;
-        }
-
-        if (!isValidEmail(trimmedEmail)) {
-            setError(`Invalid email format: "${trimmedEmail}"\nPlease enter a valid email address (e.g., example@email.com)`);
-            return;
-        }
-
-        if (!password) {
-            setError('Please enter a password');
-            return;
-        }
-
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters long');
+        if (!trimmedEmail || !isValidEmail(trimmedEmail) || !password || password.length < 6) {
+            setError('Account details are invalid.');
             return;
         }
 
         setIsSubmitting(true);
         try {
-            console.log('Attempting signup with validated email:', { email: trimmedEmail, username: trimmedUsername });
-            await onComplete(trimmedEmail, password, trimmedUsername, selectedHobbies, selectedFields, true);
+            // 1. Clerk signup
+            const result = await signUp.create({
+                emailAddress: trimmedEmail,
+                password,
+                username: trimmedUsername,
+            });
+
+            // 2. Prepare email verification if needed
+            if (result.status !== 'complete') {
+                await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+                switchView('verify');
+                setIsSubmitting(false);
+            } else {
+                // Auto-complete if possible
+                await setSignUpActive({ session: result.createdSessionId });
+                await AuthService.createProfile(result.createdUserId || '', {
+                    email: trimmedEmail,
+                    username: trimmedUsername,
+                    hobbies: selectedHobbies,
+                    studyFields: selectedFields
+                });
+            }
         } catch (err: any) {
-            // Show the exact email we tried to use in the error
-            setError(`${err.message}\nAttempted email: '${trimmedEmail}'`);
+            setError(getFriendlyError(err));
             setIsSubmitting(false);
-            // If error is account related, might need to go back, but let's stay on traits for now so they don't lose selection
+        }
+    };
+
+    const handleVerify = async () => {
+        if (isSubmitting || !isSignUpLoaded) return;
+        if (code.length < 6) {
+            setError('Please enter the 6-digit verification code.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const completeSignUp = await signUp.attemptEmailAddressVerification({
+                code,
+            });
+
+            if (completeSignUp.status === 'complete') {
+                await setSignUpActive({ session: completeSignUp.createdSessionId });
+                
+                // Create the Supabase profile
+                await AuthService.createProfile(completeSignUp.createdUserId || '', {
+                    email: email.trim().toLowerCase(),
+                    username: username.trim(),
+                    hobbies: selectedHobbies,
+                    studyFields: selectedFields
+                });
+            } else {
+                console.log("Verification status:", completeSignUp.status);
+                setError(`Verification incomplete: ${completeSignUp.status}`);
+                setIsSubmitting(false);
+            }
+        } catch (err: any) {
+            setError(getFriendlyError(err));
+            setIsSubmitting(false);
         }
     };
 
@@ -362,6 +371,44 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
         </View>
     );
 
+    const renderVerify = () => (
+        <View style={styles.formContainer}>
+            <Pressable onPress={() => switchView('traits')} style={styles.backBtn}>
+                <Ionicons name="arrow-back" size={24} color="#000" />
+            </Pressable>
+
+            {renderHeader("Verify Email", `An email was sent to ${email}. Enter the 6-digit code below.`)}
+
+            <View style={styles.inputStack}>
+                {renderInput("6-digit Code", code, setCode, false, 'none', 'number-pad')}
+                {error && <Text style={styles.errorText}>{error}</Text>}
+            </View>
+
+            <View style={styles.footerActions}>
+                <AppButton
+                    onPress={handleVerify}
+                    style={[styles.primaryBtn, { width: '100%' }]}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.primaryBtnText}>Verify Account</Text>}
+                </AppButton>
+                
+                <Pressable
+                    onPress={async () => {
+                        try {
+                            await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+                        } catch (err: any) {
+                            setError(getFriendlyError(err) || "Couldn't resend the code. Please wait a moment.");
+                        }
+                    }}
+                    style={styles.loginLink}
+                >
+                    <Text style={styles.loginLinkText}>Didn't get a code? <Text style={{ fontWeight: '700', color: '#000' }}>Resend</Text></Text>
+                </Pressable>
+            </View>
+        </View>
+    );
+
     const renderTraits = () => (
         <View style={styles.formContainer}>
             <Pressable onPress={() => switchView('signup')} style={styles.backBtn}>
@@ -428,6 +475,7 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                         {view === 'login' && renderLogin()}
                         {view === 'signup' && renderSignup()}
                         {view === 'traits' && renderTraits()}
+                        {view === 'verify' && renderVerify()}
                     </Animated.View>
                 </SafeAreaView>
             </ImageBackground>

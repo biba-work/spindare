@@ -10,7 +10,6 @@ import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Post } from '../services/PostService';
-import { auth } from '../services/firebaseConfig';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
 
@@ -82,6 +81,7 @@ const TextIcon = ({ color }: { color: string }) => (
 );
 
 interface ProfileScreenProps {
+    userId: string;
     onBack: () => void;
     onLogout: () => void;
     spinsLeft: number;
@@ -97,17 +97,17 @@ interface ProfileScreenProps {
 import { useTheme } from '../contexts/ThemeContext';
 
 export const ProfileScreen = ({
+    userId,
     onBack,
     onLogout,
     spinsLeft,
     setSpinsLeft,
     activeChallenge,
     onChallengeReceived,
-
     userProfile,
     onUpdateProfile,
     onShare,
-    onOpenCamera
+    onOpenCamera,
 }: ProfileScreenProps) => {
     const [mode, setMode] = useState<'list' | 'grid'>('grid');
     const [showSettings, setShowSettings] = useState(false);
@@ -142,6 +142,7 @@ export const ProfileScreen = ({
     const [mediaUri, setMediaUri] = useState<string | null>(null);
     const [textContent, setTextContent] = useState('');
     const [mediaAspectRatio, setMediaAspectRatio] = useState(1);
+    const [isSubmittingChallenge, setIsSubmittingChallenge] = useState(false);
 
     const [editUsername, setEditUsername] = useState(userProfile.username);
 
@@ -154,8 +155,8 @@ export const ProfileScreen = ({
         if (newUsername.length < 1) return;
 
         try {
-            // Update in Firestore (profile + all posts)
-            await AuthService.updateUsername(newUsername);
+            // Update in Supabase (profile + all posts)
+            await AuthService.updateUsername(userId, newUsername);
 
             // Update locally in parent component
             onUpdateProfile({ username: newUsername });
@@ -176,14 +177,13 @@ export const ProfileScreen = ({
             useNativeDriver: true,
         }).start();
 
-        const uid = auth.currentUser?.uid;
-        if (uid) {
-            const unsub = PostService.subscribeToUserPosts(uid, (posts) => {
+        if (userId) {
+            const unsub = PostService.subscribeToUserPosts(userId, (posts) => {
                 setUserPosts(posts);
             });
             return () => unsub();
         }
-    }, []);
+    }, [userId]);
 
     const openSpinner = () => {
         if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -275,11 +275,13 @@ export const ProfileScreen = ({
     };
 
     const submitChallenge = async () => {
-        if (!spinResult) return;
+        if (!spinResult || isSubmittingChallenge) return;
 
+        setIsSubmittingChallenge(true);
         try {
-            // Submit to Firestore
+            // Submit to Supabase
             await PostService.createPost(
+                userId,
                 userProfile.username,
                 userProfile.photoURL || '',
                 spinResult,
@@ -293,6 +295,8 @@ export const ProfileScreen = ({
         } catch (error: any) {
             console.error("Post submission error:", error);
             Alert.alert("Error", "Could not post your challenge. Please try again.");
+        } finally {
+            setIsSubmittingChallenge(false);
         }
     };
 
@@ -681,8 +685,8 @@ export const ProfileScreen = ({
                                                     onChangeText={setTextContent}
                                                     multiline
                                                 />
-                                                <Pressable onPress={submitChallenge} style={styles.submitBtn}>
-                                                    <Text style={styles.submitBtnText}>Post Challenge</Text>
+                                                <Pressable onPress={submitChallenge} style={[styles.submitBtn, isSubmittingChallenge && { opacity: 0.5 }]} disabled={isSubmittingChallenge}>
+                                                    <Text style={styles.submitBtnText}>{isSubmittingChallenge ? 'Posting...' : 'Post Challenge'}</Text>
                                                 </Pressable>
                                             </View>
                                         )}
@@ -699,8 +703,8 @@ export const ProfileScreen = ({
                                                     onChangeText={setTextContent}
                                                     autoFocus
                                                 />
-                                                <Pressable onPress={submitChallenge} style={styles.submitBtn}>
-                                                    <Text style={styles.submitBtnText}>Post Challenge</Text>
+                                                <Pressable onPress={submitChallenge} style={[styles.submitBtn, isSubmittingChallenge && { opacity: 0.5 }]} disabled={isSubmittingChallenge}>
+                                                    <Text style={styles.submitBtnText}>{isSubmittingChallenge ? 'Posting...' : 'Post Challenge'}</Text>
                                                 </Pressable>
                                             </View>
                                         )}

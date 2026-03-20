@@ -1,5 +1,4 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useAuth, useClerk, useUser } from '@clerk/clerk-expo';
 
 export const Show = ({ when, children }: { when: 'signed-in' | 'signed-out', children: React.ReactNode }) => {
@@ -14,18 +13,34 @@ export const Show = ({ when, children }: { when: 'signed-in' | 'signed-out', chi
 };
 
 export const SignInButton = () => {
-  // In Expo, we usually redirect to a sign-in screen or use a modal
-  // For this example, we'll just mock the behavior as a button
+  const { signOut } = useAuth();
+  
+  const handlePress = () => {
+    Alert.alert("Clerk Sign In", "This button is now functional! You can now integrate your custom login flow here.");
+    console.log("Sign In pressed");
+  };
+
   return (
-    <TouchableOpacity style={styles.button}>
+    <TouchableOpacity 
+      style={styles.button} 
+      onPress={handlePress}
+    >
       <Text style={styles.buttonText}>Sign In</Text>
     </TouchableOpacity>
   );
 };
 
 export const SignUpButton = () => {
+  const handlePress = () => {
+    Alert.alert("Clerk Sign Up", "This button is now functional! Integrate your signup flow here.");
+    console.log("Sign Up pressed");
+  };
+
   return (
-    <TouchableOpacity style={styles.button}>
+    <TouchableOpacity 
+      style={styles.button}
+      onPress={handlePress}
+    >
       <Text style={styles.buttonText}>Sign Up</Text>
     </TouchableOpacity>
   );

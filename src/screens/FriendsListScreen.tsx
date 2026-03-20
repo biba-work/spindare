@@ -18,7 +18,7 @@ interface Friend {
     photoURL?: string;
 }
 
-export const FriendsListScreen = ({ onClose, challenge }: { onClose: () => void, challenge: string }) => {
+export const FriendsListScreen = ({ onClose, challenge, currentUserId }: { onClose: () => void, challenge: string, currentUserId: string }) => {
     const { darkMode } = useTheme();
     const [friends, setFriends] = useState<Friend[]>([]);
     const [searchResults, setSearchResults] = useState<Friend[]>([]);
@@ -46,12 +46,13 @@ export const FriendsListScreen = ({ onClose, challenge }: { onClose: () => void,
 
         // Fetch real friends
         fetchFriends();
-    }, []);
+    }, [currentUserId]);
 
     const fetchFriends = async () => {
+        if (!currentUserId) return;
         setLoading(true);
         try {
-            const realFriends = await SocialService.getFriends();
+            const realFriends = await SocialService.getFriends(currentUserId);
             setFriends(realFriends);
         } catch (error) {
             console.error("Failed to fetch friends:", error);
@@ -84,7 +85,7 @@ export const FriendsListScreen = ({ onClose, challenge }: { onClose: () => void,
 
     const handleSendToFriend = async (friend: Friend) => {
         try {
-            await ChatService.sendChallengeToUser(friend.id, friend.name, challenge, friend.photoURL);
+            await ChatService.sendChallengeToUser(currentUserId, friend.id, friend.name, challenge, friend.photoURL);
             console.log(`✅ Challenge sent to friend ${friend.username}: ${challenge}`);
             return true;
         } catch (error) {
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     containerDark: { backgroundColor: '#1C1C1E' },
 
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 16 },
-    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3 },
+    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     headerTitleDark: { color: '#FFF' },
 
     closeButton: { padding: 4 },
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.05)',
     },
 
-    previewLabel: { color: '#A7BBC7', fontSize: 8, fontWeight: '500', letterSpacing: 2, marginBottom: 4, textTransform: 'uppercase' },
+    previewLabel: { color: '#A7BBC7', fontSize: 8, fontWeight: '500', letterSpacing: 2, marginBottom: 4, textTransform: 'uppercase', paddingRight: Platform.OS === 'android' ? 6 : 0 },
     previewText: { color: '#4A4A4A', fontSize: 14, lineHeight: 20, fontWeight: '400' },
     previewTextDark: { color: '#E5E5EA' },
 
@@ -322,7 +323,7 @@ const styles = StyleSheet.create({
     sentButton: { backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#D1D1D1' },
     sentButtonDark: { backgroundColor: 'transparent', borderColor: '#48484A' },
 
-    sendButtonText: { color: '#FAF9F6', fontSize: 11, fontWeight: '600', letterSpacing: 1 },
+    sendButtonText: { color: '#FAF9F6', fontSize: 11, fontWeight: '600', letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     sendButtonTextDark: { color: '#FFF' },
 
     sentButtonText: { color: '#8E8E93' },

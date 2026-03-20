@@ -1,25 +1,7 @@
-import { db, auth, storage } from './firebaseConfig';
-import { Image } from 'react-native';
-import {
-    collection,
-    addDoc,
-    query,
-    orderBy,
-    onSnapshot,
-    doc,
-    updateDoc,
-    increment,
-    serverTimestamp,
-    getDocs,
-    limit,
-    where,
-    getDoc,
-    deleteDoc,
-    setDoc,
-    getCountFromServer
-} from 'firebase/firestore';
+import { supabase } from './supabaseConfig';
 import { NotificationService } from './NotificationService';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 export interface Post {
     id: string;
@@ -29,7 +11,7 @@ export interface Post {
     challenge: string;
     content: string;
     media: string | null;
-    timestamp: any;
+    timestamp: string;
     reactions: {
         felt: number;
         thought: number;
@@ -38,155 +20,179 @@ export interface Post {
     spinCount?: number;
 }
 
+// Maps a raw Supabase row to the Post interface (created_at → timestamp)
+const mapPost = (row: any): Post => ({ ...row, timestamp: row.created_at });
+
 export const PostService = {
-    // Helper to upload image to Storage
+    // Helper to upload image to Supabase Storage
     async uploadImage(uri: string): Promise<string> {
         try {
-            // Use fetch to read the file as a blob, then convert to base64
-            const response = await fetch(uri);
-            const blob = await response.blob();
-
-            // Convert blob to base64 using FileReader
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const result = reader.result as string;
-                    // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
-                    const base64Data = result.split(',')[1];
-                    resolve(base64Data);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
             const filename = `posts/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-            const storageRef = ref(storage, filename);
+            
+            const { data, error } = await supabase.storage
+                .from('spindare-assets')
+                .upload(filename, decode(base64), {
+                    contentType: 'image/jpeg'
+                });
 
-            // Upload the base64 string directly
-            await uploadString(storageRef, base64, 'base64', {
-                contentType: 'image/jpeg'
-            });
+            if (error) throw error;
 
-            return await getDownloadURL(storageRef);
+            const { data: { publicUrl } } = supabase.storage
+                .from('spindare-assets')
+                .getPublicUrl(data.path);
+
+            return publicUrl;
         } catch (error) {
-            console.error("Firebase Storage Upload Error:", error);
+            console.error("Supabase Storage Upload Error:", error);
             throw error;
         }
     },
 
     // Create a new challenge post
-    async createPost(username: string, avatar: string, challenge: string, content: string, mediaUri: string | null) {
-        const user = auth.currentUser;
-        if (!user) throw new Error("Must be logged in to post");
+    async createPost(userId: string, username: string, avatar: string, challenge: string, content: string, mediaUri: string | null) {
+        if (!userId) throw new Error("Must be logged in to post");
 
         let finalMediaUrl = mediaUri;
         if (mediaUri && !mediaUri.startsWith('http')) {
             finalMediaUrl = await this.uploadImage(mediaUri);
         }
 
-        // Calculate functional Spin Count (how many people have done this challenge)
-        let count = 1; // Default to 1 (this new post)
+        // Calculate functional Spin Count
+        let count = 1;
         try {
-            const countQ = query(collection(db, 'posts'), where("challenge", "==", challenge));
-            const snapshot = await getCountFromServer(countQ);
-            count = snapshot.data().count + 1;
+            const { count: existingCount } = await supabase
+                .from('posts')
+                .select('*', { count: 'exact', head: true })
+                .eq('challenge', challenge);
+            
+            count = (existingCount || 0) + 1;
         } catch (err) {
-            console.warn("Could not calculate spin count, defaulting to 1", err);
+            console.warn("Could not calculate spin count", err);
         }
 
-        const postData = {
-            userId: user.uid,
-            author: username,
-            avatar: avatar,
-            challenge: challenge,
-            content: content,
-            media: finalMediaUrl,
-            timestamp: serverTimestamp(),
-            reactions: {
-                felt: 0,
-                thought: 0,
-                intrigued: 0
-            },
-            spinCount: count
-        };
+        const { data, error } = await supabase
+            .from('posts')
+            .insert({
+                userId,
+                author: username,
+                avatar,
+                challenge,
+                content,
+                media: finalMediaUrl,
+                spinCount: count,
+                reactions: { felt: 0, thought: 0, intrigued: 0 }
+            })
+            .select()
+            .single();
 
-        return await addDoc(collection(db, 'posts'), postData);
+        if (error) throw error;
+        return data;
     },
 
-    // Listen to real-time feed updates
+    // Subscribe to real-time feed updates
     subscribeToFeed(callback: (posts: Post[]) => void) {
-        const q = query(collection(db, 'posts'), orderBy('timestamp', 'desc'));
+        // Initial fetch
+        const fetchPosts = async () => {
+            const { data } = await supabase
+                .from('posts')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (data) callback(data.map(mapPost));
+        };
 
-        return onSnapshot(q, (snapshot) => {
-            const posts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as Post));
-            callback(posts);
-        });
+        fetchPosts();
+
+        // Subscription
+        const channel = supabase
+            .channel('public:posts')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'posts' },
+                () => fetchPosts() // Refresh on any change for simplicity
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
     // Listen to specific user's posts
     subscribeToUserPosts(userId: string, callback: (posts: Post[]) => void) {
-        // Note: Composite index might be needed for 'where' + 'orderBy'.
-        // For now we sort client side or trust 'where' is enough.
-        const q = query(collection(db, 'posts'), where('userId', '==', userId));
+        const fetchUserPosts = async () => {
+            const { data } = await supabase
+                .from('posts')
+                .select('*')
+                .eq('userId', userId)
+                .order('created_at', { ascending: false });
+            if (data) callback(data.map(mapPost));
+        };
 
-        return onSnapshot(q, (snapshot) => {
-            const posts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as Post)).sort((a, b) => {
-                // Manual client side sort descending
-                const tA = a.timestamp?.toMillis ? a.timestamp.toMillis() : 0;
-                const tB = b.timestamp?.toMillis ? b.timestamp.toMillis() : 0;
-                return tB - tA;
-            });
-            callback(posts);
-        });
+        fetchUserPosts();
+
+        const channel = supabase
+            .channel(`user:posts:${userId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'posts', filter: `userId=eq.${userId}` },
+                () => fetchUserPosts()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
     // Toggle a reaction to a post
-    async toggleReaction(postId: string, type: 'felt' | 'thought' | 'intrigued') {
-        const userId = auth.currentUser?.uid;
+    async toggleReaction(
+        userId: string, 
+        currentUsername: string,
+        currentAvatar: string | null,
+        postId: string, 
+        type: 'felt' | 'thought' | 'intrigued'
+    ) {
         if (!userId) return;
 
-        const postRef = doc(db, 'posts', postId);
-        const likeRef = doc(db, 'posts', postId, 'likes', userId);
-
         try {
-            const likeDoc = await getDoc(likeRef);
+            // Check for existing reaction
+            const { data: existing, error: fetchError } = await supabase
+                .from('reactions')
+                .select('*')
+                .eq('postId', postId)
+                .eq('userId', userId)
+                .single();
 
-            if (likeDoc.exists()) {
-                const data = likeDoc.data();
-                const existingType = data.type;
-
-                if (existingType === type) {
-                    // Remove reaction (unlike)
-                    await deleteDoc(likeRef);
-                    await updateDoc(postRef, {
-                        [`reactions.${type}`]: increment(-1)
-                    });
+            if (existing) {
+                if (existing.type === type) {
+                    // Remove
+                    await supabase.from('reactions').delete().eq('id', existing.id);
+                    // Update post counts (better done via RPC or edge function, but for now client-side is fine if RLS allows)
+                    await supabase.rpc('decrement_reaction', { post_id: postId, reaction_type: type });
                 } else {
-                    // Change reaction type
-                    await updateDoc(likeRef, { type });
-                    await updateDoc(postRef, {
-                        [`reactions.${existingType}`]: increment(-1),
-                        [`reactions.${type}`]: increment(1)
-                    });
+                    // Change
+                    const oldType = existing.type;
+                    await supabase.from('reactions').update({ type }).eq('id', existing.id);
+                    await supabase.rpc('swap_reaction', { post_id: postId, old_type: oldType, new_type: type });
                 }
             } else {
-                // Add new reaction
-                await setDoc(likeRef, { type, timestamp: serverTimestamp() });
-                await updateDoc(postRef, {
-                    [`reactions.${type}`]: increment(1)
-                });
+                // Add new
+                await supabase.from('reactions').insert({ userId, postId, type });
+                await supabase.rpc('increment_reaction', { post_id: postId, reaction_type: type });
 
-                // Send Notification
-                const postSnap = await getDoc(postRef);
-                if (postSnap.exists()) {
-                    const postData = postSnap.data();
-                    await NotificationService.sendNotification(postData.userId, 'reaction', `reacted with ${type} to your post`, postId);
+                // Notification logic
+                const { data: post } = await supabase.from('posts').select('userId').eq('id', postId).single();
+                if (post) {
+                    await NotificationService.sendNotification(
+                        post.userId, 
+                        'reaction', 
+                        `reacted with ${type} to your post`,
+                        userId,
+                        currentUsername,
+                        currentAvatar,
+                        postId
+                    );
                 }
             }
         } catch (e) {
@@ -195,231 +201,242 @@ export const PostService = {
     },
 
     // Add a comment
-    async addComment(postId: string, text: string) {
-        const user = auth.currentUser;
-        if (!user) throw new Error("Must be logged in");
+    async addComment(
+        userId: string, 
+        username: string, 
+        avatar: string, 
+        postId: string, 
+        text: string
+    ) {
+        if (!userId) throw new Error("Must be logged in");
 
-        await addDoc(collection(db, 'posts', postId, 'comments'), {
-            userId: user.uid,
-            username: user.displayName || "Anonymous",
-            avatar: user.photoURL || null,
-            text,
-            timestamp: serverTimestamp()
-        });
+        const { error } = await supabase
+            .from('comments')
+            .insert({
+                postId,
+                userId,
+                author: username,
+                avatar,
+                content: text
+            });
+
+        if (error) throw error;
 
         // Send Notification
-        const postRef = doc(db, 'posts', postId);
-        const postSnap = await getDoc(postRef);
-        if (postSnap.exists()) {
-            const postData = postSnap.data();
-            await NotificationService.sendNotification(postData.userId, 'comment', 'commented on your post', postId);
+        const { data: post } = await supabase.from('posts').select('userId').eq('id', postId).single();
+        if (post) {
+            await NotificationService.sendNotification(
+                post.userId, 
+                'comment', 
+                'commented on your post',
+                userId,
+                username,
+                avatar,
+                postId
+            );
         }
     },
 
     // Subscribe to comments
     subscribeToComments(postId: string, callback: (comments: any[]) => void) {
-        const q = query(
-            collection(db, 'posts', postId, 'comments'),
-            orderBy('timestamp', 'asc')
-        );
+        const fetchComments = async () => {
+            const { data } = await supabase
+                .from('comments')
+                .select('*')
+                .eq('postId', postId)
+                .order('created_at', { ascending: true });
+            if (data) callback(data);
+        };
 
-        return onSnapshot(q, (snapshot) => {
-            const comments = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            callback(comments);
-        });
+        fetchComments();
+
+        const channel = supabase
+            .channel(`comments:${postId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'comments', filter: `postId=eq.${postId}` },
+                () => fetchComments()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
-    // Seed fake data if collection is empty or for testing
+    // Seed fake data — DEV ONLY. Never call this in production.
     async seedFakeData() {
-        // 1. INJECT CUSTOM GUEST POSTS (From Local Assets)
-        const guests = [
-            {
-                id: "guest-1", author: "Sarah_Vibes",
-                challenge: "Morning Light", content: "Caught the sunrise just in time.",
-                media: Image.resolveAssetSource(require('../../assets/guest_1.jpg')).uri
-            },
-            {
-                id: "guest-2", author: "Davide33",
-                challenge: "Urban Jungle", content: "Concrete and leaves. My favorite combo.",
-                media: Image.resolveAssetSource(require('../../assets/guest_2.jpg')).uri
-            },
-            {
-                id: "guest-3", author: "LensWalker",
-                challenge: "Reflection", content: "Who knew a puddle could look this deep?",
-                media: Image.resolveAssetSource(require('../../assets/guest_3.jpg')).uri
-            }
-        ];
-
-        for (const guest of guests) {
-            const guestQ = query(collection(db, 'posts'), where("userId", "==", guest.id));
-            const guestSnap = await getDocs(guestQ);
-            if (guestSnap.empty) {
-                console.log(`Injecting custom guest post ${guest.id}...`);
-                await addDoc(collection(db, 'posts'), {
-                    userId: guest.id,
-                    author: guest.author,
-                    avatar: `https://ui-avatars.com/api/?name=${guest.author}&background=random`,
-                    challenge: guest.challenge,
-                    content: guest.content,
-                    media: guest.media,
-                    timestamp: serverTimestamp(),
-                    reactions: { felt: Math.floor(Math.random() * 20), thought: Math.floor(Math.random() * 10), intrigued: Math.floor(Math.random() * 5) },
-                    spinCount: Math.floor(Math.random() * 500)
-                });
-            }
-        }
-
-        // 2. Quick check to see if we already have data
-        const q = query(collection(db, 'posts'), limit(1));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-            console.log("Feed data exists. Syncing real spin counts...");
-
-            // 1. Fetch all posts
-            const allPostsQ = query(collection(db, 'posts'));
-            const allSnap = await getDocs(allPostsQ);
-
-            // 2. Group posts by challenge
-            const challengeCounts: Record<string, number> = {};
-
-            allSnap.docs.forEach(d => {
-                const data = d.data();
-                if (data.challenge) {
-                    challengeCounts[data.challenge] = (challengeCounts[data.challenge] || 0) + 1;
-                }
-            });
-
-            // 3. Update all posts with the REAL count
-            const batchPromises = allSnap.docs.map(async (d) => {
-                const data = d.data();
-                if (data.challenge) {
-                    const realCount = challengeCounts[data.challenge] || 1;
-                    // Only update if different to save writes
-                    if (data.spinCount !== realCount) {
-                        await updateDoc(doc(db, 'posts', d.id), { spinCount: realCount });
-                    }
-                } else if (data.spinCount === undefined) {
-                    // Posts without challenges get 0
-                    await updateDoc(doc(db, 'posts', d.id), { spinCount: 0 });
-                }
-            });
-
-            await Promise.all(batchPromises);
-            console.log("Spin counts synced successfully!");
+        if (!__DEV__) {
+            console.warn('seedFakeData() is disabled in production builds.');
             return;
         }
+        const { count } = await supabase.from('posts').select('*', { count: 'exact', head: true });
+        if (count && count > 0) return;
 
-        console.log("Seeding fake data...");
+        console.log("Seeding mock posts to Supabase...");
         const FAKES = [
             {
-                userId: "ai-faker-1",
-                author: "ZenMasterAI",
-                avatar: "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=200&q=80",
+                userId: "mock-user-1",
+                author: "elia.v",
+                avatar: "https://i.pravatar.cc/150?img=1",
                 challenge: "Silence Protocol",
-                content: "Spent 2 hours in total silence. The city sounds like a different beast when you stop contributing to the noise.",
+                content: "Spent 2 hours in total silence. The city sounds like a different beast when you stop contributing to the noise. Highly recommend.",
                 media: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80",
                 reactions: { felt: 24, thought: 12, intrigued: 5 },
-                spinCount: 1240
+                spinCount: 1240,
             },
             {
-                userId: "ai-faker-2",
-                author: "UrbanExplorer",
-                avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80",
-                challenge: "Unknown Path",
-                content: "Took the back alley near the industrial district. Found this street art I never knew existed. Beauty is everywhere.",
-                media: "https://images.unsplash.com/photo-1518107616385-ad308919634a?w=800&q=80",
-                reactions: { felt: 8, thought: 3, intrigued: 45 },
-                spinCount: 856
+                userId: "mock-user-2",
+                author: "marek.r",
+                avatar: "https://i.pravatar.cc/150?img=5",
+                challenge: "Trace a shadow",
+                content: "Found the most perfect shadow at 4pm. Traced it with chalk on my apartment floor. By 5pm it was gone. Impermanence, I guess.",
+                media: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
+                reactions: { felt: 31, thought: 18, intrigued: 9 },
+                spinCount: 876,
             },
             {
-                userId: "ai-faker-3",
-                author: "MemoryKeeper",
-                avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80",
-                challenge: "Deep Memory",
-                content: "Wrote down the smell of my grandmother's kitchen. It's crazy how words can make you smell cinnamon and old books.",
+                userId: "mock-user-3",
+                author: "sofi.k",
+                avatar: "https://i.pravatar.cc/150?img=9",
+                challenge: "One texture, ten seconds",
+                content: "I pressed my palm flat against the bark of an oak for ten full seconds. Felt every ridge. I don't know why this hit me so hard.",
+                media: "https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=800&q=80",
+                reactions: { felt: 67, thought: 14, intrigued: 22 },
+                spinCount: 2103,
+            },
+            {
+                userId: "mock-user-4",
+                author: "dan.exe",
+                avatar: "https://i.pravatar.cc/150?img=12",
+                challenge: "No mirror day",
+                content: "Went the whole day without checking how I looked. By lunchtime I stopped caring. By evening I felt weirdly free.",
                 media: null,
-                reactions: { felt: 56, thought: 89, intrigued: 2 },
-                spinCount: 45
-            }
+                reactions: { felt: 88, thought: 41, intrigued: 17 },
+                spinCount: 3312,
+            },
+            {
+                userId: "mock-user-5",
+                author: "lena.w",
+                avatar: "https://i.pravatar.cc/150?img=20",
+                challenge: "Sky for 60 seconds",
+                content: "Lay flat on the pavement outside my building and stared up for exactly 60 seconds. A woman asked if I needed help. We ended up talking for half an hour.",
+                media: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
+                reactions: { felt: 112, thought: 34, intrigued: 56 },
+                spinCount: 4018,
+            },
+            {
+                userId: "mock-user-6",
+                author: "b.ramos",
+                avatar: "https://i.pravatar.cc/150?img=33",
+                challenge: "Write a letter you'll never send",
+                content: "Wrote three pages. Tore them up. Then wrote three more. The act of writing is different when you know no one else will read it.",
+                media: null,
+                reactions: { felt: 99, thought: 77, intrigued: 11 },
+                spinCount: 1589,
+            },
+            {
+                userId: "mock-user-7",
+                author: "theo.n",
+                avatar: "https://i.pravatar.cc/150?img=41",
+                challenge: "Eat in silence, no phone",
+                content: "Ate breakfast with zero distractions. Actually tasted my food. Wild concept.",
+                media: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80",
+                reactions: { felt: 45, thought: 29, intrigued: 8 },
+                spinCount: 720,
+            },
+            {
+                userId: "mock-user-8",
+                author: "mia.sol",
+                avatar: "https://i.pravatar.cc/150?img=47",
+                challenge: "Photograph something broken",
+                content: "Found a cracked pavement tile that looked like a map of somewhere I've never been. The break was more interesting than what surrounded it.",
+                media: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80",
+                reactions: { felt: 58, thought: 62, intrigued: 33 },
+                spinCount: 945,
+            },
         ];
 
-        for (const fake of FAKES) {
-            await addDoc(collection(db, 'posts'), {
-                ...fake,
-                timestamp: serverTimestamp()
-            });
-        }
+        await supabase.from('posts').insert(FAKES);
+        console.log(`Seeded ${FAKES.length} mock posts.`);
     },
 
     // Subscribe to Kept Challenges
-    subscribeToKeptChallenges(userId: string, callback: (kept: { id: string, challenge: string, postId: string }[]) => void) {
-        const q = query(
-            collection(db, 'users', userId, 'kept_challenges'),
-            orderBy('timestamp', 'desc')
-        );
+    subscribeToKeptChallenges(userId: string, callback: (kept: any[]) => void) {
+        const fetchKept = async () => {
+            const { data } = await supabase
+                .from('kept_challenges')
+                .select('*')
+                .eq('userId', userId)
+                .order('created_at', { ascending: false });
+            if (data) callback(data);
+        };
 
-        return onSnapshot(q, (snapshot) => {
-            const kept = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as { id: string, challenge: string, postId: string }));
-            callback(kept);
-        });
+        fetchKept();
+
+        const channel = supabase
+            .channel(`kept:${userId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'kept_challenges', filter: `userId=eq.${userId}` },
+                () => fetchKept()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
-    // Toggle Keep Challenge (Per Post)
+    // Toggle Keep Challenge
     async toggleKeptChallenge(userId: string, postId: string, challenge: string) {
-        // Create a unique reference based on Post ID
-        const q = query(collection(db, 'users', userId, 'kept_challenges'), where('postId', '==', postId));
-        const snapshot = await getDocs(q);
+        const { data: existing } = await supabase
+            .from('kept_challenges')
+            .select('*')
+            .eq('userId', userId)
+            .eq('postId', postId)
+            .single();
 
-        if (!snapshot.empty) {
-            // Already kept -> Remove it
-            const docId = snapshot.docs[0].id;
-            await deleteDoc(doc(db, 'users', userId, 'kept_challenges', docId));
-            return false; // Not kept anymore
+        if (existing) {
+            await supabase.from('kept_challenges').delete().eq('id', existing.id);
+            return false;
         } else {
-            // Not kept -> Add it
-            await addDoc(collection(db, 'users', userId, 'kept_challenges'), {
-                postId,
-                challenge,
-                timestamp: serverTimestamp()
-            });
-            return true; // Now kept
+            await supabase.from('kept_challenges').insert({ userId, postId, challenge });
+            return true;
         }
     },
 
     // Record Sent/Spind Challenge
     async recordSpindChallenge(userId: string, postId: string, challenge: string) {
-        // Check if already sent/spind (optional, but prevents duplicates)
-        const q = query(collection(db, 'users', userId, 'spind_challenges'), where('postId', '==', postId));
-        const snapshot = await getDocs(q);
-
-        if (snapshot.empty) {
-            await addDoc(collection(db, 'users', userId, 'spind_challenges'), {
-                postId,
-                challenge,
-                timestamp: serverTimestamp()
-            });
-        }
+        await supabase
+            .from('spind_challenges')
+            .upsert({ userId, postId, challenge }, { onConflict: 'userId,postId' });
     },
 
     // Subscribe to Spind Challenges
-    subscribeToSpindChallenges(userId: string, callback: (spind: { id: string, challenge: string, postId: string }[]) => void) {
-        const q = query(
-            collection(db, 'users', userId, 'spind_challenges'),
-            orderBy('timestamp', 'desc')
-        );
+    subscribeToSpindChallenges(userId: string, callback: (spind: any[]) => void) {
+        const fetchSpind = async () => {
+            const { data } = await supabase
+                .from('spind_challenges')
+                .select('*')
+                .eq('userId', userId)
+                .order('created_at', { ascending: false });
+            if (data) callback(data);
+        };
 
-        return onSnapshot(q, (snapshot) => {
-            const spind = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            } as { id: string, challenge: string, postId: string }));
-            callback(spind);
-        });
+        fetchSpind();
+
+        const channel = supabase
+            .channel(`spind:${userId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'spind_challenges', filter: `userId=eq.${userId}` },
+                () => fetchSpind()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }
 };

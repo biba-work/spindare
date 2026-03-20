@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.05)',
     },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', letterSpacing: 2, textTransform: 'uppercase' },
+    headerTitle: { color: '#8E8E93', fontSize: 10, fontWeight: '500', letterSpacing: 2, textTransform: 'uppercase', paddingRight: Platform.OS === 'android' ? 2 : 0 },
     textDark: { color: '#FFF' },
     scrollContent: { paddingVertical: 8 },
     challengeCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 24, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     secondaryBtn: { backgroundColor: '#FAF9F6', borderWidth: 1, borderColor: '#D1D1D1' },
     secondaryBtnDark: { backgroundColor: 'transparent', borderColor: '#48484A' },
     disabledBtn: { opacity: 0.2 },
-    primaryText: { color: '#FAF9F6', fontWeight: '500', fontSize: 12, letterSpacing: 1 },
-    actionText: { color: '#8E8E93', fontWeight: '500', fontSize: 12, letterSpacing: 1 },
+    primaryText: { color: '#FAF9F6', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
+    actionText: { color: '#8E8E93', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     disabledText: { color: '#AEAEB2' },
 });

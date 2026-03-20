@@ -1,8 +1,8 @@
 import { StreamChat, Channel as StreamChannel, ChannelSort, ChannelFilters, ChannelOptions, Event } from 'stream-chat';
-import { auth } from './firebaseConfig';
 
-// Replace with your Stream Chat API key from https://dashboard.getstream.io
-const STREAM_API_KEY = process.env.EXPO_PUBLIC_STREAM_API_KEY || 'YOUR_STREAM_API_KEY';
+// Set EXPO_PUBLIC_STREAM_API_KEY in your .env file.
+// Get your key from https://dashboard.getstream.io
+const STREAM_API_KEY = process.env.EXPO_PUBLIC_STREAM_API_KEY || '';
 
 // Initialize Stream Chat client
 export const chatClient = StreamChat.getInstance(STREAM_API_KEY);
@@ -14,17 +14,16 @@ export interface ChatUser {
 }
 
 export const ChatService = {
-    // Connect current Firebase user to Stream Chat
+    // Connect current user to Stream Chat
     async connectUser(userId: string, username: string, avatar?: string): Promise<void> {
         if (!chatClient.userID) {
             try {
-                // Use test token from environment (for development)
                 const testToken = process.env.EXPO_PUBLIC_STREAM_TEST_TOKEN;
                 const testUserId = process.env.EXPO_PUBLIC_STREAM_TEST_USER_ID;
 
-                // If we have a test token, we use the hardcoded test user ID
-                // otherwise we use the actual Firebase userId with a dev token
-                const activeId = testToken ? (testUserId || 'falling-poetry-1') : userId;
+                const activeId = testToken ? (testUserId || userId) : userId;
+                // ⚠️ TODO: Replace devToken() with a real JWT from your backend before going to production.
+                // devToken() is insecure and must only be used in local development.
                 const token = testToken || chatClient.devToken(activeId);
 
                 await chatClient.connectUser(
@@ -88,11 +87,16 @@ export const ChatService = {
     },
 
     // Send a challenge message to a user
-    async sendChallengeToUser(recipientId: string, recipientName: string, challenge: string, recipientAvatar?: string): Promise<void> {
-        const currentUser = auth.currentUser;
-        if (!currentUser) throw new Error('Must be logged in to send challenges');
+    async sendChallengeToUser(
+        currentUserId: string, 
+        recipientId: string, 
+        recipientName: string, 
+        challenge: string, 
+        recipientAvatar?: string
+    ): Promise<void> {
+        if (!currentUserId) throw new Error('Must be logged in to send challenges');
 
-        const channel = await this.getOrCreateDMChannel(currentUser.uid, recipientId, recipientName, recipientAvatar);
+        const channel = await this.getOrCreateDMChannel(currentUserId, recipientId, recipientName, recipientAvatar);
 
         // Send a challenge message
         await channel.sendMessage({
@@ -101,13 +105,12 @@ export const ChatService = {
     },
 
     // Get channels for current user
-    async getUserChannels(): Promise<StreamChannel[]> {
-        const currentUser = auth.currentUser;
-        if (!currentUser) return [];
+    async getUserChannels(userId: string): Promise<StreamChannel[]> {
+        if (!userId) return [];
 
         const filters: ChannelFilters = {
             type: 'messaging',
-            members: { $in: [currentUser.uid] },
+            members: { $in: [userId] },
         };
 
         const sort: ChannelSort = { last_message_at: -1 };

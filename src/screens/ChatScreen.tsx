@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { auth } from '../services/firebaseConfig';
 import { Channel as StreamChannel, MessageResponse, Event } from 'stream-chat';
 import Svg, { Path } from 'react-native-svg';
 import { formatDistanceToNow } from 'date-fns';
@@ -35,6 +34,7 @@ const SendIcon = ({ color }: { color: string }) => (
 
 interface ChatScreenProps {
     channel: StreamChannel;
+    currentUserId: string;
     onBack: () => void;
 }
 
@@ -50,7 +50,7 @@ interface MessageItem {
     challenge?: string;
 }
 
-export const ChatScreen = ({ channel, onBack }: ChatScreenProps) => {
+export const ChatScreen = ({ channel, onBack, currentUserId }: ChatScreenProps) => {
     const { darkMode } = useTheme();
     const insets = useSafeAreaInsets();
     const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -58,7 +58,6 @@ export const ChatScreen = ({ channel, onBack }: ChatScreenProps) => {
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(true);
     const flatListRef = useRef<FlatList>(null);
-    const currentUserId = auth.currentUser?.uid;
 
     // Get other user's info for header
     const members = Object.values(channel.state.members);
@@ -367,6 +366,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: 'rgba(255,255,255,0.8)',
         letterSpacing: 1,
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     messageText: {
         fontSize: 15,

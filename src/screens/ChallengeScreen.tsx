@@ -6,17 +6,27 @@ import { SpinWheel } from '../components/molecules/SpinWheel';
 import { ReactionButton } from '../components/atoms/ReactionButton';
 import { AIService, UserProfile } from '../services/AIService';
 import { Post, PostService } from '../services/PostService';
-import { auth } from '../services/firebaseConfig';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
 const CHALLENGES = [
-    "Take a photo of something that reminds you of silence.",
-    "Write down one thing you've never told anyone.",
-    "Ask a stranger what their favorite memory is.",
-    "Walk for 10 minutes without looking at any screen.",
-    "Draw how you feel right now using only circles.",
+    "Photograph something that reminds you of silence.",
+    "Write one thing you've never told anyone.",
+    "Ask a stranger what their favourite memory is.",
+    "Walk 10 minutes without looking at any screen.",
+    "Draw how you feel using only circles.",
+    "Trace the outline of a shadow with your finger.",
+    "Find something broken and make it beautiful.",
+    "Stare at the sky for exactly 60 seconds.",
+    "Write a letter you'll never send.",
+    "Eat your next meal with zero distractions.",
+    "Spend 2 hours in complete silence.",
+    "Touch 5 different textures in the next 5 minutes.",
+    "Go the whole day without checking how you look.",
+    "Photograph something that no one else would notice.",
+    "Close your eyes for 3 minutes and just listen.",
 ];
 
 const SendIcon = ({ color }: { color: string }) => (
@@ -92,14 +102,23 @@ export const ChallengeScreen = () => {
     const [posts, setPosts] = useState<Post[]>([]);
 
     // ... mocked user profile logic ...
+    const { isLoaded, userId, isSignedIn } = useAuth();
+    const { user: clerkUser } = useUser();
+
+    // Sync clerk user data to a local profile object for AIService compatibility
     const userProfile: UserProfile = {
-        username: "bibovic",
-        email: "bibovic@example.com",
-        hobbies: ["Photography", "Gaming", "Art"],
+        username: clerkUser?.username || clerkUser?.firstName || "User",
+        email: clerkUser?.primaryEmailAddress?.emailAddress || "",
+        hobbies: ["Photography", "Gaming", "Art"], // These could be fetched from Supabase later
         studyFields: ["Computer Science"],
+        photoURL: clerkUser?.imageUrl,
         xp: 248,
         level: 3
     };
+
+    if (!isLoaded || !isSignedIn) {
+        return null; // App.tsx handles SignedOut state
+    }
 
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -248,6 +267,7 @@ export const ChallengeScreen = () => {
         if (target === 'feed') {
             try {
                 await PostService.createPost(
+                    userId || 'guest',
                     userProfile.username,
                     userProfile.photoURL || '',
                     challenge || 'Daily Spin',
@@ -439,7 +459,9 @@ export const ChallengeScreen = () => {
                 {isFeedVisible && (
                     <FeedScreen
                         posts={posts}
-                        currentUserId={auth.currentUser?.uid}
+                        currentUserId={userId || undefined}
+                        currentUsername={userProfile.username}
+                        currentAvatar={userProfile.photoURL || null}
                     />
                 )}
             </Animated.View>
@@ -474,6 +496,7 @@ export const ChallengeScreen = () => {
                 {isSharing && (
                     <FriendsListScreen
                         challenge={challenge || ''}
+                        currentUserId={userId || ''}
                         onClose={hideShare}
                     />
                 )}
@@ -489,11 +512,11 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#FAF9F6' },
     mainContainer: { flex: 1, paddingHorizontal: 32, justifyContent: 'space-between', paddingVertical: height * 0.05 },
     header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-    headerText: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textTransform: 'uppercase' },
+    headerText: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textTransform: 'uppercase', paddingRight: Platform.OS === 'android' ? 6 : 0 },
     centerSection: { alignItems: 'center', justifyContent: 'center', flex: 1 },
     wheelWrapper: { alignItems: 'center' },
     instructionContainer: { marginTop: 60, alignItems: 'center' },
-    instructionText: { color: '#8E8E93', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 8 },
+    instructionText: { color: '#8E8E93', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 8, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     instructionSubtext: { color: '#AEAEB2', fontSize: 12, fontWeight: '400' },
     challengeContainer: { width: '100%', alignItems: 'center' },
     blurCard: {
@@ -550,7 +573,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 12,
     },
-    actionBtnText: { color: '#8E8E93', fontSize: 14, fontWeight: '600', letterSpacing: 1.5 },
+    actionBtnText: { color: '#8E8E93', fontSize: 14, fontWeight: '600', letterSpacing: 1.5, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     proofContainer: { marginTop: 10, width: '100%', alignItems: 'center' },
     proofIconsRow: { flexDirection: 'row', gap: 24, marginBottom: 20 },
     proofIconBtn: {
@@ -570,7 +593,7 @@ const styles = StyleSheet.create({
     saveLaterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16 },
     saveLaterText: { color: '#A7BBC7', fontSize: 13, fontWeight: '500' },
     resetButton: { marginTop: 48, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 24, backgroundColor: '#FFF', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
-    resetText: { color: '#AEAEB2', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 2 },
+    resetText: { color: '#AEAEB2', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 2, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     footer: { alignItems: 'center', paddingBottom: 20 },
     footerText: { color: '#AEAEB2', fontSize: 9, fontWeight: '400', letterSpacing: 2 },
     swipeIndicator: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.05)', marginBottom: 24 },

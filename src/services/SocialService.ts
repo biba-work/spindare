@@ -1,172 +1,212 @@
-import { doc, setDoc, deleteDoc, getDoc, collection, getCountFromServer, serverTimestamp, getDocs, QueryDocumentSnapshot, DocumentData, onSnapshot } from 'firebase/firestore';
-import { db, auth } from './firebaseConfig';
-
+import { supabase } from './supabaseConfig';
 import { NotificationService } from './NotificationService';
 
 export const SocialService = {
-    async followUser(targetUserId: string): Promise<'connected' | 'requested'> {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) throw new Error("Not authenticated");
+    async followUser(
+        currentUserId: string, 
+        targetUserId: string,
+        fromUsername: string,
+        fromAvatar: string | null
+    ): Promise<'connected' | 'requested'> {
         if (currentUserId === targetUserId) throw new Error("Cannot follow self");
 
         // 0. Check target user's privacy settings
-        const targetUserDoc = await getDoc(doc(db, 'users', targetUserId));
-        const targetUserData = targetUserDoc.data();
-        const isPrivate = targetUserData?.connectionPrivacy === 'private';
+        const { data: targetUser } = await supabase
+            .from('profiles')
+            .select('connectionPrivacy')
+            .eq('id', targetUserId)
+            .single();
+
+        const isPrivate = targetUser?.connectionPrivacy === 'private';
 
         if (isPrivate) {
             // Send Connection Request
-            await setDoc(doc(db, 'users', targetUserId, 'connectionRequests', currentUserId), {
-                createdAt: serverTimestamp(),
-                status: 'pending'
-            });
-            await NotificationService.sendNotification(targetUserId, 'follow', 'sent you a connection request');
+            await supabase
+                .from('connection_requests')
+                .upsert({ receiver_id: targetUserId, requester_id: currentUserId, status: 'pending' });
+
+            await NotificationService.sendNotification(
+                targetUserId, 
+                'follow', 
+                'sent you a connection request',
+                currentUserId,
+                fromUsername,
+                fromAvatar
+            );
             return 'requested';
         } else {
-            // 1. Add to my 'following'
-            await setDoc(doc(db, 'users', currentUserId, 'following', targetUserId), {
-                createdAt: serverTimestamp()
-            });
-            // 2. Add to their 'followers'
-            await setDoc(doc(db, 'users', targetUserId, 'followers', currentUserId), {
-                createdAt: serverTimestamp()
-            });
+            // Add to follows table (bidirectional or unidirectional depending on your app, here it seems unidirectional like Twitter)
+            await supabase
+                .from('follows')
+                .upsert({ follower_id: currentUserId, following_id: targetUserId });
 
-            // 3. Send Notification
-            await NotificationService.sendNotification(targetUserId, 'follow', 'want to Connect with you');
+            // Send Notification
+            await NotificationService.sendNotification(
+                targetUserId, 
+                'follow', 
+                'want to Connect with you',
+                currentUserId,
+                fromUsername,
+                fromAvatar
+            );
             return 'connected';
         }
     },
 
-    async checkIsRequested(targetUserId: string): Promise<boolean> {
-        const currentUserId = auth.currentUser?.uid;
+    async checkIsRequested(currentUserId: string, targetUserId: string): Promise<boolean> {
         if (!currentUserId) return false;
 
-        const docRef = doc(db, 'users', targetUserId, 'connectionRequests', currentUserId);
-        const snapshot = await getDoc(docRef);
-        return snapshot.exists();
+        const { data } = await supabase
+            .from('connection_requests')
+            .select('id')
+            .eq('receiver_id', targetUserId)
+            .eq('requester_id', currentUserId)
+            .eq('status', 'pending')
+            .single();
+        
+        return !!data;
     },
 
-    async unfollowUser(targetUserId: string) {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) throw new Error("Not authenticated");
-
-        await deleteDoc(doc(db, 'users', currentUserId, 'following', targetUserId));
-        await deleteDoc(doc(db, 'users', targetUserId, 'followers', currentUserId));
-        // Also remove any pending request
-        await deleteDoc(doc(db, 'users', targetUserId, 'connectionRequests', currentUserId));
+    async unfollowUser(currentUserId: string, targetUserId: string) {
+        await supabase
+            .from('follows')
+            .delete()
+            .eq('follower_id', currentUserId)
+            .eq('following_id', targetUserId);
     },
 
-    async acceptConnectionRequest(requesterId: string) {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) return;
+    async acceptConnectionRequest(
+        currentUserId: string, 
+        requesterId: string,
+        fromUsername: string,
+        fromAvatar: string | null
+    ) {
+        // 1. Add follow record
+        await supabase
+            .from('follows')
+            .upsert({ follower_id: requesterId, following_id: currentUserId });
 
-        // 1. Add requester to my followers
-        await setDoc(doc(db, 'users', currentUserId, 'followers', requesterId), {
-            createdAt: serverTimestamp()
-        });
-        // 2. Add me to requester's following
-        await setDoc(doc(db, 'users', requesterId, 'following', currentUserId), {
-            createdAt: serverTimestamp()
-        });
+        // 2. Update Request
+        await supabase
+            .from('connection_requests')
+            .delete()
+            .eq('receiver_id', currentUserId)
+            .eq('requester_id', requesterId);
 
-        // 3. Delete Request
-        await deleteDoc(doc(db, 'users', currentUserId, 'connectionRequests', requesterId));
-
-        // 4. Notify requester
-        await NotificationService.sendNotification(requesterId, 'follow', 'accepted your connection request');
+        // 3. Notify requester
+        await NotificationService.sendNotification(
+            requesterId, 
+            'follow', 
+            'accepted your connection request',
+            currentUserId,
+            fromUsername,
+            fromAvatar
+        );
     },
 
-    async declineConnectionRequest(requesterId: string) {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) return;
-
-        await deleteDoc(doc(db, 'users', currentUserId, 'connectionRequests', requesterId));
+    async declineConnectionRequest(currentUserId: string, requesterId: string) {
+        await supabase
+            .from('connection_requests')
+            .delete()
+            .eq('receiver_id', currentUserId)
+            .eq('requester_id', requesterId);
     },
 
-    subscribeToRequests(callback: (requests: any[]) => void) {
-        const currentUserId = auth.currentUser?.uid;
+    subscribeToRequests(currentUserId: string, callback: (requests: any[]) => void) {
         if (!currentUserId) return () => { };
 
-        const q = collection(db, 'users', currentUserId, 'connectionRequests');
+        const fetchRequests = async () => {
+            const { data } = await supabase
+                .from('connection_requests')
+                .select(`
+                    requester_id,
+                    created_at,
+                    profiles:requester_id (username, photoURL)
+                `)
+                .eq('receiver_id', currentUserId)
+                .eq('status', 'pending');
 
-        return onSnapshot(q, async (snapshot) => {
-            const requests = await Promise.all(snapshot.docs.map(async (docSnap) => {
-                const requesterId = docSnap.id;
-                // Fetch basic user info
-                const userDoc = await getDoc(doc(db, 'users', requesterId));
-                const userData = userDoc.data();
-                return {
-                    id: requesterId,
-                    username: userData?.username || 'User',
-                    photoURL: userData?.photoURL || null,
-                    timestamp: docSnap.data().createdAt
-                };
-            }));
+            if (data) {
+                const formatted = data.map((r: any) => ({
+                    id: r.requester_id,
+                    username: r.profiles?.username || 'User',
+                    photoURL: r.profiles?.photoURL || null,
+                    timestamp: r.created_at
+                }));
+                callback(formatted);
+            }
+        };
 
-            callback(requests);
-        });
+        fetchRequests();
+
+        const channel = supabase
+            .channel(`requests:${currentUserId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'connection_requests', filter: `receiver_id=eq.${currentUserId}` },
+                () => fetchRequests()
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
-    async checkIsFollowing(targetUserId: string): Promise<boolean> {
-        const currentUserId = auth.currentUser?.uid;
+    async checkIsFollowing(currentUserId: string, targetUserId: string): Promise<boolean> {
         if (!currentUserId) return false;
 
-        const docRef = doc(db, 'users', currentUserId, 'following', targetUserId);
-        const snapshot = await getDoc(docRef);
-        return snapshot.exists();
+        const { data } = await supabase
+            .from('follows')
+            .select('id')
+            .eq('follower_id', currentUserId)
+            .eq('following_id', targetUserId)
+            .single();
+        
+        return !!data;
     },
 
     async getFollowStats(userId: string) {
         try {
-            const followersColl = collection(db, 'users', userId, 'followers');
-            const followingColl = collection(db, 'users', userId, 'following');
+            const { count: followers } = await supabase
+                .from('follows')
+                .select('*', { count: 'exact', head: true })
+                .eq('following_id', userId);
 
-            const followersSnapshot = await getCountFromServer(followersColl);
-            const followingSnapshot = await getCountFromServer(followingColl);
+            const { count: following } = await supabase
+                .from('follows')
+                .select('*', { count: 'exact', head: true })
+                .eq('follower_id', userId);
 
             return {
-                followers: followersSnapshot.data().count,
-                following: followingSnapshot.data().count
+                followers: followers || 0,
+                following: following || 0
             };
         } catch (e) {
-            // console.error("Error getting stats", e);
             return { followers: 0, following: 0 };
         }
     },
 
-    async getFriends(): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {
-        const currentUserId = auth.currentUser?.uid;
+    async getFriends(currentUserId: string): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {
         if (!currentUserId) return [];
 
         try {
-            const followingRef = collection(db, 'users', currentUserId, 'following');
-            const snapshot = await getDocs(followingRef);
+            const { data } = await supabase
+                .from('follows')
+                .select(`
+                    following_id,
+                    profiles:following_id (username, photoURL)
+                `)
+                .eq('follower_id', currentUserId);
 
-            interface FriendResult {
-                id: string;
-                name: string;
-                username: string;
-                photoURL?: string;
-            }
+            if (!data) return [];
 
-            const friendPromises = snapshot.docs.map(async (docSnap: QueryDocumentSnapshot<DocumentData>): Promise<FriendResult | null> => {
-                const friendId = docSnap.id;
-                const friendDoc = await getDoc(doc(db, 'users', friendId));
-                if (friendDoc.exists()) {
-                    const data = friendDoc.data();
-                    return {
-                        id: friendId,
-                        name: data.username || 'User',
-                        username: `@${data.username}`,
-                        photoURL: data.photoURL as string | undefined
-                    };
-                }
-                return null;
-            });
-
-            const results = await Promise.all(friendPromises);
-            return results.filter((f): f is FriendResult => f !== null);
+            return data.map((f: any) => ({
+                id: f.following_id,
+                name: f.profiles?.username || 'User',
+                username: `@${f.profiles?.username || 'user'}`,
+                photoURL: f.profiles?.photoURL
+            }));
         } catch (error) {
             console.error("Error fetching friends:", error);
             return [];
@@ -175,77 +215,68 @@ export const SocialService = {
 
     // --- Ghost / Block Logic ---
 
-    async ghostUser(targetUserId: string) {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) return;
+    async ghostUser(currentUserId: string, targetUserId: string) {
+        await supabase
+            .from('ghosted_users')
+            .upsert({ user_id: currentUserId, ghosted_id: targetUserId });
 
-        // Add to ghosted collection
-        await setDoc(doc(db, 'users', currentUserId, 'ghosted', targetUserId), {
-            createdAt: serverTimestamp()
-        });
-
-        // Optionally unfollow
-        await this.unfollowUser(targetUserId);
+        await this.unfollowUser(currentUserId, targetUserId);
     },
 
-    async checkIsGhosted(targetUserId: string): Promise<boolean> {
-        const currentUserId = auth.currentUser?.uid;
+    async checkIsGhosted(currentUserId: string, targetUserId: string): Promise<boolean> {
         if (!currentUserId) return false;
 
-        const docRef = doc(db, 'users', currentUserId, 'ghosted', targetUserId);
-        const snapshot = await getDoc(docRef);
-        return snapshot.exists();
+        const { data } = await supabase
+            .from('ghosted_users')
+            .select('id')
+            .eq('user_id', currentUserId)
+            .eq('ghosted_id', targetUserId)
+            .single();
+        
+        return !!data;
     },
 
-    async checkIsGhostedBy(targetUserId: string): Promise<boolean> {
-        const currentUserId = auth.currentUser?.uid;
+    async checkIsGhostedBy(currentUserId: string, targetUserId: string): Promise<boolean> {
         if (!currentUserId) return false;
 
-        // Check if target has ghosted ME
-        const docRef = doc(db, 'users', targetUserId, 'ghosted', currentUserId);
-        const snapshot = await getDoc(docRef);
-        return snapshot.exists();
+        const { data } = await supabase
+            .from('ghosted_users')
+            .select('id')
+            .eq('user_id', targetUserId)
+            .eq('ghosted_id', currentUserId)
+            .single();
+        
+        return !!data;
     },
 
-    async unghostUser(targetUserId: string) {
-        const currentUserId = auth.currentUser?.uid;
-        if (!currentUserId) return;
-
-        await deleteDoc(doc(db, 'users', currentUserId, 'ghosted', targetUserId));
+    async unghostUser(currentUserId: string, targetUserId: string) {
+        await supabase
+            .from('ghosted_users')
+            .delete()
+            .eq('user_id', currentUserId)
+            .eq('ghosted_id', targetUserId);
     },
 
-    async getGhostedUsers(): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {
-        const currentUserId = auth.currentUser?.uid;
+    async getGhostedUsers(currentUserId: string): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {
         if (!currentUserId) return [];
 
         try {
-            const ghostedRef = collection(db, 'users', currentUserId, 'ghosted');
-            const snapshot = await getDocs(ghostedRef);
+            const { data } = await supabase
+                .from('ghosted_users')
+                .select(`
+                    ghosted_id,
+                    profiles:ghosted_id (username, photoURL)
+                `)
+                .eq('user_id', currentUserId);
 
-            interface GhostUser {
-                id: string;
-                name: string;
-                username: string;
-                photoURL?: string;
-            }
+            if (!data) return [];
 
-            const promises = snapshot.docs.map(async (docSnap): Promise<GhostUser | null> => {
-                const targetId = docSnap.id;
-                const userDoc = await getDoc(doc(db, 'users', targetId));
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    return {
-                        id: targetId,
-                        name: (data.username as string) || 'User',
-                        username: `@${data.username}`,
-                        photoURL: data.photoURL as string | undefined
-                    };
-                }
-                return null;
-            });
-
-            const results = await Promise.all(promises);
-            return results.filter((u): u is GhostUser => u !== null);
+            return data.map((g: any) => ({
+                id: g.ghosted_id,
+                name: g.profiles?.username || 'User',
+                username: `@${g.profiles?.username || 'user'}`,
+                photoURL: g.profiles?.photoURL
+            }));
         } catch (error) {
             console.error("Error fetching ghosted users:", error);
             return [];

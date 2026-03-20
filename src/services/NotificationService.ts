@@ -1,5 +1,4 @@
-import { db, auth } from './firebaseConfig';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, doc, updateDoc, getDoc, writeBatch, where, getDocs } from 'firebase/firestore';
+import { supabase } from './supabaseConfig';
 
 export type NotificationType = 'reaction' | 'follow' | 'challenge' | 'comment';
 
@@ -9,112 +8,115 @@ export interface Notification {
     fromUserId: string;
     fromUsername: string;
     fromAvatar: string | null;
-    content: string; // "liked your post", "started following you"
-    targetId: string | null; // postId, or challengeId
+    content: string;
+    targetId: string | null;
     read: boolean;
-    timestamp: any;
+    timestamp: string;
 }
 
 export const NotificationService = {
     // Send a notification to a specific user
-    async sendNotification(toUserId: string, type: NotificationType, content: string, targetId?: string) {
-        const currentUser = auth.currentUser;
-
-        // Safety check: Don't notify self, and ensure user is logged in
-        if (!currentUser || currentUser.uid === toUserId) return;
+    async sendNotification(
+        toUserId: string, 
+        type: NotificationType, 
+        content: string, 
+        fromUserId: string,
+        fromUsername: string,
+        fromAvatar: string | null,
+        targetId?: string
+    ) {
+        if (fromUserId === toUserId) return;
 
         try {
-            await addDoc(collection(db, 'users', toUserId, 'notifications'), {
-                type,
-                fromUserId: currentUser.uid,
-                fromUsername: currentUser.displayName || 'User',
-                fromAvatar: currentUser.photoURL || null,
-                content,
-                targetId: targetId || null,
-                read: false,
-                timestamp: serverTimestamp()
-            });
+            await supabase
+                .from('notifications')
+                .insert({
+                    user_id: toUserId,
+                    type,
+                    from_user_id: fromUserId,
+                    content,
+                    target_id: targetId || null,
+                    read: false
+                });
         } catch (error) {
             console.error("Error sending notification:", error);
         }
     },
 
     // Subscribe to current user's notifications
-    subscribeToNotifications(callback: (notifs: Notification[]) => void) {
-        const user = auth.currentUser;
-        if (!user) return () => { };
+    subscribeToNotifications(userId: string, callback: (notifs: Notification[]) => void) {
+        if (!userId) return () => { };
 
-        const q = query(
-            collection(db, 'users', user.uid, 'notifications'),
-            orderBy('timestamp', 'desc'),
-            limit(50)
-        );
+        const fetchNotifs = async () => {
+            const { data } = await supabase
+                .from('notifications')
+                .select(`
+                    id,
+                    type,
+                    from_user_id,
+                    content,
+                    target_id,
+                    read,
+                    created_at,
+                    profiles:from_user_id (username, photoURL)
+                `)
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(50);
 
-        return onSnapshot(q, async (snapshot) => {
-            const notifs = await Promise.all(snapshot.docs.map(async (docSnap) => {
-                const data = docSnap.data();
-                // Fetch fresh user info to keep it synced
-                let fromUsername = data.fromUsername;
-                let fromAvatar = data.fromAvatar;
+            if (data) {
+                const formatted = data.map((n: any) => ({
+                    id: n.id,
+                    type: n.type,
+                    fromUserId: n.from_user_id,
+                    fromUsername: n.profiles?.username || 'User',
+                    fromAvatar: n.profiles?.photoURL || null,
+                    content: n.content,
+                    targetId: n.target_id,
+                    read: n.read,
+                    timestamp: n.created_at
+                } as Notification));
+                callback(formatted);
+            }
+        };
 
-                if (data.fromUserId) {
-                    try {
-                        const userDoc = await getDoc(doc(db, 'users', data.fromUserId));
-                        if (userDoc.exists()) {
-                            const userData = userDoc.data();
-                            fromUsername = userData.username || fromUsername;
-                            fromAvatar = userData.photoURL || fromAvatar;
-                        }
-                    } catch (e) {
-                        console.error("Error fetching notification user:", e);
-                    }
-                }
+        fetchNotifs();
 
-                return {
-                    id: docSnap.id,
-                    ...data,
-                    fromUsername,
-                    fromAvatar,
-                } as Notification;
-            }));
+        const channel = supabase
+            .channel(`notifs:${userId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+                () => fetchNotifs()
+            )
+            .subscribe();
 
-            callback(notifs);
-        });
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
     // Mark a notification as read
-    async markAsRead(notifId: string) {
-        const user = auth.currentUser;
-        if (!user) return;
+    async markAsRead(userId: string, notifId: string) {
         try {
-            await updateDoc(doc(db, 'users', user.uid, 'notifications', notifId), {
-                read: true
-            });
+            await supabase
+                .from('notifications')
+                .update({ read: true })
+                .eq('id', notifId)
+                .eq('user_id', userId);
         } catch (error) {
             console.error("Error marking notification as read:", error);
         }
     },
 
     // Mark ALL notifications as read
-    async markAllAsRead() {
-        const user = auth.currentUser;
-        if (!user) return;
-
+    async markAllAsRead(userId: string) {
         try {
-            const q = query(
-                collection(db, 'users', user.uid, 'notifications'),
-                where('read', '==', false)
-            );
-            const snapshot = await getDocs(q);
-
-            if (snapshot.empty) return;
-
-            const batch = writeBatch(db);
-            snapshot.docs.forEach((docSnap) => {
-                batch.update(docSnap.ref, { read: true });
-            });
-
-            await batch.commit();
+            await supabase
+                .from('notifications')
+                .update({ read: true })
+                .eq('user_id', userId)
+                .eq('read', false);
         } catch (error) {
             console.error("Error marking all as read:", error);
         }

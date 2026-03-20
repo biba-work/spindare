@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, FlatList, Animated, Image, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, Animated, Image, Pressable, Modal, Platform } from 'react-native';
 import { ReactionItem } from '../components/molecules/ReactionItem';
 import { ImageViewer } from '../components/molecules/MediaViewer';
 import { Post, PostService } from '../services/PostService';
@@ -51,12 +51,24 @@ const TextIcon = ({ color }: { color: string }) => (
 interface PostItemProps {
     post: Post;
     isOwner?: boolean;
+    currentUserId?: string;
+    currentUsername?: string;
+    currentAvatar?: string | null;
     onProfilePress?: (userId: string, username: string, avatar: string) => void;
     onChallengeAction?: (challenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     darkMode: boolean;
 }
 
-const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }: PostItemProps) => {
+const PostItem = ({ 
+    post, 
+    isOwner, 
+    currentUserId, 
+    currentUsername,
+    currentAvatar,
+    onProfilePress, 
+    onChallengeAction, 
+    darkMode 
+}: PostItemProps) => {
     const [selected, setSelected] = useState<string | null>(null);
     const [isReacted, setIsReacted] = useState(false);
     const [showChallengeMenu, setShowChallengeMenu] = useState(false);
@@ -68,7 +80,17 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
         if (selected === type) {
             // Deselect logic (undo)
             setSelected(null);
-            try { await PostService.toggleReaction(post.id, type); } catch (e) { }
+            try { 
+                if (currentUserId) {
+                    await PostService.toggleReaction(
+                        currentUserId, 
+                        currentUsername || 'Anonymous',
+                        currentAvatar || null,
+                        post.id, 
+                        type
+                    ); 
+                }
+            } catch (e) { }
             return;
         }
 
@@ -77,7 +99,15 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
         try {
-            await PostService.toggleReaction(post.id, type);
+            if (currentUserId) {
+                await PostService.toggleReaction(
+                    currentUserId, 
+                    currentUsername || 'Anonymous',
+                    currentAvatar || null,
+                    post.id, 
+                    type
+                );
+            }
 
             // Wait 1.5s then fade out
             setTimeout(() => {
@@ -250,6 +280,8 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
 interface FeedScreenProps {
     posts: Post[];
     currentUserId?: string;
+    currentUsername?: string;
+    currentAvatar?: string | null;
     ListHeaderComponent?: React.ReactElement;
     onScroll?: (event: any) => void;
     contentContainerStyle?: any;
@@ -260,6 +292,8 @@ interface FeedScreenProps {
 export const FeedScreen = ({
     posts,
     currentUserId,
+    currentUsername,
+    currentAvatar,
     ListHeaderComponent,
     onScroll,
     contentContainerStyle,
@@ -278,6 +312,9 @@ export const FeedScreen = ({
                     <PostItem
                         post={item}
                         isOwner={item.userId === currentUserId}
+                        currentUserId={currentUserId}
+                        currentUsername={currentUsername}
+                        currentAvatar={currentAvatar}
                         onProfilePress={onProfilePress}
                         onChallengeAction={onChallengeAction}
                         darkMode={darkMode}
@@ -440,6 +477,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#1C1C1E',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     challengeBtnTextDark: {
         color: '#FFF',
@@ -511,6 +549,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#FF3B30',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     // SPIND-style proof action buttons
     menuActionsRow: {

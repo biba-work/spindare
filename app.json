@@ -2,6 +2,7 @@
   "expo": {
     "name": "spindare",
     "slug": "spindare",
+    "sdkVersion": "55.0.0",
     "version": "0.61.52",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -49,7 +50,10 @@
         {
           "photosPermission": "Allow SPINDARE to access your photos to share challenge moments."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-video",
+      "expo-web-browser"
     ],
     "runtimeVersion": "1.0.0",
     "extra": {

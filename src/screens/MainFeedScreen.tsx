@@ -9,10 +9,11 @@ import { MessagesScreen } from './MessagesScreen';
 import { ChatScreen } from './ChatScreen';
 import { GenericOverlay } from '../components/organisms/GenericOverlay';
 import { AppButton } from '../components/atoms/AppButton';
+
 import { UserProfile, HobbyType, StudyFieldType } from '../services/AIService';
 import { AuthService } from '../services/AuthService';
 import { Post, PostService } from '../services/PostService';
-import { auth } from '../services/firebaseConfig';
+
 import { ChatService } from '../services/ChatService';
 import { Channel as StreamChannel } from 'stream-chat';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -21,9 +22,13 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { PostCreationScreen } from './PostCreationScreen';
 import { UserProfileView } from './UserProfileView';
+import { LogViewerScreen } from './LogViewerScreen';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../contexts/ThemeContext';
 import { SearchService } from '../services/SearchService';
+import { useAuth, useUser, useClerk } from '@clerk/clerk-expo';
+
+import { supabase } from '../services/supabaseConfig';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,13 +62,16 @@ const UserIcon = ({ color }: { color: string }) => (
 export const MainFeedScreen = () => {
     const insets = useSafeAreaInsets();
     const { darkMode } = useTheme();
-
+    
+    const { isLoaded, userId, isSignedIn } = useAuth();
+    const { user } = useUser();
+    const { signOut } = useClerk();
+    
     // State
-    const [isAuthenticated, setIsAuthenticated] = useState(true);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [userProfile, setUserProfile] = useState<UserProfile>({
-        email: "rashica07@spindare.com",
-        username: "rashica07",
+        email: "",
+        username: "Guest",
         hobbies: [],
         studyFields: [],
         xp: 0,
@@ -80,6 +88,13 @@ export const MainFeedScreen = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [posts, setPosts] = useState<Post[]>([]);
     const [isPosting, setIsPosting] = useState(false);
+
+    // Wire up real-time feed; seed mock posts in dev if DB is empty
+    useEffect(() => {
+        const unsubscribe = PostService.subscribeToFeed(setPosts);
+        if (__DEV__) PostService.seedFakeData();
+        return unsubscribe;
+    }, []);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [viewingProfile, setViewingProfile] = useState<{ userId: string; username: string; avatar: string } | null>(null);
     const [searchResults, setSearchResults] = useState<{ users: (UserProfile & { uid?: string })[], posts: Post[] }>({ users: [], posts: [] });
@@ -87,6 +102,21 @@ export const MainFeedScreen = () => {
     // Chat/Messages state
     const [isMessagesVisible, setIsMessagesVisible] = useState(false);
     const [activeChat, setActiveChat] = useState<StreamChannel | null>(null);
+
+    // Hidden log viewer (5-tap on version footer)
+    const [isLogViewerVisible, setIsLogViewerVisible] = useState(false);
+    const versionTapCount = useRef(0);
+    const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const handleVersionTap = () => {
+        versionTapCount.current += 1;
+        if (versionTapTimer.current) clearTimeout(versionTapTimer.current);
+        versionTapTimer.current = setTimeout(() => { versionTapCount.current = 0; }, 2000);
+        if (versionTapCount.current >= 5) {
+            versionTapCount.current = 0;
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setIsLogViewerVisible(true);
+        }
+    };
 
 
     // Animations
@@ -101,57 +131,57 @@ export const MainFeedScreen = () => {
     const miniHeaderVisible = useRef(new Animated.Value(0)).current;
     const isMiniHeaderHapticTriggered = useRef(false);
 
+
     useEffect(() => {
-        console.log('MainFeedScreen useEffect starting auth listener...');
-        const unsubscribeAuth = AuthService.onSessionChange(async (user, profile) => {
-            console.log('Auth state changed. User:', user?.uid, 'Profile exists:', !!profile);
-            if (user && profile) {
-                setUserProfile(profile);
-                setIsAuthenticated(true);
-                console.log('Seeding fake data...');
-                PostService.seedFakeData();
-
-                // Connect to Stream Chat
+        const loadInitialData = async () => {
+            if (isLoaded && isSignedIn && userId) {
                 try {
-                    console.log('Connecting to Stream Chat...');
-                    await ChatService.connectUser(
-                        user.uid,
-                        profile.username,
-                        profile.photoURL
-                    );
-                    console.log('Stream Chat connected');
+                    console.log("MainFeedScreen session check. isSignedIn:", isSignedIn, "userId:", userId);
+                    
+                    // Fetch profile from Supabase using Clerk ID
+                    let profile = await AuthService.getProfile(userId);
+                    if (!profile && user) {
+                        // Auto-create if missing (e.g. first social login)
+                        profile = await AuthService.createProfile(userId, {
+                            email: user.primaryEmailAddress?.emailAddress || "",
+                            username: user.username || user.firstName || "User",
+                            hobbies: [],
+                            studyFields: []
+                        });
+                    }
+                    if (profile) setUserProfile(profile);
                 } catch (err) {
-                    console.log('Stream Chat connection deferred:', err);
+                    console.error("Error loading user profile:", err);
+                } finally {
+                    setIsLoading(false);
                 }
-
-                const now = Date.now();
-                const lastTs = profile.lastSpinTimestamp || 0;
-                const hoursPassed = (now - lastTs) / (1000 * 60 * 60);
-
-                if (hoursPassed >= 24) {
-                    setSpinsLeft(2);
-                    AuthService.updateSpinnerState(2, profile.lastSpinTimestamp || 0);
-                } else if (profile.spinsLeft !== undefined) {
-                    setSpinsLeft(profile.spinsLeft);
-                }
-            } else {
-                console.log('No Firebase session, running as rashica07');
-                // Keep authenticated with default profile
+            } else if (isLoaded && !isSignedIn) {
+                console.log("Running as guest/rashica07");
+                setIsLoading(false);
             }
-            console.log('Setting isLoading to false');
-            setIsLoading(false);
-        });
-
-        const unsubscribeFeed = PostService.subscribeToFeed((updatedPosts) => {
-            console.log('Feed updated, post count:', updatedPosts.length);
-            setPosts(updatedPosts);
-        });
-
-        return () => {
-            unsubscribeAuth();
-            unsubscribeFeed();
         };
-    }, []);
+
+        loadInitialData();
+    }, [isLoaded, isSignedIn, userId, user]);
+
+    // Badge animation: pop in when a challenge is saved, shrink out when empty
+    useEffect(() => {
+        Animated.spring(badgeScale, {
+            toValue: savedChallenges.length > 0 ? 1 : 0,
+            useNativeDriver: true,
+            friction: 5,
+            tension: 80,
+        }).start();
+    }, [savedChallenges.length]);
+
+    // Profile Listener
+    useEffect(() => {
+        if (!userId) return;
+        const unsubscribe = AuthService.onProfileChange(userId, (profile) => {
+            if (profile) setUserProfile(profile);
+        });
+        return unsubscribe;
+    }, [userId]);
 
     // Search Effect
     useEffect(() => {
@@ -170,10 +200,11 @@ export const MainFeedScreen = () => {
     }, [searchQuery]);
 
     const updateSpins = async (newCount: number) => {
+        if (!userId) return;
         setSpinsLeft(newCount);
         try {
             const timestamp = userProfile.lastSpinTimestamp || Date.now();
-            await AuthService.updateSpinnerState(newCount, timestamp);
+            await AuthService.updateSpinnerState(userId, newCount, timestamp);
             setUserProfile(prev => ({ ...prev, spinsLeft: newCount, lastSpinTimestamp: timestamp }));
         } catch (e) {
             console.error("Error saving spinner state", e);
@@ -181,10 +212,11 @@ export const MainFeedScreen = () => {
     };
 
     const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
+        if (!userId) return;
         setUserProfile(prev => {
             const newProfile = { ...prev, ...updates };
             if (updates.photoURL) {
-                AuthService.updateProfilePicture(updates.photoURL);
+                AuthService.updateProfilePicture(userId, updates.photoURL);
             }
             return newProfile;
         });
@@ -200,9 +232,12 @@ export const MainFeedScreen = () => {
     };
 
     const handleLogout = async () => {
-        await AuthService.logout();
-        setIsAuthenticated(false);
-        setIsProfileVisible(false);
+        try {
+            await signOut();
+            setIsProfileVisible(false);
+        } catch (err) {
+            console.error("Logout error:", err);
+        }
     };
 
     const toggleSearch = (show: boolean) => {
@@ -242,11 +277,20 @@ export const MainFeedScreen = () => {
         }
     };
 
+    const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+
     const handlePostSubmit = async (content: string, imageUri?: string | null) => {
-        hidePostCreator();
+        if (isSubmittingPost) return;
+        setIsSubmittingPost(true);
         try {
-            await PostService.createPost(userProfile.username, userProfile.photoURL || '', challenge || 'Inbox Challenge', content, imageUri || null);
-        } catch (err) { console.error(err); }
+            if (!userId) throw new Error("User ID not available");
+            await PostService.createPost(userId, userProfile.username, userProfile.photoURL || '', challenge || 'Inbox Challenge', content, imageUri || null);
+            hidePostCreator();
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSubmittingPost(false);
+        }
     };
 
     const handleOverlayAction = (itemChallenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => {
@@ -285,14 +329,6 @@ export const MainFeedScreen = () => {
 
     if (isLoading) return (<View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}><Image source={require('../../assets/logo.png')} style={{ width: 80, height: 80 }} resizeMode="contain" /></View>);
 
-    if (!isAuthenticated) return (
-        <OnboardingScreen onComplete={async (email, pass, username, h, s, isSignup) => {
-            if (isSignup) { const profile = await AuthService.signUp(email, pass, { email, username, hobbies: h, studyFields: s }); setUserProfile(profile); }
-            else { const profile = await AuthService.login(email, pass); setUserProfile(profile); }
-            setIsAuthenticated(true);
-        }} />
-    );
-
     return (
         <View style={[styles.container, darkMode && styles.containerDark]}>
             <StatusBar style={darkMode ? "light" : "dark"} />
@@ -302,7 +338,7 @@ export const MainFeedScreen = () => {
                         {!isSearching && (
                             <View style={styles.leftActions}>
                                 <Pressable onPress={() => setIsProfileVisible(true)} style={styles.topBarPfpContainer}>
-                                    <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.topBarPfp} />
+                                    <Image source={{ uri: userProfile.photoURL || Image.resolveAssetSource(require('../../assets/icon.png')).uri }} style={styles.topBarPfp} />
                                 </Pressable>
                                 <AppButton type="icon" onPress={() => showOverlay('saved')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
                                     <SavedIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
@@ -384,7 +420,7 @@ export const MainFeedScreen = () => {
                 <BlurView intensity={80} tint={darkMode ? "dark" : "light"} style={[styles.miniBlurWrapper, { paddingTop: insets.top }, darkMode && { borderBottomColor: 'rgba(255,255,255,0.1)' }]}>
                     <View style={styles.miniHeaderContent}>
                         <Pressable onPress={() => setIsProfileVisible(true)} style={styles.miniPfpWrapper}>
-                            <Image source={{ uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL) ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri : userProfile.photoURL }} style={styles.miniPfp} />
+                            <Image source={{ uri: userProfile.photoURL || Image.resolveAssetSource(require('../../assets/icon.png')).uri }} style={styles.miniPfp} />
                         </Pressable>
                         <Text style={[styles.miniUsername, darkMode && styles.textDark]}>@{userProfile.username}</Text>
                     </View>
@@ -394,7 +430,9 @@ export const MainFeedScreen = () => {
             <View style={styles.content}>
                 <FeedScreen
                     posts={posts}
-                    currentUserId={auth.currentUser?.uid}
+                    currentUserId={userId || undefined}
+                    currentUsername={userProfile.username}
+                    currentAvatar={userProfile.photoURL || null}
                     ListHeaderComponent={renderHeader}
                     onScroll={onScroll}
                     contentContainerStyle={{ paddingTop: 60 + insets.top }}
@@ -412,12 +450,15 @@ export const MainFeedScreen = () => {
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>SPINDARE V0.61.64 (PRE-ALPHA TESTING)</Text>
+                <Pressable onPress={handleVersionTap} hitSlop={{ top: 12, bottom: 12, left: 20, right: 20 }}>
+                    <Text style={styles.versionText}>SPINDARE V0.61.64 (PRE-ALPHA TESTING)</Text>
+                </Pressable>
             </View>
 
             {isProfileVisible && (
                 <View style={styles.fullOverlay}>
                     <ProfileScreen
+                        userId={userId || ''}
                         onBack={() => setIsProfileVisible(false)}
                         onLogout={handleLogout}
                         spinsLeft={spinsLeft}
@@ -431,10 +472,10 @@ export const MainFeedScreen = () => {
                     />
                 </View>
             )}
-            {isSharing && <View style={[styles.fullOverlay, { zIndex: 6000 }]}><FriendsListScreen challenge={challenge || ''} onClose={() => setIsSharing(false)} /></View>}
+            {isSharing && <View style={[styles.fullOverlay, { zIndex: 6000 }]}><FriendsListScreen challenge={challenge || ''} currentUserId={userId || ''} onClose={() => setIsSharing(false)} /></View>}
 
             <Animated.View style={[styles.fullOverlay, { transform: [{ translateY: postTransitionAnim }] }]}>
-                {isPosting && <PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={hidePostCreator} onPost={handlePostSubmit} />}
+                {isPosting && <PostCreationScreen challenge={challenge || ''} imageUri={selectedImage} onClose={hidePostCreator} onPost={handlePostSubmit} isSubmitting={isSubmittingPost} />}
             </Animated.View>
 
             <GenericOverlay
@@ -458,6 +499,7 @@ export const MainFeedScreen = () => {
             {isMessagesVisible && (
                 <View style={styles.fullOverlay}>
                     <MessagesScreen
+                        userId={userId || ''}
                         onBack={() => setIsMessagesVisible(false)}
                         onOpenChat={(channel) => {
                             setActiveChat(channel);
@@ -472,9 +514,15 @@ export const MainFeedScreen = () => {
                 <View style={styles.fullOverlay}>
                     <ChatScreen
                         channel={activeChat}
+                        currentUserId={userId || ''}
                         onBack={() => setActiveChat(null)}
                     />
                 </View>
+            )}
+
+            {/* Hidden Dev Log Viewer — open by tapping version text 5 times */}
+            {isLogViewerVisible && (
+                <LogViewerScreen onClose={() => setIsLogViewerVisible(false)} />
             )}
 
             {viewingProfile && (
@@ -483,12 +531,15 @@ export const MainFeedScreen = () => {
                         userId={viewingProfile.userId}
                         username={viewingProfile.username}
                         avatar={viewingProfile.avatar}
+                        currentUserId={userId || ''}
+                        currentUsername={userProfile.username}
+                        currentAvatar={userProfile.photoURL || null}
                         onBack={() => setViewingProfile(null)}
                         onStartChat={async () => {
-                            if (!auth.currentUser) return;
+                            if (!userId) return;
                             try {
                                 const channel = await ChatService.getOrCreateDMChannel(
-                                    auth.currentUser.uid,
+                                    userId,
                                     viewingProfile.userId,
                                     viewingProfile.username,
                                     viewingProfile.avatar
@@ -516,7 +567,7 @@ const styles = StyleSheet.create({
     leftActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     topBarPfpContainer: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)' },
     topBarPfp: { width: '100%', height: '100%' },
-    logo: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textAlign: 'center', position: 'absolute', left: 0, right: 0, zIndex: -1 },
+    logo: { color: '#4A4A4A', fontSize: 13, fontWeight: '500', letterSpacing: 6, textAlign: 'center', position: 'absolute', left: 0, right: 0, zIndex: -1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     logoDark: { color: '#FFF' },
     rightActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     navBtn: { width: 48, height: 48, backgroundColor: 'transparent' },

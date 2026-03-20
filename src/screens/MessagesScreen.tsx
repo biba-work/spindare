@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, FlatList, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Image, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { ChatService, chatClient } from '../services/ChatService';
-import { auth } from '../services/firebaseConfig';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { Channel as StreamChannel } from 'stream-chat';
 import { formatDistanceToNow } from 'date-fns';
@@ -22,6 +21,7 @@ const MessageIcon = ({ color }: { color: string }) => (
 );
 
 interface MessagesScreenProps {
+    userId: string;
     onBack: () => void;
     onOpenChat: (channel: StreamChannel) => void;
 }
@@ -36,7 +36,7 @@ interface ChannelPreview {
     unreadCount: number;
 }
 
-export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
+export const MessagesScreen = ({ userId, onBack, onOpenChat }: MessagesScreenProps) => {
     const { darkMode } = useTheme();
     const [channels, setChannels] = useState<ChannelPreview[]>([]);
     const [loading, setLoading] = useState(true);
@@ -44,15 +44,15 @@ export const MessagesScreen = ({ onBack, onOpenChat }: MessagesScreenProps) => {
 
     useEffect(() => {
         loadChannels();
-    }, []);
+    }, [userId]);
 
     const loadChannels = async () => {
         try {
             setLoading(true);
             setError(null);
 
-            const userChannels = await ChatService.getUserChannels();
-            const currentUserId = auth.currentUser?.uid;
+            const userChannels = await ChatService.getUserChannels(userId);
+            const currentUserId = userId;
 
             const channelPreviews: ChannelPreview[] = userChannels.map(channel => {
                 // Get the other member's info for DM channels
@@ -217,6 +217,7 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 14,
         fontWeight: '600',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     emptyTitle: {
         fontSize: 18,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     },
     closeBtn: { padding: 4 },
     closeText: { color: '#A7BBC7', fontSize: 14, fontWeight: '500' },
-    title: { color: '#4A4A4A', fontSize: 11, fontWeight: '600', letterSpacing: 3 },
+    title: { color: '#4A4A4A', fontSize: 11, fontWeight: '600', letterSpacing: 3, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     placeholder: { width: 50 },
     tabsContainer: {
         flexDirection: 'row',
@@ -450,6 +450,7 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
         letterSpacing: 2,
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     inboxCard: {
         padding: 20,
@@ -511,6 +512,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '700',
         letterSpacing: 1.5,
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     statusPill: {
         paddingHorizontal: 10,

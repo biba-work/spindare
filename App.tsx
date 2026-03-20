@@ -1,3 +1,5 @@
+// LogService MUST be the first import — it patches console.* immediately.
+import "./src/services/LogService";
 import React, { useCallback } from "react";
 import { View, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -5,11 +7,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
-import { ClerkProvider, ClerkLoaded } from '@clerk/clerk-expo';
-import { Show, SignInButton, SignUpButton, UserButton } from "./src/components/ClerkUI";
+import { ClerkProvider, ClerkLoaded, SignedIn, SignedOut } from '@clerk/clerk-expo';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
 import { MainFeedScreen } from "./src/screens/MainFeedScreen";
+import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { AppConfig } from "./src/config/AppConfig";
 
 SplashScreen.preventAutoHideAsync();
@@ -78,24 +80,23 @@ export default function App() {
           <ThemeProvider>
             <View style={styles.container} onLayout={onLayoutRootView}>
               <View style={styles.deadzone} />
-              <View style={styles.authHeader}>
-                <Show when="signed-out">
-                  <View style={{ flexDirection: 'row' }}>
-                    <SignInButton />
-                    <SignUpButton />
-                  </View>
-                </Show>
-                <Show when="signed-in">
-                  <UserButton />
-                </Show>
-              </View>
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <StatusBar style="light" />
-                {AppConfig.useRestructuredLayout ? (
-                  <MainFeedScreen />
-                ) : (
-                  <ChallengeScreen />
-                )}
+                
+                <SignedIn>
+                  {AppConfig.useRestructuredLayout ? (
+                    <MainFeedScreen />
+                  ) : (
+                    <ChallengeScreen />
+                  )}
+                </SignedIn>
+                
+                <SignedOut>
+                  <OnboardingScreen onComplete={async () => {
+                    // Logic is handled by Clerk hooks inside OnboardingScreen
+                  }} />
+                </SignedOut>
+                
               </GestureHandlerRootView>
             </View>
           </ThemeProvider>

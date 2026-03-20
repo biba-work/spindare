@@ -1,31 +1,25 @@
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { db } from './firebaseConfig';
+import { supabase } from './supabaseConfig';
 import { UserProfile } from './AIService';
 import { Post } from './PostService';
 
 export const SearchService = {
     async searchUsers(text: string): Promise<(UserProfile & { uid?: string })[]> {
-        const cleanText = text.trim().toLowerCase();
+        const cleanText = text.trim();
         if (!cleanText) return [];
 
         try {
-            const usersRef = collection(db, 'users');
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .ilike('username', `%${cleanText}%`)
+                .limit(10);
 
-            // Try using a lowercase indexed field first (if you have 'usernameLower' in DB)
-            // Fallback: just get all users and filter client-side (fine for small apps)
-            const snapshot = await getDocs(usersRef);
+            if (error) throw error;
 
-            const allUsers = snapshot.docs.map(doc => ({
-                uid: doc.id,
-                ...(doc.data() as UserProfile)
-            }));
-
-            // Filter client-side for partial match (case-insensitive)
-            const filtered = allUsers.filter(u =>
-                u.username?.toLowerCase().includes(cleanText)
-            );
-
-            return filtered.slice(0, 10); // Limit results to 10
+            return (data || []).map(profile => ({
+                uid: profile.id,
+                ...profile
+            })) as (UserProfile & { uid?: string })[];
         } catch (error) {
             console.error("Search Users Error:", error);
             return [];
@@ -33,25 +27,19 @@ export const SearchService = {
     },
 
     async searchChallenges(text: string): Promise<Post[]> {
-        const cleanText = text.trim().toLowerCase();
+        const cleanText = text.trim();
         if (!cleanText) return [];
 
         try {
-            const postsRef = collection(db, 'posts');
-            const snapshot = await getDocs(postsRef);
+            const { data, error } = await supabase
+                .from('posts')
+                .select('*')
+                .or(`challenge.ilike.%${cleanText}%,content.ilike.%${cleanText}%`)
+                .limit(15);
 
-            const allPosts = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...(doc.data() as Omit<Post, 'id'>)
-            }));
+            if (error) throw error;
 
-            // Filter client-side for partial match on challenge (case-insensitive)
-            const filtered = allPosts.filter(p =>
-                p.challenge?.toLowerCase().includes(cleanText) ||
-                p.content?.toLowerCase().includes(cleanText)
-            );
-
-            return filtered.slice(0, 15); // Limit results to 15
+            return data || [];
         } catch (error) {
             console.error("Search Challenges Error:", error);
             return [];
