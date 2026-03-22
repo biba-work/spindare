@@ -1,7 +1,8 @@
 import { supabase } from './supabaseConfig';
 import { NotificationService } from './NotificationService';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export interface Post {
     id: string;
@@ -24,12 +25,23 @@ export interface Post {
 const mapPost = (row: any): Post => ({ ...row, timestamp: row.created_at });
 
 export const PostService = {
-    // Helper to upload image to Supabase Storage
+    // Helper to upload image to Supabase Storage.
+    // Converts ANY format (RAW, HEIC, PNG, WebP, DNG, etc.) to JPEG first
+    // so the rest of the app always receives a safe, displayable URL.
     async uploadImage(uri: string): Promise<string> {
         try {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            // Step 1: Convert to JPEG regardless of source format
+            const converted = await ImageManipulator.manipulateAsync(
+                uri,
+                [], // no resize/crop — keep original dimensions
+                { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG }
+            );
+
+            // Step 2: Read as base64
+            const base64 = await FileSystem.readAsStringAsync(converted.uri, { encoding: 'base64' });
             const filename = `posts/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
-            
+
+            // Step 3: Upload the guaranteed-JPEG bytes
             const { data, error } = await supabase.storage
                 .from('spindare-assets')
                 .upload(filename, decode(base64), {
@@ -49,13 +61,31 @@ export const PostService = {
         }
     },
 
+    // Upload a video file to Supabase Storage
+    async uploadVideo(uri: string): Promise<string> {
+        try {
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            const filename = `posts/video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+            const { data, error } = await supabase.storage
+                .from('spindare-assets')
+                .upload(filename, decode(base64), { contentType: 'video/mp4' });
+            if (error) throw error;
+            const { data: { publicUrl } } = supabase.storage.from('spindare-assets').getPublicUrl(data.path);
+            return publicUrl;
+        } catch (error) {
+            console.error("Video Upload Error:", error);
+            throw error;
+        }
+    },
+
     // Create a new challenge post
     async createPost(userId: string, username: string, avatar: string, challenge: string, content: string, mediaUri: string | null) {
         if (!userId) throw new Error("Must be logged in to post");
 
         let finalMediaUrl = mediaUri;
         if (mediaUri && !mediaUri.startsWith('http')) {
-            finalMediaUrl = await this.uploadImage(mediaUri);
+            const isVideo = /\.(mp4|mov|avi|webm|3gp)$/i.test(mediaUri);
+            finalMediaUrl = isVideo ? await this.uploadVideo(mediaUri) : await this.uploadImage(mediaUri);
         }
 
         // Calculate functional Spin Count
@@ -65,7 +95,7 @@ export const PostService = {
                 .from('posts')
                 .select('*', { count: 'exact', head: true })
                 .eq('challenge', challenge);
-            
+
             count = (existingCount || 0) + 1;
         } catch (err) {
             console.warn("Could not calculate spin count", err);
@@ -87,29 +117,85 @@ export const PostService = {
             .single();
 
         if (error) throw error;
+
+        // Update streak — fire and forget, never block the post
+        this.updateStreak(userId).catch(e => console.warn("Streak update failed:", e));
+
         return data;
     },
 
+    // Update the user's daily challenge streak
+    async updateStreak(userId: string) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('streak, "lastChallengeDate"')
+            .eq('id', userId)
+            .single();
+
+        if (!profile) return;
+
+        const today = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+        const last = profile.lastChallengeDate;
+
+        let newStreak = 1;
+        if (last) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+            if (last === today) {
+                return; // Already posted today, don't increment
+            } else if (last === yesterdayStr) {
+                newStreak = (profile.streak || 0) + 1; // Consecutive day
+            }
+            // else: streak broken, reset to 1
+        }
+
+        await supabase
+            .from('profiles')
+            .update({ streak: newStreak, lastChallengeDate: today })
+            .eq('id', userId);
+    },
+
     // Subscribe to real-time feed updates
-    subscribeToFeed(callback: (posts: Post[]) => void) {
-        // Initial fetch
-        const fetchPosts = async () => {
+    subscribeToFeed(callback: (updater: (prev: Post[]) => Post[]) => void) {
+        // Initial fetch — replaces entire list once on mount
+        const fetchAll = async () => {
             const { data } = await supabase
                 .from('posts')
                 .select('*')
                 .order('created_at', { ascending: false });
-            if (data) callback(data.map(mapPost));
+            if (data) callback(() => data.map(mapPost));
         };
 
-        fetchPosts();
+        fetchAll();
 
-        // Subscription
         const channel = supabase
             .channel('public:posts')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'posts' },
-                () => fetchPosts() // Refresh on any change for simplicity
+                { event: 'INSERT', schema: 'public', table: 'posts' },
+                (payload) => {
+                    // New post: prepend without touching existing items
+                    const newPost = mapPost(payload.new);
+                    callback(prev => [newPost, ...prev.filter(p => p.id !== newPost.id)]);
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'posts' },
+                (payload) => {
+                    // Reaction / edit: update only the changed post in place
+                    const updated = mapPost(payload.new);
+                    callback(prev => prev.map(p => p.id === updated.id ? updated : p));
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'DELETE', schema: 'public', table: 'posts' },
+                (payload) => {
+                    callback(prev => prev.filter(p => p.id !== payload.old.id));
+                }
             )
             .subscribe();
 
@@ -146,6 +232,21 @@ export const PostService = {
     },
 
     // Toggle a reaction to a post
+    async getUserReaction(userId: string, postId: string): Promise<'felt' | 'thought' | 'intrigued' | null> {
+        if (!userId || !postId) return null;
+        try {
+            const { data } = await supabase
+                .from('reactions')
+                .select('type')
+                .eq('postId', postId)
+                .eq('userId', userId)
+                .single();
+            return (data?.type || null) as any;
+        } catch {
+            return null;
+        }
+    },
+
     async toggleReaction(
         userId: string, 
         currentUsername: string,

@@ -241,8 +241,8 @@ export const ImageViewer = ({ imageUri, children, onTap }: ImageViewerProps) => 
 
 const styles = StyleSheet.create({
     container: {
-        width: SCREEN_WIDTH,
-        height: SCREEN_WIDTH * 1.25,
+        width: '100%',          // fill parent card, not full device width
+        aspectRatio: 0.8,       // keeps the same 1:1.25 ratio (1/1.25 = 0.8)
     },
     imageWrapper: {
         width: '100%',

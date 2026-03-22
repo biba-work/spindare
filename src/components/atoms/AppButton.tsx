@@ -14,21 +14,38 @@ interface AppButtonProps {
 
 export const AppButton = ({ onPress, children, style, type = 'primary', haptic = true, hitSlop, disabled }: AppButtonProps) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
+    const opacityAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.96,
-            useNativeDriver: true,
-            speed: 50,
-        }).start();
+        Animated.parallel([
+            Animated.spring(scaleAnim, {
+                toValue: 0.92,
+                useNativeDriver: true,
+                friction: 10,
+                tension: 200,
+            }),
+            Animated.timing(opacityAnim, {
+                toValue: 0.85,
+                duration: 100,
+                useNativeDriver: true,
+            })
+        ]).start();
     };
 
     const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            useNativeDriver: true,
-            speed: 50,
-        }).start();
+        Animated.parallel([
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+                friction: 4,
+                tension: 60,
+            }),
+            Animated.timing(opacityAnim, {
+                toValue: 1,
+                duration: 100,
+                useNativeDriver: true,
+            })
+        ]).start();
     };
 
     const handlePress = () => {
@@ -52,7 +69,7 @@ export const AppButton = ({ onPress, children, style, type = 'primary', haptic =
                 style,
             ]}
         >
-            <Animated.View style={{ transform: [{ scale: scaleAnim }], alignItems: 'center', justifyContent: 'center', width: '100%', flexDirection: 'row', gap: 8 }}>
+            <Animated.View renderToHardwareTextureAndroid={true} style={{ transform: [{ scale: scaleAnim }], opacity: opacityAnim, alignItems: 'center', justifyContent: 'center', width: '100%', flexDirection: 'row', gap: 8 }}>
                 {children}
             </Animated.View>
         </Pressable>

@@ -1,5 +1,8 @@
 // LogService MUST be the first import — it patches console.* immediately.
 import "./src/services/LogService";
+import { SoundService } from "./src/services/SoundService";
+// Preload all sounds so first interactions feel instant
+SoundService.preloadAll();
 import React, { useCallback } from "react";
 import { View, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";

@@ -1,163 +1,221 @@
-import { StreamChat, Channel as StreamChannel, ChannelSort, ChannelFilters, ChannelOptions, Event } from 'stream-chat';
+import { supabase } from './supabaseConfig';
 
-// Set EXPO_PUBLIC_STREAM_API_KEY in your .env file.
-// Get your key from https://dashboard.getstream.io
-const STREAM_API_KEY = process.env.EXPO_PUBLIC_STREAM_API_KEY || '';
-
-// Initialize Stream Chat client
-export const chatClient = StreamChat.getInstance(STREAM_API_KEY);
-
-export interface ChatUser {
-    id: string;
-    name: string;
+// Message shape matching react-native-gifted-chat's IMessage
+export interface Message {
+    _id: string;
+    text: string;
+    createdAt: Date;
+    user: {
+        _id: string;
+        name: string;
+        avatar?: string;
+    };
     image?: string;
 }
 
+export interface Conversation {
+    id: string;
+    otherUserId: string;
+    otherUsername: string;
+    otherAvatar: string;
+    lastMessage: string;
+    lastMessageAt: string;
+}
+
+// Generate a stable, sorted conversation ID for two users
+const makeConversationId = (userId1: string, userId2: string): string => {
+    return [userId1, userId2].sort().join('__');
+};
+
 export const ChatService = {
-    // Connect current user to Stream Chat
-    async connectUser(userId: string, username: string, avatar?: string): Promise<void> {
-        if (!chatClient.userID) {
-            try {
-                const testToken = process.env.EXPO_PUBLIC_STREAM_TEST_TOKEN;
-                const testUserId = process.env.EXPO_PUBLIC_STREAM_TEST_USER_ID;
 
-                const activeId = testToken ? (testUserId || userId) : userId;
-                // ⚠️ TODO: Replace devToken() with a real JWT from your backend before going to production.
-                // devToken() is insecure and must only be used in local development.
-                const token = testToken || chatClient.devToken(activeId);
+    // Get or create a conversation between two users
+    async getOrCreateConversation(
+        currentUserId: string,
+        otherUserId: string
+    ): Promise<string> {
+        const convoId = makeConversationId(currentUserId, otherUserId);
 
-                await chatClient.connectUser(
-                    {
-                        id: activeId,
-                        name: username,
-                        image: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=random`,
-                    },
-                    token
-                );
-                console.log('Stream Chat connected for user:', username, 'as', activeId);
-            } catch (error) {
-                console.log('Stream Chat connection skipped:', error);
-            }
+        const { data: existing } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('id', convoId)
+            .single();
+
+        if (!existing) {
+            await supabase.from('conversations').insert({
+                id: convoId,
+                user1: currentUserId,
+                user2: otherUserId,
+            });
         }
+
+        return convoId;
     },
 
-    // Disconnect user from Stream Chat
-    async disconnectUser(): Promise<void> {
-        if (chatClient.userID) {
-            await chatClient.disconnectUser();
-            console.log('Stream Chat disconnected');
-        }
-    },
-
-    // Create or get a direct message channel between two users
-    async getOrCreateDMChannel(currentUserId: string, otherUserId: string, otherUsername: string, otherUserAvatar?: string): Promise<StreamChannel> {
-        const activeUserId = chatClient.userID || currentUserId;
-
-        // 1. Ensure the other user exists. 
-        // We'll try to upsert them using the current authenticated client.
-        try {
-            await chatClient.upsertUsers([
-                {
-                    id: otherUserId,
-                    name: otherUsername,
-                    image: otherUserAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUsername)}&background=random`
-                }
-            ]);
-            console.log(`✅ Upserted/Synced user ${otherUserId} to Stream Chat`);
-        } catch (e) {
-            console.warn('User upsert failed. This happens if client-side creation is disabled in Stream Dashboard.', e);
-        }
-
-        const sortedIds = [activeUserId, otherUserId].sort();
-        const channelId = `dm_${sortedIds[0]}_${sortedIds[1]}`;
-
-        try {
-            const channel = chatClient.channel('messaging', channelId, {
-                name: otherUsername,
-                image: otherUserAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUsername)}&background=random`,
-                members: [activeUserId, otherUserId],
-            } as any);
-
-            await channel.watch();
-            return channel;
-        } catch (e: any) {
-            console.error('Channel creation failed:', e);
-            throw new Error(`Failed to start chat with ${otherUsername}. Please ensure they have logged in at least once.`);
-        }
-    },
-
-    // Send a challenge message to a user
+    // Send a challenge as a DM
     async sendChallengeToUser(
-        currentUserId: string, 
-        recipientId: string, 
-        recipientName: string, 
-        challenge: string, 
+        currentUserId: string,
+        recipientId: string,
+        recipientName: string,
+        challenge: string,
         recipientAvatar?: string
     ): Promise<void> {
         if (!currentUserId) throw new Error('Must be logged in to send challenges');
 
-        const channel = await this.getOrCreateDMChannel(currentUserId, recipientId, recipientName, recipientAvatar);
+        const convoId = await this.getOrCreateConversation(currentUserId, recipientId);
 
-        // Send a challenge message
-        await channel.sendMessage({
-            text: `🎯 Challenge: "${challenge}"`,
-        });
+        await this.sendMessage(
+            convoId,
+            currentUserId,
+            `🎯 Challenge: "${challenge}"`
+        );
     },
 
-    // Get channels for current user
-    async getUserChannels(userId: string): Promise<StreamChannel[]> {
-        if (!userId) return [];
+    // Fetch all conversations for a user
+    subscribeToConversations(
+        currentUserId: string,
+        callback: (convos: Conversation[]) => void
+    ) {
+        const fetchConvos = async () => {
+            const { data, error } = await supabase
+                .from('conversations')
+                .select('*')
+                .or(`user1.eq.${currentUserId},user2.eq.${currentUserId}`)
+                .order('last_message_at', { ascending: false });
 
-        const filters: ChannelFilters = {
-            type: 'messaging',
-            members: { $in: [userId] },
+            if (error || !data) { callback([]); return; }
+
+            // Resolve profiles for the "other" person
+            const otherIds = data.map(c =>
+                c.user1 === currentUserId ? c.user2 : c.user1
+            );
+
+            if (otherIds.length === 0) { callback([]); return; }
+
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, username, "photoURL"')
+                .in('id', otherIds);
+
+            const profileMap: Record<string, any> = {};
+            (profiles || []).forEach((p: any) => {
+                profileMap[p.id] = p;
+            });
+
+            const convos: Conversation[] = data.map(c => {
+                const otherId = c.user1 === currentUserId ? c.user2 : c.user1;
+                const profile = profileMap[otherId];
+                return {
+                    id: c.id,
+                    otherUserId: otherId,
+                    otherUsername: profile?.username || 'User',
+                    otherAvatar: profile?.photoURL || '',
+                    lastMessage: c.last_message || '',
+                    lastMessageAt: c.last_message_at,
+                };
+            });
+
+            callback(convos);
         };
 
-        const sort: ChannelSort = { last_message_at: -1 };
-        const options: ChannelOptions = { state: true, watch: true, presence: true };
+        fetchConvos();
 
-        const channels = await chatClient.queryChannels(filters, sort, options);
-        return channels;
+        const channel = supabase
+            .channel(`convos:${currentUserId}`)
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'conversations' },
+                () => fetchConvos()
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
     },
 
-    // Check if client is connected
-    isConnected(): boolean {
-        return !!chatClient.userID;
-    },
+    // Subscribe to messages in a conversation (returns gifted-chat-shaped messages)
+    subscribeToMessages(
+        conversationId: string,
+        callback: (messages: Message[]) => void
+    ) {
+        const fetchMessages = async () => {
+            const { data } = await supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', conversationId)
+                .order('created_at', { ascending: false })
+                .limit(50);
 
-    // Get the chat client instance
-    getClient(): StreamChat {
-        return chatClient;
-    },
+            if (!data) { callback([]); return; }
 
-    // Send a reaction to a message
-    async sendReaction(channel: StreamChannel, messageId: string, reactionType: string): Promise<void> {
-        await channel.sendReaction(messageId, {
-            type: reactionType,
-        });
-    },
+            const senderIds = [...new Set(data.map(m => m.sender_id))];
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, username, "photoURL"')
+                .in('id', senderIds);
 
-    // Remove a reaction from a message
-    async removeReaction(channel: StreamChannel, messageId: string, reactionType: string): Promise<void> {
-        await channel.deleteReaction(messageId, reactionType);
-    },
+            const profileMap: Record<string, any> = {};
+            (profiles || []).forEach((p: any) => { profileMap[p.id] = p; });
 
-    // Send a reply to a message (threaded)
-    async sendReply(channel: StreamChannel, parentMessageId: string, text: string, customFields: Record<string, any> = {}): Promise<any> {
-        const response = await channel.sendMessage({
-            text,
-            parent_id: parentMessageId,
-            ...customFields,
-        } as any);
-        return response.message;
-    },
+            const messages: Message[] = data.map(m => ({
+                _id: m.id,
+                text: m.text,
+                createdAt: new Date(m.created_at),
+                image: m.image || undefined,
+                user: {
+                    _id: m.sender_id,
+                    name: profileMap[m.sender_id]?.username || 'User',
+                    avatar: profileMap[m.sender_id]?.photoURL || undefined,
+                },
+            }));
 
-    // Subscribe to new messages on a channel
-    subscribeToNewMessages(channel: StreamChannel, callback: (event: Event) => void): { unsubscribe: () => void } {
-        const handler = (event: Event) => callback(event);
-        channel.on('message.new', handler);
-        return {
-            unsubscribe: () => channel.off('message.new', handler),
+            callback(messages);
         };
+
+        fetchMessages();
+
+        const channel = supabase
+            .channel(`msgs:${conversationId}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
+                () => fetchMessages()
+            )
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
     },
+
+    // Send a message
+    async sendMessage(
+        conversationId: string,
+        senderId: string,
+        text: string,
+        image?: string
+    ) {
+        const { error } = await supabase
+            .from('messages')
+            .insert({
+                conversation_id: conversationId,
+                sender_id: senderId,
+                text,
+                image: image || null,
+            });
+
+        if (error) throw error;
+
+        // Update conversation preview
+        await supabase
+            .from('conversations')
+            .update({
+                last_message: text || '📷 Photo',
+                last_message_at: new Date().toISOString(),
+            })
+            .eq('id', conversationId);
+    },
+
+    // Helpers to match old API shape used elsewhere
+    isConnected(): boolean { return true; },
+    async connectUser() { },
+    async disconnectUser() { },
 };

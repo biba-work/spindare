@@ -123,6 +123,12 @@ export const ChallengeScreen = () => {
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(20)).current;
+    const cardScale = useRef(new Animated.Value(0.92)).current;
+    const actionBtnAnim1 = useRef(new Animated.Value(0)).current;
+    const actionBtnAnim2 = useRef(new Animated.Value(0)).current;
+    const proofIconAnim1 = useRef(new Animated.Value(0)).current;
+    const proofIconAnim2 = useRef(new Animated.Value(0)).current;
+    const proofIconAnim3 = useRef(new Animated.Value(0)).current;
 
     // Animations for transitions
     const feedTransitionAnim = useRef(new Animated.Value(height)).current;
@@ -242,9 +248,7 @@ export const ChallengeScreen = () => {
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [1, 1],
+                mediaTypes: ['images', 'videos'],
                 quality: 0.8,
             });
 
@@ -300,27 +304,37 @@ export const ChallengeScreen = () => {
 
             {!proofMode ? (
                 <View style={styles.actionRow}>
-                    <Pressable style={styles.actionBtn} onPress={showShare}>
-                        <ShareIcon color="#8E8E93" />
-                        <Text style={styles.actionBtnText}>SEND</Text>
-                    </Pressable>
-                    <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
-                        <CheckIcon color="#FAF9F6" />
-                        <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
-                    </Pressable>
+                    <Animated.View style={{ flex: 1, opacity: actionBtnAnim1, transform: [{ translateY: actionBtnAnim1.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
+                        <Pressable style={styles.actionBtn} onPress={showShare}>
+                            <ShareIcon color="#8E8E93" />
+                            <Text style={styles.actionBtnText}>SEND</Text>
+                        </Pressable>
+                    </Animated.View>
+                    <Animated.View style={{ flex: 1, opacity: actionBtnAnim2, transform: [{ translateY: actionBtnAnim2.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
+                        <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
+                            <CheckIcon color="#FAF9F6" />
+                            <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
+                        </Pressable>
+                    </Animated.View>
                 </View>
             ) : (
                 <View style={styles.proofContainer}>
                     <View style={styles.proofIconsRow}>
-                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('camera')}>
-                            <CameraIcon color="#FAF9F6" />
-                        </Pressable>
-                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('gallery')}>
-                            <GalleryIcon color="#FAF9F6" />
-                        </Pressable>
-                        <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('text')}>
-                            <TextIcon color="#FAF9F6" />
-                        </Pressable>
+                        <Animated.View style={{ opacity: proofIconAnim1, transform: [{ scale: proofIconAnim1 }, { translateY: proofIconAnim1.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
+                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('camera')}>
+                                <CameraIcon color="#FAF9F6" />
+                            </Pressable>
+                        </Animated.View>
+                        <Animated.View style={{ opacity: proofIconAnim2, transform: [{ scale: proofIconAnim2 }, { translateY: proofIconAnim2.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
+                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('gallery')}>
+                                <GalleryIcon color="#FAF9F6" />
+                            </Pressable>
+                        </Animated.View>
+                        <Animated.View style={{ opacity: proofIconAnim3, transform: [{ scale: proofIconAnim3 }, { translateY: proofIconAnim3.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
+                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('text')}>
+                                <TextIcon color="#FAF9F6" />
+                            </Pressable>
+                        </Animated.View>
                     </View>
                     <Pressable style={styles.saveLaterBtn} onPress={() => { setChallenge(null); setProofMode(false); }}>
                         <ClockIcon color="#AEAEB2" />
@@ -339,6 +353,20 @@ export const ChallengeScreen = () => {
     }, []);
 
     useEffect(() => {
+        if (proofMode) {
+            Animated.stagger(60, [
+                Animated.spring(proofIconAnim1, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
+                Animated.spring(proofIconAnim2, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
+                Animated.spring(proofIconAnim3, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
+            ]).start();
+        } else {
+            proofIconAnim1.setValue(0);
+            proofIconAnim2.setValue(0);
+            proofIconAnim3.setValue(0);
+        }
+    }, [proofMode]);
+
+    useEffect(() => {
         if (challenge) {
             Animated.parallel([
                 Animated.timing(fadeAnim, {
@@ -351,10 +379,20 @@ export const ChallengeScreen = () => {
                     duration: 600,
                     useNativeDriver: true,
                 }),
+                Animated.spring(cardScale, { toValue: 1, useNativeDriver: true, friction: 6, tension: 50 })
             ]).start();
+            setTimeout(() => {
+                Animated.stagger(80, [
+                    Animated.spring(actionBtnAnim1, { toValue: 1, useNativeDriver: true, friction: 6, tension: 40 }),
+                    Animated.spring(actionBtnAnim2, { toValue: 1, useNativeDriver: true, friction: 6, tension: 40 }),
+                ]).start();
+            }, 300);
         } else {
             fadeAnim.setValue(0);
             slideAnim.setValue(20);
+            cardScale.setValue(0.92);
+            actionBtnAnim1.setValue(0);
+            actionBtnAnim2.setValue(0);
         }
     }, [challenge]);
 
@@ -404,7 +442,7 @@ export const ChallengeScreen = () => {
                             <Animated.View
                                 style={[
                                     styles.challengeContainer,
-                                    { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+                                    { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: cardScale }] }
                                 ]}
                             >
                                 {Platform.OS === 'ios' ? (

@@ -12,8 +12,6 @@ import {
     Platform,
     Image,
     ImageBackground,
-    LayoutAnimation,
-    UIManager,
     ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,11 +31,6 @@ import * as WebBrowser from 'expo-web-browser';
 WebBrowser.maybeCompleteAuthSession();
 
 const { width, height } = Dimensions.get('window');
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const HOBBIES: HobbyType[] = ["Reading", "Gaming", "Fitness", "Cooking", "Art", "Photography", "Hiking", "Music"];
 const FIELDS: StudyFieldType[] = ["Computer Science", "Business", "Engineering", "Medicine", "Arts", "Law", "Physics", "Design"];

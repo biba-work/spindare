@@ -257,6 +257,33 @@ export const SocialService = {
             .eq('ghosted_id', targetUserId);
     },
 
+    // ── Saved Challenges (kept_challenges) ─────────────────────────────────────
+
+    async saveChallenge(userId: string, challenge: string, postId?: string): Promise<void> {
+        const expiresAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
+        const { error } = await supabase
+            .from('kept_challenges')
+            .insert({
+                "userId": userId,
+                challenge,
+                "postId": postId || null,
+                "expiresAt": expiresAt,
+            });
+        if (error) throw error;
+    },
+
+    async getSavedChallenges(userId: string): Promise<string[]> {
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+            .from('kept_challenges')
+            .select('challenge')
+            .eq('userId', userId)
+            .gt('expiresAt', now)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []).map((row: any) => row.challenge);
+    },
+
     async getGhostedUsers(currentUserId: string): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {
         if (!currentUserId) return [];
 

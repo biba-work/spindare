@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "spindare",
+    "name": "Spindare",
     "slug": "spindare",
     "sdkVersion": "55.0.0",
-    "version": "0.61.52",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,9 +14,14 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "jsEngine": "hermes",
-      "bundleIdentifier": "com.spindare.app"
+      "bundleIdentifier": "com.spindare.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SPINDARE needs your camera to capture challenge moments.",
+        "NSMicrophoneUsageDescription": "SPINDARE needs your microphone to record challenge videos.",
+        "NSPhotoLibraryUsageDescription": "SPINDARE needs your photo library to share challenge moments."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,14 +29,16 @@
         "backgroundColor": "#000000"
       },
       "package": "com.spindare.app",
-      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "jsEngine": "hermes",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.VIBRATE",
+        "android.permission.INTERNET"
       ]
     },
     "web": {
@@ -42,17 +49,25 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow SPINDARE to access your camera to capture challenge reflections."
+          "cameraPermission": "Allow SPINDARE to access your camera to capture challenge reflections.",
+          "microphonePermission": "Allow SPINDARE to access your microphone to record challenge videos."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow SPINDARE to access your photos to share challenge moments."
+          "photosPermission": "Allow SPINDARE to access your photos to share challenge moments.",
+          "cameraPermission": "Allow SPINDARE to access your camera."
         }
       ],
       "expo-secure-store",
-      "expo-video",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
+      ],
       "expo-web-browser"
     ],
     "runtimeVersion": "1.0.0",

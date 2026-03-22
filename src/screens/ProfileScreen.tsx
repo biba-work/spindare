@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { PostService } from '../services/PostService';
 import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 import { Post } from '../services/PostService';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
@@ -92,6 +93,7 @@ interface ProfileScreenProps {
     onUpdateProfile: (updates: Partial<UserProfile>) => void;
     onShare?: () => void;
     onOpenCamera?: () => void;
+    onSaveChallenge?: (challenge: string) => void;
 }
 
 import { useTheme } from '../contexts/ThemeContext';
@@ -108,6 +110,7 @@ export const ProfileScreen = ({
     onUpdateProfile,
     onShare,
     onOpenCamera,
+    onSaveChallenge,
 }: ProfileScreenProps) => {
     const [mode, setMode] = useState<'list' | 'grid'>('grid');
     const [showSettings, setShowSettings] = useState(false);
@@ -126,6 +129,9 @@ export const ProfileScreen = ({
     const settingsAnim = useRef(new Animated.Value(height)).current;
     const spinnerAnim = useRef(new Animated.Value(height)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    const [postCountDisplay, setPostCountDisplay] = useState(0);
+    const postCountAnim = useRef(new Animated.Value(0)).current;
 
     const SPIN_REWARDS = [
         'Read 10 pages of a book 📚',
@@ -161,7 +167,7 @@ export const ProfileScreen = ({
             // Update locally in parent component
             onUpdateProfile({ username: newUsername });
 
-            if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            SoundService.postSuccess();
             Alert.alert("Success", "Username updated! It may take a moment for changes to appear everywhere.");
         } catch (error: any) {
             console.error("Username update failed:", error);
@@ -180,13 +186,17 @@ export const ProfileScreen = ({
         if (userId) {
             const unsub = PostService.subscribeToUserPosts(userId, (posts) => {
                 setUserPosts(posts);
+                postCountAnim.setValue(0);
+                Animated.timing(postCountAnim, { toValue: posts.length, duration: 800, useNativeDriver: false }).start();
+                const listenerId = postCountAnim.addListener(({ value }) => setPostCountDisplay(Math.round(value)));
+                return () => postCountAnim.removeListener(listenerId);
             });
             return () => unsub();
         }
     }, [userId]);
 
     const openSpinner = () => {
-        if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        SoundService.tap();
         setShowSpinner(true);
         setSpinResult(null);
         setSubmissionStep('idle');
@@ -213,7 +223,7 @@ export const ProfileScreen = ({
     };
 
     const handleSpinEnd = (result: string) => {
-        if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        SoundService.spinLand(); // haptic + sound — always fires, respects silent switch
 
         // No limit check
         // if (spinsLeft > 0) setSpinsLeft(spinsLeft - 1);
@@ -221,9 +231,6 @@ export const ProfileScreen = ({
         setSpinResult(result);
         setSubmissionStep('result');
         onChallengeReceived(result);
-
-        // Haptic success
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
     const handleActionChoose = () => {
@@ -259,7 +266,7 @@ export const ProfileScreen = ({
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
+            mediaTypes: ['images', 'videos'],
             quality: 0.8,
         });
 
@@ -402,13 +409,20 @@ export const ProfileScreen = ({
                             {/* Stats */}
                             <View style={styles.statsRow}>
                                 <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{postCountDisplay}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
                                 </View>
                                 <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
                                 <View style={styles.statItem}>
                                     <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
+                                </View>
+                                <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>
+                                        {(userProfile as any).streak > 0 ? `🔥 ${(userProfile as any).streak}` : '—'}
+                                    </Text>
+                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Streak</Text>
                                 </View>
                             </View>
                         </View>
@@ -564,13 +578,13 @@ export const ProfileScreen = ({
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Alert.alert('Blocked Users', 'Block list coming in a future update.')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Blocked Users</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Alert.alert('Data & Storage', 'Data management coming in a future update.')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Data & Storage</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('https://clerk.com/docs/security')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Account Security</Text>
                                             </Pressable>
                                         </>
@@ -580,25 +594,25 @@ export const ProfileScreen = ({
                                         <>
                                             <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Get help and support</Text>
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/faq')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>FAQs</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('mailto:support@spindare.app')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Contact Support</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('mailto:support@spindare.app?subject=Problem%20Report')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Report a Problem</Text>
                                             </Pressable>
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/terms')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Terms of Service</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/privacy')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy Policy</Text>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
+                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/guidelines')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
                                                 <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Community Guidelines</Text>
                                             </Pressable>
 
@@ -649,6 +663,21 @@ export const ProfileScreen = ({
                                                         <Text style={styles.actionBtnTextPrimary}>Do It</Text>
                                                     </Pressable>
                                                 </View>
+
+                                                {/* Save for later — tappable text below the main buttons */}
+                                                <Pressable
+                                                    onPress={() => {
+                                                        if (spinResult) {
+                                                            SoundService.save();
+                                                            onSaveChallenge?.(spinResult);
+                                                        }
+                                                        closeSpinner();
+                                                    }}
+                                                    style={styles.saveLaterRow}
+                                                    hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
+                                                >
+                                                    <Text style={styles.saveLaterText}>🕐 Save for later</Text>
+                                                </Pressable>
                                             </Animated.View>
                                         )}
 
@@ -1166,6 +1195,17 @@ const styles = StyleSheet.create({
         gap: 12,
         width: '100%',
         marginTop: 8,
+    },
+    saveLaterRow: {
+        alignSelf: 'center',
+        marginTop: 16,
+        paddingVertical: 4,
+    },
+    saveLaterText: {
+        color: '#A7BBC7',
+        fontSize: 14,
+        fontWeight: '500',
+        letterSpacing: -0.2,
     },
     actionBtnPrimary: {
         flex: 1,

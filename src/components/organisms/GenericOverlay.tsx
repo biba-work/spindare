@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ScrollView, Dimensions, Image, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
@@ -69,6 +70,7 @@ interface OverlayProps {
     animation: Animated.Value;
     onOpenMessages?: () => void;
     onViewProfile?: (userId: string, username: string, avatar: string) => void;
+    userId?: string;
 }
 
 const MOCK_CHALLENGES = {
@@ -81,7 +83,7 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile, userId }: OverlayProps) => {
     const { darkMode } = useTheme();
     const [subTab, setSubTab] = useState<'notifs' | 'inbox' | 'messages'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
@@ -89,17 +91,17 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
     const [requests, setRequests] = useState<any[]>([]);
 
     React.useEffect(() => {
-        if (visible && type === 'notifications') {
-            const notifUnsub = NotificationService.subscribeToNotifications(setNotifications);
-            const reqUnsub = SocialService.subscribeToRequests(setRequests);
+        if (visible && type === 'notifications' && userId) {
+            const notifUnsub = NotificationService.subscribeToNotifications(userId, setNotifications);
+            const reqUnsub = SocialService.subscribeToRequests(userId, setRequests);
             // Mark all as read when opening
-            NotificationService.markAllAsRead();
+            NotificationService.markAllAsRead(userId);
             return () => {
                 notifUnsub();
                 reqUnsub();
             };
         }
-    }, [visible, type]);
+    }, [visible, type, userId]);
 
     if (!visible) return null;
 

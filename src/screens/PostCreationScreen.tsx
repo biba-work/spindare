@@ -1,19 +1,42 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, Dimensions, TouchableWithoutFeedback, Keyboard, Image, ScrollView, ActivityIndicator } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Polyline, Circle } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
+
+// Bubble particles — 10 evenly-spread directions, deterministic distances
+const BUBBLE_COUNT = 10;
+const BUBBLE_COLORS = ['#A7BBC7', '#C7A7BC', '#A7C7B0', '#C7BBA7', '#B0C7E8', '#E8C7B0', '#C7E8B0', '#B0B0E8', '#E8B0C7', '#B0E8D4'];
+const BUBBLES = Array.from({ length: BUBBLE_COUNT }, (_, i) => {
+    const angle = (i / BUBBLE_COUNT) * Math.PI * 2;
+    const dist  = 65 + (i % 3) * 28; // 65, 93, 121 cycling
+    return {
+        color: BUBBLE_COLORS[i],
+        tx: Math.cos(angle) * dist,
+        ty: Math.sin(angle) * dist,
+        size: 8 + (i % 3) * 4, // 8, 12, 16 cycling
+    };
+});
+
+const isVideoUri = (uri: string) => /\.(mp4|mov|avi|webm|3gp)$/i.test(uri);
+
+// Separate component so useVideoPlayer hook is valid
+const VideoPreview = ({ uri, style }: { uri: string; style: any }) => {
+    const player = useVideoPlayer(uri, p => { p.pause(); });
+    return <VideoView player={player} style={style} contentFit="cover" nativeControls />;
+};
 
 interface PostCreationScreenProps {
     challenge: string;
     imageUri?: string | null;
     onClose: () => void;
-    onPost: (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => void;
-    isSubmitting?: boolean;
+    onPost: (content: string, imageUri?: string | null, target?: 'feed' | 'friend') => Promise<void> | void;
+    isSubmitting?: boolean; // kept for back-compat but local state takes over
 }
 
 const SendIcon = ({ color }: { color: string }) => (
@@ -22,24 +45,95 @@ const SendIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
-export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost, isSubmitting = false }: PostCreationScreenProps) => {
+const CheckIcon = ({ color }: { color: string }) => (
+    <Svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <Polyline points="20 6 9 17 4 12" />
+    </Svg>
+);
+
+export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost }: PostCreationScreenProps) => {
     const { darkMode } = useTheme();
-    const [content, setContent] = useState('');
-    const [imageUri, setImageUri] = useState(initialImageUri);
-    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const [content, setContent]         = useState('');
+    const [imageUri, setImageUri]       = useState(initialImageUri);
+    const [submitting, setSubmitting]   = useState(false);
+    const [success, setSuccess]         = useState(false);
+
+    // Entry animation
+    const fadeAnim  = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(30)).current;
+
+    // Success overlay
+    const overlayOpacity  = useRef(new Animated.Value(0)).current;
+    const checkScale      = useRef(new Animated.Value(0)).current;
+    const checkOpacity    = useRef(new Animated.Value(0)).current;
+    const circleScale     = useRef(new Animated.Value(0)).current;
+
+    // Bubble particles
+    const bubbleAnims = useRef(
+        BUBBLES.map(() => ({
+            scale:      new Animated.Value(0),
+            translateX: new Animated.Value(0),
+            translateY: new Animated.Value(0),
+            opacity:    new Animated.Value(1),
+        }))
+    ).current;
 
     useEffect(() => {
         Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
             Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
         ]).start();
     }, []);
 
-    const handleAction = (target: 'feed' | 'friend') => {
-        if ((content.trim() || imageUri) && !isSubmitting) {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onPost(content, imageUri, target);
+    const triggerSuccess = () => {
+        setSuccess(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // 1. Fade in overlay
+        Animated.timing(overlayOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+
+        // 2. Pop the green circle in
+        Animated.spring(circleScale, {
+            toValue: 1, friction: 4, tension: 80, useNativeDriver: true,
+        }).start();
+
+        // 3. Check appears just after the circle
+        setTimeout(() => {
+            Animated.spring(checkScale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
+            Animated.timing(checkOpacity, { toValue: 1, duration: 100, useNativeDriver: true }).start();
+        }, 120);
+
+        // 4. Bubbles explode outward then fade
+        bubbleAnims.forEach((b, i) => {
+            const bubble = BUBBLES[i];
+            const delay = i * 30;
+            Animated.sequence([
+                Animated.delay(delay),
+                Animated.parallel([
+                    Animated.spring(b.scale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
+                    Animated.timing(b.translateX, { toValue: bubble.tx, duration: 550, useNativeDriver: true }),
+                    Animated.timing(b.translateY, { toValue: bubble.ty, duration: 550, useNativeDriver: true }),
+                    Animated.sequence([
+                        Animated.delay(300),
+                        Animated.timing(b.opacity, { toValue: 0, duration: 350, useNativeDriver: true }),
+                    ]),
+                ]),
+            ]).start();
+        });
+
+        // 5. Close after animation settles
+        setTimeout(() => onClose(), 1600);
+    };
+
+    const handleAction = async (target: 'feed' | 'friend') => {
+        if ((!content.trim() && !imageUri) || submitting || success) return;
+        setSubmitting(true);
+        try {
+            await onPost(content, imageUri, target);
+            triggerSuccess();
+        } catch {
+            // Post failed — let user retry
+            setSubmitting(false);
         }
     };
 
@@ -48,28 +142,28 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
         setImageUri(null);
     };
 
-    const isReady = content.trim() || imageUri;
+    const isReady = !!(content.trim() || imageUri);
 
     return (
         <View style={styles.fullScreen}>
             {Platform.OS === 'ios' ? (
-                <BlurView intensity={20} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                <BlurView intensity={20} tint={darkMode ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: darkMode ? 'rgba(28, 28, 30, 0.95)' : 'rgba(250, 249, 246, 0.95)' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: darkMode ? 'rgba(28,28,30,0.95)' : 'rgba(250,249,246,0.95)' }]} />
             )}
 
             <SafeAreaView style={styles.safeArea}>
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.keyboardView}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                    keyboardVerticalOffset={0}
                 >
                     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                         <Animated.View style={[styles.container, darkMode && styles.containerDark, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
                             <View style={styles.header}>
-                                <Pressable onPress={onClose} hitSlop={20} disabled={isSubmitting}>
-                                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={darkMode ? "#FFF" : "#8E8E93"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <Pressable onPress={onClose} hitSlop={20} disabled={submitting || success}>
+                                    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={darkMode ? '#FFF' : '#8E8E93'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <Path d="M19 12H5M12 19l-7-7 7-7" />
                                     </Svg>
                                 </Pressable>
@@ -90,8 +184,12 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
                                 {imageUri && (
                                     <View style={styles.imageWrapper}>
-                                        <Image source={{ uri: imageUri }} style={styles.image} />
-                                        <Pressable style={styles.removeImageButton} onPress={removeImage} disabled={isSubmitting}>
+                                        {isVideoUri(imageUri) ? (
+                                            <VideoPreview uri={imageUri} style={styles.image} />
+                                        ) : (
+                                            <Image source={{ uri: imageUri }} style={styles.image} />
+                                        )}
+                                        <Pressable style={styles.removeImageButton} onPress={removeImage} disabled={submitting}>
                                             <View style={styles.removeIconWrapper}>
                                                 <Svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                     <Path d="M18 6L6 18M6 6l12 12" />
@@ -105,12 +203,12 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                     <TextInput
                                         style={[styles.input, darkMode && styles.textDark]}
                                         placeholder="Add a caption or thoughts..."
-                                        placeholderTextColor={darkMode ? "#8E8E93" : "#C5C5C5"}
+                                        placeholderTextColor={darkMode ? '#8E8E93' : '#C5C5C5'}
                                         multiline
                                         value={content}
                                         onChangeText={setContent}
                                         maxLength={300}
-                                        editable={!isSubmitting}
+                                        editable={!submitting && !success}
                                     />
                                 </View>
                             </ScrollView>
@@ -118,29 +216,68 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                             <View style={[styles.actionFooter, darkMode && styles.borderDark]}>
                                 <Pressable
                                     onPress={() => handleAction('friend')}
-                                    style={[styles.actionBtn, styles.secondaryBtn, darkMode && styles.secondaryBtnDark, (!isReady || isSubmitting) && styles.disabledBtn]}
-                                    disabled={!isReady || isSubmitting}
+                                    style={[styles.actionBtn, styles.secondaryBtn, darkMode && styles.secondaryBtnDark, (!isReady || submitting) && styles.disabledBtn]}
+                                    disabled={!isReady || submitting || success}
                                 >
-                                    <SendIcon color={isReady && !isSubmitting ? (darkMode ? "#FFF" : "#8E8E93") : "#AEAEB2"} />
-                                    <Text style={[styles.actionText, darkMode && styles.textDark, (!isReady || isSubmitting) && styles.disabledText]}>SEND PRIVATELY</Text>
+                                    <SendIcon color={isReady && !submitting ? (darkMode ? '#FFF' : '#8E8E93') : '#AEAEB2'} />
+                                    <Text style={[styles.actionText, darkMode && styles.textDark, (!isReady || submitting) && styles.disabledText]}>SEND PRIVATELY</Text>
                                 </Pressable>
 
                                 <Pressable
                                     onPress={() => handleAction('feed')}
-                                    style={[styles.actionBtn, styles.primaryBtn, darkMode && styles.primaryBtnDark, (!isReady || isSubmitting) && styles.disabledBtn]}
-                                    disabled={!isReady || isSubmitting}
+                                    style={[styles.actionBtn, styles.primaryBtn, darkMode && styles.primaryBtnDark, (!isReady || submitting) && styles.disabledBtn]}
+                                    disabled={!isReady || submitting || success}
                                 >
-                                    {isSubmitting ? (
+                                    {submitting ? (
                                         <ActivityIndicator color="#FAF9F6" />
                                     ) : (
                                         <Text style={styles.primaryText}>POST TO FEED</Text>
                                     )}
                                 </Pressable>
                             </View>
+
                         </Animated.View>
                     </TouchableWithoutFeedback>
                 </KeyboardAvoidingView>
             </SafeAreaView>
+
+            {/* ── Success overlay ─────────────────────────────────────── */}
+            {success && (
+                <Animated.View style={[StyleSheet.absoluteFill, styles.successOverlay, { opacity: overlayOpacity }]} pointerEvents="none">
+                    {/* Bubble particles */}
+                    {BUBBLES.map((bubble, i) => (
+                        <Animated.View
+                            key={i}
+                            style={[
+                                styles.bubble,
+                                {
+                                    width: bubble.size,
+                                    height: bubble.size,
+                                    borderRadius: bubble.size / 2,
+                                    backgroundColor: bubble.color,
+                                    opacity: bubbleAnims[i].opacity,
+                                    transform: [
+                                        { translateX: bubbleAnims[i].translateX },
+                                        { translateY: bubbleAnims[i].translateY },
+                                        { scale: bubbleAnims[i].scale },
+                                    ],
+                                },
+                            ]}
+                        />
+                    ))}
+
+                    {/* Green circle + checkmark */}
+                    <Animated.View style={[styles.successCircle, { transform: [{ scale: circleScale }] }]}>
+                        <Animated.View style={{ opacity: checkOpacity, transform: [{ scale: checkScale }] }}>
+                            <CheckIcon color="#FFF" />
+                        </Animated.View>
+                    </Animated.View>
+
+                    <Animated.Text style={[styles.successLabel, { opacity: checkOpacity }]}>
+                        Posted!
+                    </Animated.Text>
+                </Animated.View>
+            )}
         </View>
     );
 };
@@ -202,4 +339,35 @@ const styles = StyleSheet.create({
     primaryText: { color: '#FAF9F6', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     actionText: { color: '#8E8E93', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     disabledText: { color: '#AEAEB2' },
+
+    // ── Success overlay ───────────────────────────────────────────────────────
+    successOverlay: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        zIndex: 999,
+    },
+    successCircle: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#34C759',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#34C759',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 20,
+        elevation: 12,
+    },
+    successLabel: {
+        color: '#FFF',
+        fontSize: 18,
+        fontWeight: '700',
+        marginTop: 20,
+        letterSpacing: -0.3,
+    },
+    bubble: {
+        position: 'absolute',
+    },
 });

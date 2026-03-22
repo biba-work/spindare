@@ -5,13 +5,12 @@ import {
     StyleSheet,
     FlatList,
     Pressable,
-    SafeAreaView,
     TextInput,
     Platform,
     Share,
-    Clipboard,
     Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogService, LogEntry, LogLevel } from '../services/LogService';
 
 interface LogViewerScreenProps {
@@ -65,8 +64,7 @@ export const LogViewerScreen = ({ onClose }: LogViewerScreenProps) => {
         try {
             await Share.share({ message: text, title: 'Spindare Logs' });
         } catch {
-            Clipboard.setString(text);
-            Alert.alert('Copied', 'Logs copied to clipboard.');
+            Alert.alert('Export failed', 'Could not open share sheet.');
         }
     }, [logs]);
 
@@ -84,7 +82,7 @@ export const LogViewerScreen = ({ onClose }: LogViewerScreenProps) => {
 
         return (
             <Pressable
-                onLongPress={() => { Clipboard.setString(item.message); Alert.alert('Copied', 'Log entry copied.'); }}
+                onLongPress={() => Share.share({ message: item.message }).catch(() => {})}
                 style={[styles.logRow, item.level === 'error' && styles.logRowError, item.level === 'warn' && styles.logRowWarn]}
             >
                 <View style={styles.logMeta}>
@@ -107,7 +105,7 @@ export const LogViewerScreen = ({ onClose }: LogViewerScreenProps) => {
                 <View style={styles.header}>
                     <View>
                         <Text style={styles.title}>📋 Dev Logs</Text>
-                        <Text style={styles.subtitle}>{filtered.length} entries · long-press to copy</Text>
+                        <Text style={styles.subtitle}>{filtered.length} entries · long-press to share</Text>
                     </View>
                     <View style={styles.headerActions}>
                         <Pressable onPress={handleExport} style={styles.headerBtn}>

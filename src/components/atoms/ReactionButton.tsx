@@ -78,29 +78,112 @@ const Shape = ({ type, color }: { type: ReactionType; color: string }) => {
     }
 };
 
+const getColorForType = (type: ReactionType): string => {
+    switch (type) {
+        case 'felt':
+            return '#FF6B6B';
+        case 'thought':
+            return '#4ECDC4';
+        case 'intrigued':
+            return '#FFE66D';
+        default:
+            return '#4A4A4A';
+    }
+};
+
 export const ReactionButton = ({ type, label, onPress, selected }: ReactionButtonProps) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
+    const rippleScale = useRef(new Animated.Value(0.5)).current;
+    const rippleOpacity = useRef(new Animated.Value(0)).current;
+    const glowAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        Animated.spring(scaleAnim, {
-            toValue: selected ? 1.1 : 1, // Slightly reduced scale for cleaner look
-            useNativeDriver: true,
-            friction: 6,
+        Animated.spring(glowAnim, {
+            toValue: selected ? 1 : 0,
+            useNativeDriver: false,
+            friction: 5,
             tension: 40,
         }).start();
     }, [selected]);
 
     const handlePress = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (selected) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } else {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        }
+
+        scaleAnim.setValue(0.6);
+        Animated.sequence([
+            Animated.spring(scaleAnim, {
+                toValue: 1.3,
+                useNativeDriver: true,
+                friction: 3,
+                tension: 180,
+            }),
+            Animated.spring(scaleAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+                friction: 3,
+                tension: 180,
+            }),
+        ]).start();
+
+        rippleScale.setValue(0.5);
+        rippleOpacity.setValue(0.6);
+        Animated.parallel([
+            Animated.timing(rippleScale, {
+                toValue: 2.5,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+            Animated.timing(rippleOpacity, {
+                toValue: 0,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+        ]).start();
+
         onPress();
     };
 
+    const glowBackgroundColor = glowAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['rgba(0,0,0,0)', 'rgba(74,74,74,0.15)'],
+    });
+
+    const rippleColor = getColorForType(type);
+
     return (
         <Pressable onPress={handlePress} style={styles.button}>
-            <View style={styles.container} renderToHardwareTextureAndroid={true}>
-                <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-                    <Shape type={type} color={selected ? '#FFFFFF' : '#3f3f46'} />
+            <View style={[styles.container, { position: 'relative', overflow: 'visible' }]} renderToHardwareTextureAndroid={true}>
+                {/* Ripple effect */}
+                <Animated.View
+                    style={[
+                        styles.ripple,
+                        {
+                            backgroundColor: rippleColor,
+                            transform: [{ scale: rippleScale }],
+                            opacity: rippleOpacity,
+                        },
+                    ]}
+                    pointerEvents="none"
+                />
+
+                {/* Glow background */}
+                <Animated.View
+                    style={[
+                        styles.glowBackground,
+                        {
+                            backgroundColor: glowBackgroundColor,
+                        },
+                    ]}
+                >
+                    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                        <Shape type={type} color={selected ? '#FFFFFF' : '#3f3f46'} />
+                    </Animated.View>
                 </Animated.View>
+
                 <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={2}>
                     {label}
                 </Text>
@@ -115,10 +198,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
         alignItems: 'center',
         justifyContent: 'center',
-        minWidth: 70, // Ensure consistent width
+        minWidth: 70,
     },
     container: {
         alignItems: 'center',
+    },
+    ripple: {
+        position: 'absolute',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        top: -20,
+        left: -20,
+    },
+    glowBackground: {
+        borderRadius: 20,
+        padding: 10,
+        margin: -10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     label: {
         marginTop: 10,
