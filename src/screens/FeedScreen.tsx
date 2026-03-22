@@ -54,13 +54,17 @@ interface PostItemProps {
     onProfilePress?: (userId: string, username: string, avatar: string) => void;
     onChallengeAction?: (challenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     darkMode: boolean;
+    delay?: number;
 }
 
-const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }: PostItemProps) => {
+const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode, delay = 0 }: PostItemProps) => {
     const [selected, setSelected] = useState<string | null>(null);
     const [isReacted, setIsReacted] = useState(false);
     const [showChallengeMenu, setShowChallengeMenu] = useState(false);
     const reactionAnim = useRef(new Animated.Value(1)).current;
+    const entranceAnim = useRef(new Animated.Value(0)).current;
+    const reactionScale = useRef(new Animated.Value(1)).current;
+    const challengeBtnScale = useRef(new Animated.Value(1)).current;
 
     const handleSelect = async (type: 'felt' | 'thought' | 'intrigued') => {
         if (isReacted) return;
@@ -79,13 +83,21 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
         try {
             await PostService.toggleReaction(post.id, type);
 
-            // Wait 1.5s then fade out
+            // Wait 1.5s then fade out with scale animation
             setTimeout(() => {
-                Animated.timing(reactionAnim, {
-                    toValue: 0,
-                    duration: 800,
-                    useNativeDriver: true
-                }).start(() => {
+                Animated.parallel([
+                    Animated.timing(reactionAnim, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: true
+                    }),
+                    Animated.spring(reactionScale, {
+                        toValue: 1,
+                        useNativeDriver: true,
+                        friction: 4,
+                        tension: 60,
+                    })
+                ]).start(() => {
                     setIsReacted(true);
                 });
             }, 1500);
@@ -94,6 +106,17 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
             console.error("Reaction Error:", err);
         }
     };
+
+    // Entrance animation on mount
+    React.useEffect(() => {
+        Animated.spring(entranceAnim, {
+            toValue: 1,
+            delay: delay,
+            useNativeDriver: true,
+            friction: 8,
+            tension: 40,
+        }).start();
+    }, [delay]);
 
     const handleProfilePress = () => {
         if (!isOwner && onProfilePress) {
@@ -145,7 +168,21 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
     };
 
     return (
-        <View style={[styles.postCard, darkMode && styles.postCardDark]}>
+        <Animated.View
+            style={[
+                styles.postCard,
+                darkMode && styles.postCardDark,
+                {
+                    opacity: entranceAnim,
+                    transform: [
+                        { translateY: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) },
+                        { scale: entranceAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }
+                    ],
+                },
+            ]}
+            renderToHardwareTextureAndroid={true}
+        >
+            <View style={[styles.postCard, darkMode && styles.postCardDark]}>
             <View style={styles.header}>
                 <Pressable
                     onPress={handleProfilePress}
@@ -173,7 +210,7 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
 
             {post.media && post.media.trim() !== '' ? (
                 <ImageViewer imageUri={post.media}>
-                    <Animated.View style={[styles.reactionOverlay, { opacity: reactionAnim }]}>
+                    <Animated.View style={[styles.reactionOverlay, { opacity: reactionAnim, transform: [{ scale: reactionScale }] }]} renderToHardwareTextureAndroid={true}>
                         {renderReactions()}
                     </Animated.View>
                     <View style={[styles.textOverlay, darkMode && styles.textOverlayDark, isReacted && { paddingRight: 24 }]}>
@@ -198,15 +235,29 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
             {/* Challenge Action Button - Only show for other users' posts with challenges */}
             {!isOwner && post.challenge && (
                 <Pressable
+                    onPressIn={() => {
+                        Animated.spring(challengeBtnScale, {
+                            toValue: 0.93,
+                            useNativeDriver: true,
+                            friction: 10,
+                            tension: 200,
+                        }).start();
+                    }}
+                    onPressOut={() => {
+                        Animated.spring(challengeBtnScale, {
+                            toValue: 1,
+                            useNativeDriver: true,
+                            friction: 4,
+                            tension: 60,
+                        }).start();
+                    }}
                     onPress={openChallengeMenu}
-                    style={({ pressed }) => [
-                        styles.challengeBtn,
-                        darkMode && styles.challengeBtnDark,
-                        pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }
-                    ]}
+                    style={styles.challengeBtn}
                 >
-                    <ChallengeIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
-                    <Text style={[styles.challengeBtnText, darkMode && styles.challengeBtnTextDark]}>CHALLENGE</Text>
+                    <Animated.View style={{ transform: [{ scale: challengeBtnScale }], width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} renderToHardwareTextureAndroid={true}>
+                        <ChallengeIcon color={darkMode ? "#FFF" : "#1C1C1E"} />
+                        <Text style={[styles.challengeBtnText, darkMode && styles.challengeBtnTextDark]}>CHALLENGE</Text>
+                    </Animated.View>
                 </Pressable>
             )}
 
@@ -243,7 +294,8 @@ const PostItem = ({ post, isOwner, onProfilePress, onChallengeAction, darkMode }
                     </View>
                 </Pressable>
             </Modal>
-        </View>
+            </View>
+        </Animated.View>
     );
 };
 
@@ -274,13 +326,14 @@ export const FeedScreen = ({
             <FlatList
                 data={posts}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
+                renderItem={({ item, index }) => (
                     <PostItem
                         post={item}
                         isOwner={item.userId === currentUserId}
                         onProfilePress={onProfilePress}
                         onChallengeAction={onChallengeAction}
                         darkMode={darkMode}
+                        delay={index * 80}
                     />
                 )}
                 contentContainerStyle={[styles.list, contentContainerStyle]}

@@ -96,6 +96,29 @@ interface ProfileScreenProps {
 
 import { useTheme } from '../contexts/ThemeContext';
 
+// Animated counter hook
+const useAnimatedCounter = (targetValue: number, duration: number = 1000) => {
+    const [displayValue, setDisplayValue] = useState(0);
+    const countAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        countAnim.setValue(0);
+        const listener = countAnim.addListener(({ value }) => {
+            setDisplayValue(Math.round(value));
+        });
+
+        Animated.timing(countAnim, {
+            toValue: targetValue,
+            duration: duration,
+            useNativeDriver: false,
+        }).start();
+
+        return () => countAnim.removeListener(listener);
+    }, [targetValue]);
+
+    return displayValue;
+};
+
 export const ProfileScreen = ({
     onBack,
     onLogout,
@@ -119,6 +142,11 @@ export const ProfileScreen = ({
     const [notifications, setNotifications] = useState(true);
     const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main');
     const [userPosts, setUserPosts] = useState<Post[]>([]);
+
+    // Stats animations
+    const totalReactions = userPosts.reduce((sum, post) => sum + (post.reactions.felt + post.reactions.thought + post.reactions.intrigued), 0);
+    const displayPostCount = useAnimatedCounter(userPosts.length, 1000);
+    const displayReactionCount = useAnimatedCounter(totalReactions, 1000);
 
     const [showSpinner, setShowSpinner] = useState(false);
     const [spinResult, setSpinResult] = useState<string | null>(null);
@@ -398,12 +426,12 @@ export const ProfileScreen = ({
                             {/* Stats */}
                             <View style={styles.statsRow}>
                                 <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{displayPostCount}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
                                 </View>
                                 <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
                                 <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{displayReactionCount}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
                                 </View>
                             </View>
@@ -435,34 +463,83 @@ export const ProfileScreen = ({
                                 </View>
                             ) : mode === 'grid' ? (
                                 <View style={styles.gridContainer}>
-                                    {userPosts.map(post => (
-                                        <View key={post.id} style={styles.gridItem}>
-                                            {post.media ? (
-                                                <Image source={{ uri: post.media }} style={styles.gridImage} />
-                                            ) : (
-                                                <View style={[styles.gridImage, styles.gridTextOnly]}>
-                                                    <Text style={styles.gridTextContent} numberOfLines={4}>{post.content}</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                    ))}
+                                    {userPosts.map((post, index) => {
+                                        const itemAnim = useRef(new Animated.Value(0)).current;
+                                        useEffect(() => {
+                                            Animated.spring(itemAnim, {
+                                                toValue: 1,
+                                                delay: index * 60,
+                                                useNativeDriver: true,
+                                                friction: 8,
+                                                tension: 40,
+                                            }).start();
+                                        }, []);
+                                        return (
+                                            <Animated.View
+                                                key={post.id}
+                                                style={[
+                                                    styles.gridItem,
+                                                    {
+                                                        opacity: itemAnim,
+                                                        transform: [
+                                                            { scale: itemAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }
+                                                        ],
+                                                    },
+                                                ]}
+                                                renderToHardwareTextureAndroid={true}
+                                            >
+                                                {post.media ? (
+                                                    <Image source={{ uri: post.media }} style={styles.gridImage} />
+                                                ) : (
+                                                    <View style={[styles.gridImage, styles.gridTextOnly]}>
+                                                        <Text style={styles.gridTextContent} numberOfLines={4}>{post.content}</Text>
+                                                    </View>
+                                                )}
+                                            </Animated.View>
+                                        );
+                                    })}
                                 </View>
                             ) : (
                                 <View style={styles.listContainer}>
-                                    {userPosts.map(post => (
-                                        <View key={post.id} style={[styles.listItem, darkMode && styles.listItemDark]}>
-                                            {post.media && <Image source={{ uri: post.media }} style={styles.listImage} />}
-                                            <View style={styles.listContent}>
-                                                {post.challenge && <Text style={styles.listChallenge}>{post.challenge}</Text>}
-                                                <Text style={[styles.listText, darkMode && styles.textDark]}>{post.content}</Text>
-                                                <View style={styles.listReactions}>
-                                                    <Text style={styles.reactionCount}>❤️ {post.reactions.felt}</Text>
-                                                    <Text style={styles.reactionCount}>💭 {post.reactions.thought}</Text>
-                                                    <Text style={styles.reactionCount}>✨ {post.reactions.intrigued}</Text>
+                                    {userPosts.map((post, index) => {
+                                        const itemAnim = useRef(new Animated.Value(0)).current;
+                                        useEffect(() => {
+                                            Animated.spring(itemAnim, {
+                                                toValue: 1,
+                                                delay: index * 60,
+                                                useNativeDriver: true,
+                                                friction: 8,
+                                                tension: 40,
+                                            }).start();
+                                        }, []);
+                                        return (
+                                            <Animated.View
+                                                key={post.id}
+                                                style={[
+                                                    styles.listItem,
+                                                    darkMode && styles.listItemDark,
+                                                    {
+                                                        opacity: itemAnim,
+                                                        transform: [
+                                                            { translateY: itemAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                                        ],
+                                                    },
+                                                ]}
+                                                renderToHardwareTextureAndroid={true}
+                                            >
+                                                {post.media && <Image source={{ uri: post.media }} style={styles.listImage} />}
+                                                <View style={styles.listContent}>
+                                                    {post.challenge && <Text style={styles.listChallenge}>{post.challenge}</Text>}
+                                                    <Text style={[styles.listText, darkMode && styles.textDark]}>{post.content}</Text>
+                                                    <View style={styles.listReactions}>
+                                                        <Text style={styles.reactionCount}>❤️ {post.reactions.felt}</Text>
+                                                        <Text style={styles.reactionCount}>💭 {post.reactions.thought}</Text>
+                                                        <Text style={styles.reactionCount}>✨ {post.reactions.intrigued}</Text>
+                                                    </View>
                                                 </View>
-                                            </View>
-                                        </View>
-                                    ))}
+                                            </Animated.View>
+                                        );
+                                    })}
                                 </View>
                             )}
                         </View>

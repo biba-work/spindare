@@ -93,13 +93,57 @@ export const MainFeedScreen = () => {
     const searchExpandAnim = useRef(new Animated.Value(0)).current;
     const overlayAnim = useRef(new Animated.Value(height)).current;
     const badgeScale = useRef(new Animated.Value(0)).current;
+    const badgePulse = useRef(new Animated.Value(1)).current;
     const postTransitionAnim = useRef(new Animated.Value(height)).current;
+    const feedFadeAnim = useRef(new Animated.Value(0)).current;
 
     const scrollY = useRef(new Animated.Value(0)).current;
     const lastScrollY = useRef(0);
     const headerVisible = useRef(new Animated.Value(1)).current;
     const miniHeaderVisible = useRef(new Animated.Value(0)).current;
     const isMiniHeaderHapticTriggered = useRef(false);
+
+    // Feed entrance animation
+    useEffect(() => {
+        Animated.spring(feedFadeAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            friction: 6,
+            tension: 30,
+        }).start();
+    }, []);
+
+    // Badge pulse animation
+    useEffect(() => {
+        if (savedChallenges.length > 0) {
+            Animated.spring(badgeScale, {
+                toValue: 1,
+                useNativeDriver: true,
+                friction: 6,
+                tension: 40,
+            }).start(() => {
+                const pulse = Animated.loop(
+                    Animated.sequence([
+                        Animated.timing(badgePulse, {
+                            toValue: 1.2,
+                            duration: 800,
+                            useNativeDriver: true,
+                        }),
+                        Animated.timing(badgePulse, {
+                            toValue: 1,
+                            duration: 800,
+                            useNativeDriver: true,
+                        }),
+                    ])
+                );
+                pulse.start();
+                return () => pulse.stop();
+            });
+        } else {
+            badgeScale.setValue(0);
+            badgePulse.setValue(1);
+        }
+    }, [savedChallenges.length]);
 
     useEffect(() => {
         console.log('MainFeedScreen useEffect starting auth listener...');
@@ -307,7 +351,7 @@ export const MainFeedScreen = () => {
                                 <AppButton type="icon" onPress={() => showOverlay('saved')} style={[styles.navBtn, darkMode && { backgroundColor: 'transparent' }]}>
                                     <SavedIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
                                     {savedChallenges.length > 0 && (
-                                        <Animated.View style={[styles.badge, { transform: [{ scale: badgeScale }] }]}>
+                                        <Animated.View style={[styles.badge, { transform: [{ scale: Animated.multiply(badgeScale, badgePulse) }] }]} renderToHardwareTextureAndroid={true}>
                                             <Text style={styles.badgeText}>{savedChallenges.length}</Text>
                                         </Animated.View>
                                     )}
@@ -391,7 +435,7 @@ export const MainFeedScreen = () => {
                 </BlurView>
             </Animated.View>
 
-            <View style={styles.content}>
+            <Animated.View style={[styles.content, { opacity: feedFadeAnim }]} renderToHardwareTextureAndroid={true}>
                 <FeedScreen
                     posts={posts}
                     currentUserId={auth.currentUser?.uid}
@@ -409,7 +453,7 @@ export const MainFeedScreen = () => {
                         }
                     }}
                 />
-            </View>
+            </Animated.View>
 
             <View style={styles.footer}>
                 <Text style={styles.versionText}>SPINDARE V0.61.64 (PRE-ALPHA TESTING)</Text>
