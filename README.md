@@ -1,105 +1,88 @@
-# Spindare 🌀 `v1.1.0`
+# 🌀 Spindare — The Anti-Scroll Social Experiment
 
-**The Anti-Scroll Social Experiment.** Spindare is a reaction-algorithm-based platform designed to turn digital intent into physical action. Built by a tight-knit team of three, we are redefining social connection through the "Active Reveal" system.
-
-> **Status:** Native APK Build — Internal Testing.
-> **Platform:** React Native + Expo SDK 55 — standalone Android APK via EAS Build.
+Spindare is a **privacy-first, action-packed social app** that turns scrolling into real-world fun.  
+Complete challenges, share photos/videos, reflect, and connect — all without bots ruining the experience.  
 
 ---
 
-## 🧠 The Philosophy
+## 🧠 Why Spindare?
 
-Spindare isn't a gallery; it's a gauntlet. We believe social media should make you *feel* the world around you, not just the glass in your hand.
-
-### 🎡 The Cycle
-
-1. **The Spin:** AI-driven challenges personalised to your "DNA" (Character & Interests).
-2. **The Action:** Complete the challenge. Take the photo. Write the reflection.
-3. **The Reaction:** Engage with others through three distinct emotional pillars: **Felt**, **Thought**, and **Intrigued**.
-4. **The Messaging:** Communicate freely with any active user, with the ability to **GHOST** on command.
+- Social media shouldn’t just live in your screen.  
+- Spindare makes it **interactive, engaging, and meaningful**.  
+- **Active Reveal System**: see posts, take action, share your thoughts, and connect.  
 
 ---
 
-## 🛠 Project Progress
+## 🎡 How It Works
 
-### v1.1.0 — Current (Native Build)
+1. **Spin for a Challenge**  
+   - Hand-picked or AI-generated challenges, personalized for you.  
 
-* ✅ **Native APK** — First standalone Android build via EAS Build. No longer requires Expo Go.
-* ✅ **Video Support** — Post and view video in the feed and challenge submissions. Camera and gallery now support video alongside photos.
-* ✅ **Persistent Reactions** — Reactions saved to the database. Users cannot re-react after refreshing the app.
-* ✅ **Reaction Summary on Feed** — Compact emoji + count display on every post card. No need to navigate to profile to see reaction totals.
-* ✅ **Real Timestamps** — "Just now" replaced with live relative timestamps (2m ago, 3h ago, 1d ago) from actual `created_at` values.
-* ✅ **Keyboard Fix** — Full keyboard support restored across Messages, challenge writing, and all input screens on Android.
-* ✅ **Android Card Border Fix** — Resolved "square inside card" rendering bug caused by conflicting `overflow: hidden` + `borderRadius` + `borderWidth`.
-* ✅ **AI Moved Server-Side** — Gemini API key and all prompt engineering now run inside a Supabase Edge Function. Zero AI secrets in the APK.
-* ✅ **Hermes Bytecode** — JS bundle compiled to Hermes bytecode. Not shipped as readable source code.
-* ✅ **ProGuard / R8** — Android release builds minify and shrink the native Java/Kotlin layer.
-* ✅ **Sound System** — `SoundService` wired into ProfileScreen: spin land, save challenge, and username update all trigger haptic + audio feedback.
-* ✅ **Friends List → Database** — Friends/connections list linked to live database. Challenge sends based on real connections.
-* ✅ **Animations** — Spring press on AppButton, ripple + glow + pop on ReactionButtons, staggered card entrance in feed, animated post counter on profile, pulsing saved badge.
-* ✅ **Double-Post Prevention** — All async write buttons guarded with `isSubmitting` state.
-* ✅ **In-App Log Viewer** — Hidden debug overlay triggered by tapping version text 5 times. Colour-coded, filterable, exportable.
-* ✅ **Friendly Error Messages** — All user-facing catch blocks use `getFriendlyError(err)` for human-readable errors.
-* ✅ **Fallback Challenge Pool** — 200 categorised offline challenges used when Gemini is unavailable.
+2. **Take Action**  
+   - Complete the challenge, snap a photo/video, write your reflection.  
 
-### v0.61.64 — Previous
-
-* ✅ Challenge Persistence: "Save for Later" functionality.
-* ✅ Multi-Medium Posts: Camera, Gallery, and Text responses.
-* ✅ The Reaction Trinity: Initial implementation of Felt, Thought, Intrigued.
-* ✅ UI Overhaul: Minimalist dark mode interface.
-
-### Roadmap (Next Phase)
-
-* **Realtime Feed** — Supabase Realtime subscriptions not yet firing. Posts require manual refresh. Investigate RLS + replication settings.
-* **Stream Chat Production Token** — Currently using `devToken()`. Must be replaced with a JWT-generating backend before public launch.
-* **AI Completion Analysis** — `analyzeCompletion` is a stub. Needs real Gemini integration once media upload is confirmed working.
-* **iOS Build** — EAS Build for iOS pending Apple Developer account setup.
+3. **React & Connect**  
+   - Respond to others with **Felt, Thought, or Intrigued** reactions.  
+   - Chat freely — ghost anyone if you want.  
 
 ---
 
-## 🔒 Security
+## 🌟 Key Features
 
-* **No API keys in the bundle** — Gemini key lives exclusively as a Supabase server-side secret.
-* **Hermes bytecode** — JS is not shipped as readable source code.
-* **ProGuard / R8** — Native Android layer is minified in all release builds.
-* **Stream Chat** — Needs production JWT before public launch (currently dev token).
-
----
-
-## 👥 The Team
-
-* **[Biba]** — "The Brains" – Algorithm & Logic Architecture.
-* **[Daniel]** — IT Master's Lead – Systems & Infrastructure.
-* **[Kristian]** — CO-Developer – UI/UX & Frontend Integration.
+- **Photos & Videos** — share your actions easily  
+- **Persistent Reactions** — can’t spam-react  
+- **Live Timestamps** — see posts in real-time  
+- **Fun Animations & Sounds** — app feels alive  
+- **Friends & Connections** — challenges go to people you know  
+- **Offline Challenges** — 190 curated challenges available anytime  
+- **AI Challenges** — one every 5 minutes if retries occur  
+- **Safe & Friendly** — human-readable messages, double-post prevention  
 
 ---
 
-## ⚙️ Environment
+## 🔒 Privacy & Security
 
-```
-SDK:         Expo SDK 55
-JS Engine:   Hermes (bytecode)
-Version:     1.1.0
-Build:       EAS Build — preview (APK)
-Database:    Supabase (PostgreSQL)
-Auth:        Clerk
-AI:          Gemini 1.5 Flash (server-side Edge Function)
-Messaging:   Stream Chat
-```
+- **No secrets in the app** — everything important stored safely on the server  
+- **Bot-resistant** — cooldowns & backend checks keep things fair  
+- **Safe Accounts** — powered by Clerk authentication  
+- **Encrypted & Obfuscated** — makes hacking extremely hard  
 
-## 🚀 Running Locally
+> Built to protect your privacy while keeping the app fun and safe.  
 
-```bash
-npx expo start --tunnel        # physical device via Expo Go (dev only)
-npx expo start --clear         # clear Metro cache
-npx expo start -c --tunnel     # both
-```
+---
 
-## 📦 Building
+## 🚀 Getting Started
 
-```bash
-npx expo prebuild --platform android --clean    # sync app.json → native
-eas build --platform android --profile preview  # APK for internal testing
-eas build --platform android --profile production  # AAB for Play Store
-```
+1. Spin for your first challenge  
+2. Complete it and post a photo/video  
+3. React to others’ posts  
+4. Chat freely, make friends, and enjoy the loop  
+
+---
+
+## 👥 Who Made It
+
+- **Biba** — The Brains (Algorithms & Logic)  
+- **Daniel** — IT Master (Systems & Infrastructure)  
+- **Kristian** — Co-Developer (UI/UX & Frontend)  
+
+---
+
+## 🔮 Coming Soon
+
+- Full Realtime Feed — posts appear instantly  
+- iOS Version — enjoy Spindare on Apple devices  
+- Smarter AI Challenges — more personalized & fun  
+
+---
+
+## 💡 Bottom Line
+
+Spindare isn’t just social media — it’s a **social adventure**.  
+
+- Take action ✅  
+- Reflect ✅  
+- Connect ✅  
+- Stay safe & private ✅  
+
+It’s social media, **but better**.
