@@ -4,12 +4,13 @@ import { SoundService } from "./src/services/SoundService";
 // Preload all sounds so first interactions feel instant
 SoundService.preloadAll();
 import React, { useCallback } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { ClerkProvider, ClerkLoaded, SignedIn, SignedOut } from '@clerk/clerk-expo';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
@@ -20,6 +21,7 @@ import { AppConfig } from "./src/config/AppConfig";
 SplashScreen.preventAutoHideAsync();
 
 import { ThemeProvider } from "./src/contexts/ThemeContext";
+import { ToastProvider } from "./src/contexts/ToastContext";
 
 const tokenCache = {
   async getToken(key: string) {
@@ -46,11 +48,12 @@ const tokenCache = {
   },
 };
 
-const publishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-if (!publishableKey) {
-  throw new Error("Missing Publishable Key. Please set VITE_CLERK_PUBLISHABLE_KEY in your .env");
-}
+const expoExtras = ((Constants as any).expoConfig?.extra ?? (Constants as any).manifest?.extra ?? {}) as Record<string, any>;
+const publishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY
+  || process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  || expoExtras.VITE_CLERK_PUBLISHABLE_KEY
+  || expoExtras.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
+  || '';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -76,33 +79,48 @@ export default function App() {
     return null;
   }
 
+  if (!publishableKey) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.errorContainer} onLayout={onLayoutRootView}>
+          <Text style={styles.errorTitle}>Missing Clerk publishable key</Text>
+          <Text style={styles.errorText}>
+            Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY or VITE_CLERK_PUBLISHABLE_KEY in your Expo environment/app config.
+          </Text>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
         <SafeAreaProvider>
-          <ThemeProvider>
-            <View style={styles.container} onLayout={onLayoutRootView}>
-              <View style={styles.deadzone} />
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <StatusBar style="light" />
-                
-                <SignedIn>
-                  {AppConfig.useRestructuredLayout ? (
-                    <MainFeedScreen />
-                  ) : (
-                    <ChallengeScreen />
-                  )}
-                </SignedIn>
-                
-                <SignedOut>
-                  <OnboardingScreen onComplete={async () => {
-                    // Logic is handled by Clerk hooks inside OnboardingScreen
-                  }} />
-                </SignedOut>
-                
-              </GestureHandlerRootView>
-            </View>
-          </ThemeProvider>
+          <ToastProvider>
+            <ThemeProvider>
+              <View style={styles.container} onLayout={onLayoutRootView}>
+                <View style={styles.deadzone} />
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <StatusBar style="light" />
+                  
+                  <SignedIn>
+                    {AppConfig.useRestructuredLayout ? (
+                      <MainFeedScreen />
+                    ) : (
+                      <ChallengeScreen />
+                    )}
+                  </SignedIn>
+                  
+                  <SignedOut>
+                    <OnboardingScreen onComplete={async () => {
+                      // Logic is handled by Clerk hooks inside OnboardingScreen
+                    }} />
+                  </SignedOut>
+                  
+                </GestureHandlerRootView>
+              </View>
+            </ThemeProvider>
+          </ToastProvider>
         </SafeAreaProvider>
       </ClerkLoaded>
     </ClerkProvider>
@@ -132,5 +150,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#2C2C3E',
-  }
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorTitle: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  errorText: {
+    color: '#D1D1D6',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
 });

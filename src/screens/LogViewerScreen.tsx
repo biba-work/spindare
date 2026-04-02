@@ -8,8 +8,8 @@ import {
     TextInput,
     Platform,
     Share,
-    Alert,
 } from 'react-native';
+import { useToast } from '../contexts/ToastContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LogService, LogEntry, LogLevel } from '../services/LogService';
 
@@ -45,6 +45,7 @@ export const LogViewerScreen = ({ onClose }: LogViewerScreenProps) => {
     const [logs, setLogs] = useState<LogEntry[]>(LogService.getLogs());
     const [filter, setFilter] = useState<Filter>('all');
     const [search, setSearch] = useState('');
+    const { showToast } = useToast();
 
     useEffect(() => {
         const unsub = LogService.subscribe(setLogs);
@@ -64,16 +65,14 @@ export const LogViewerScreen = ({ onClose }: LogViewerScreenProps) => {
         try {
             await Share.share({ message: text, title: 'Spindare Logs' });
         } catch {
-            Alert.alert('Export failed', 'Could not open share sheet.');
+            showToast('Could not open share sheet.', { type: 'error' });
         }
-    }, [logs]);
+    }, [logs, showToast]);
 
     const handleClear = useCallback(() => {
-        Alert.alert('Clear Logs', 'Delete all logs?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Clear', style: 'destructive', onPress: () => LogService.clear() },
-        ]);
-    }, []);
+        LogService.clear();
+        showToast('Logs cleared.', { type: 'success' });
+    }, [showToast]);
 
     const renderItem = ({ item }: { item: LogEntry }) => {
         const color = LEVEL_COLORS[item.level];

@@ -138,7 +138,7 @@ export const NotificationService = {
 
     // Subscribe to current user's notifications
     subscribeToNotifications(userId: string, callback: (notifs: Notification[]) => void) {
-        if (!userId) return () => { };
+        if (typeof userId !== 'string' || userId.length === 0 || typeof callback !== 'function') return () => { };
 
         const fetchNotifs = async () => {
             const { data } = await supabase

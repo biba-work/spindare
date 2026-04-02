@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated, Dimensions, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useToast } from '../contexts/ToastContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
@@ -40,6 +41,8 @@ export const MediaSelectionScreen = ({ onSelect, onClose, challenge }: MediaSele
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(height * 0.3)).current;
 
+    const { showToast } = useToast();
+
     useEffect(() => {
         Animated.parallel([
             Animated.timing(fadeAnim, {
@@ -62,8 +65,7 @@ export const MediaSelectionScreen = ({ onSelect, onClose, challenge }: MediaSele
         if (type === 'camera') {
             const { status } = await Camera.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-                alert('Permission to access camera is required to take photos.');
-                return;
+            showToast('Permission to access camera is required to take photos.', { type: 'error' });
             }
 
             const result = await ImagePicker.launchCameraAsync({
@@ -79,8 +81,7 @@ export const MediaSelectionScreen = ({ onSelect, onClose, challenge }: MediaSele
         } else if (type === 'gallery') {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                alert('Permission to access gallery is required to select photos.');
-                return;
+            showToast('Permission to access gallery is required to select photos.', { type: 'error' });
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({

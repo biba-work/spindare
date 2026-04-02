@@ -468,7 +468,7 @@ export const MainFeedScreen = () => {
                                                 onPress={() => { toggleSearch(false); handleProfilePress(u.uid || '', u.username, u.photoURL || ''); }}
                                                 style={({ pressed }) => [s.resultRow, pressed && { opacity: 0.6 }]}
                                             >
-                                                <Image source={{ uri: u.photoURL || Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri }} style={s.resultAvatar} />
+                                                <Image source={{ uri: u.photoURL || Image.resolveAssetSource(require('../../assets/icon.png')).uri }} style={s.resultAvatar} />
                                                 <Text style={[s.resultName, darkMode && { color: '#E5E5EA' }]}>@{u.username}</Text>
                                             </Pressable>
                                         ))}

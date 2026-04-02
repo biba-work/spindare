@@ -332,9 +332,7 @@ const PostItem = memo(({
                     <Pressable onPress={handleProfilePress} disabled={isOwner} style={s.avatarWrap}>
                         <Image
                             source={{
-                                uri: (post.author === 'rashica07' || post.author === 'example')
-                                    ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
-                                    : (post.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&q=80')
+                                uri: post.avatar || Image.resolveAssetSource(require('../../assets/icon.png')).uri
                             }}
                             style={s.avatar}
                         />

@@ -14,11 +14,12 @@ interface SpinWheelProps {
     onSpinEnd: (result: string) => void;
     canSpin: boolean;
     onPress?: () => void;
+    onSpinStart?: () => void;
 }
 
 
 
-export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelProps) => {
+export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress, onSpinStart }: SpinWheelProps) => {
     const { darkMode } = useTheme();
     const rotation = useRef(new Animated.Value(0)).current;
 
@@ -110,6 +111,7 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress }: SpinWheelPro
 
             setIsSpinning(true);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            if (onSpinStart) onSpinStart();
 
             Animated.decay(rotation, {
                 velocity: velocity / 15,

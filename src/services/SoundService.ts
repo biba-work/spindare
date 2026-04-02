@@ -5,9 +5,11 @@ import * as Haptics from 'expo-haptics';
 // Dynamic require — if expo-av isn't installed yet, Audio stays null and sounds are silently skipped
 let Audio: any = null;
 try {
-    Audio = require('expo-av').Audio;
-} catch {
-    console.warn('[SoundService] expo-av not installed — sounds disabled, haptics still work');
+    const expoAv: any = require('expo-av');
+    Audio = expoAv.Audio ?? expoAv.default?.Audio ?? expoAv;
+    if (!Audio) throw new Error('expo-av did not expose Audio');
+} catch (err) {
+    console.warn('[SoundService] expo-av not installed or failed to load — sounds disabled, haptics still work', err);
 }
 
 // ── Sound assets ─────────────────────────────────────────────────────────────
@@ -30,11 +32,18 @@ async function ensureAudio() {
     if (!Audio || audioReady) return;
     try {
         await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: false,   // respect the silent switch on iPhone
+            allowsRecordingIOS: false,
+            interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+            playsInSilentModeIOS: true,   // allow app sounds even when the device is muted
             staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+            interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+            playThroughEarpieceAndroid: false,
         });
         audioReady = true;
-    } catch { /* non-fatal */ }
+    } catch (err) {
+        console.warn('[SoundService] failed to set audio mode', err);
+    }
 }
 
 async function getSound(key: SoundKey): Promise<any | null> {

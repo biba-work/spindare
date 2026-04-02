@@ -63,6 +63,7 @@ const MessageIcon = ({ color }: { color: string }) => (
 interface OverlayProps {
     visible: boolean;
     type: 'saved' | 'notifications';
+    userId?: string;
     onClose: () => void;
     data: string[];
     onAction: (item: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
@@ -81,7 +82,7 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, userId, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
     const { darkMode } = useTheme();
     const scrollOffset = useRef(0);
     const dragY = useRef(new Animated.Value(0)).current;
@@ -126,17 +127,17 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
     const [requests, setRequests] = useState<any[]>([]);
 
     React.useEffect(() => {
-        if (visible && type === 'notifications') {
-            const notifUnsub = NotificationService.subscribeToNotifications(setNotifications);
-            const reqUnsub = SocialService.subscribeToRequests(setRequests);
+        if (visible && type === 'notifications' && userId) {
+            const notifUnsub = NotificationService.subscribeToNotifications(userId, setNotifications);
+            const reqUnsub = SocialService.subscribeToRequests(userId, setRequests);
             // Mark all as read when opening
-            NotificationService.markAllAsRead();
+            NotificationService.markAllAsRead(userId);
             return () => {
-                notifUnsub();
-                reqUnsub();
+                notifUnsub?.();
+                reqUnsub?.();
             };
         }
-    }, [visible, type]);
+    }, [visible, type, userId]);
 
     if (!visible) return null;
 
@@ -169,7 +170,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                                             style={styles.notifAvatarContainer}
                                         >
                                             <Image
-                                                source={{ uri: req.photoURL || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                                source={{ uri: req.photoURL || Image.resolveAssetSource(require('../../../assets/icon.png')).uri }}
                                                 style={styles.notifAvatar}
                                             />
                                         </Pressable>
@@ -215,7 +216,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
                                 style={styles.notifAvatarContainer}
                             >
                                 <Image
-                                    source={{ uri: notif.fromAvatar || Image.resolveAssetSource(require('../../../assets/rashica_pfp.jpg')).uri }}
+                                    source={{ uri: notif.fromAvatar || Image.resolveAssetSource(require('../../../assets/icon.png')).uri }}
                                     style={styles.notifAvatar}
                                 />
                             </Pressable>

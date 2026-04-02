@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions, Animated, Pressable, Platform, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
+import { useToast } from '../contexts/ToastContext';
 import { ReactionButton } from '../components/atoms/ReactionButton';
 import { AIService, UserProfile } from '../services/AIService';
 import { Post, PostService } from '../services/PostService';
@@ -230,11 +231,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { SoundService } from '../services/SoundService';
+import { SocialService } from '../services/SocialService';
 import { useTheme } from '../contexts/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 
 export const ChallengeScreen = () => {
     const { darkMode } = useTheme();
+    const { showToast } = useToast();
     const [challenge, setChallenge] = useState<string | null>(null);
     const [reaction, setReaction] = useState<string | null>(null);
     // ... rest of state
@@ -246,6 +249,7 @@ export const ChallengeScreen = () => {
     const [isAILoading, setIsAILoading] = useState(false);
     const [isAIChallenge, setIsAIChallenge] = useState(false);
     const [proofMode, setProofMode] = useState(false);
+    const [lastRejectTimestamp, setLastRejectTimestamp] = useState<number | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
 
     // ... mocked user profile logic ...
@@ -372,7 +376,7 @@ export const ChallengeScreen = () => {
         if (type === 'camera') {
             const { status } = await Camera.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-                alert('Permission to access camera is required to take photos.');
+                showToast('Permission to access camera is required to take photos.', { type: 'error' });
                 return;
             }
 
@@ -390,7 +394,7 @@ export const ChallengeScreen = () => {
         } else if (type === 'gallery') {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                alert('Permission to access gallery is required to select photos.');
+                showToast('Permission to access gallery is required to select photos.', { type: 'error' });
                 return;
             }
 
@@ -469,20 +473,41 @@ export const ChallengeScreen = () => {
             )}
 
             {!proofMode ? (
-                <View style={styles.actionRow}>
-                    <Animated.View style={{ flex: 1, opacity: actionBtnAnim1, transform: [{ translateY: actionBtnAnim1.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
-                        <Pressable style={styles.actionBtn} onPress={showShare}>
-                            <ShareIcon color="#8E8E93" />
-                            <Text style={styles.actionBtnText}>SEND</Text>
+                <>
+                    <View style={styles.actionRow}>
+                        <Animated.View style={{ flex: 1, opacity: actionBtnAnim1, transform: [{ translateY: actionBtnAnim1.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
+                            <Pressable style={styles.actionBtn} onPress={showShare}>
+                                <ShareIcon color="#8E8E93" />
+                                <Text style={styles.actionBtnText}>SEND</Text>
+                            </Pressable>
+                        </Animated.View>
+                        <Animated.View style={{ flex: 1, opacity: actionBtnAnim2, transform: [{ translateY: actionBtnAnim2.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
+                            <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
+                                <CheckIcon color="#FAF9F6" />
+                                <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
+                            </Pressable>
+                        </Animated.View>
+                    </View>
+
+                    <View style={styles.bottomControls}>
+                        <Pressable style={styles.saveLaterBtn} onPress={handleSaveForLater}>
+                            <ClockIcon color="#AEAEB2" />
+                            <Text style={styles.saveLaterText}>Save for later</Text>
                         </Pressable>
-                    </Animated.View>
-                    <Animated.View style={{ flex: 1, opacity: actionBtnAnim2, transform: [{ translateY: actionBtnAnim2.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
-                        <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
-                            <CheckIcon color="#FAF9F6" />
-                            <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
+                        <Pressable
+                            style={[styles.rejectBtn, !canRejectAgain() && styles.disabledButton]}
+                            onPress={handleRejectChallenge}
+                            disabled={!canRejectAgain() || isAILoading}
+                        >
+                            <Text style={[styles.saveLaterText, !canRejectAgain() && { color: '#8E8E93' }]}>
+                                {isAILoading ? 'Generating...' : 'Not this one'}
+                            </Text>
                         </Pressable>
-                    </Animated.View>
-                </View>
+                        {!canRejectAgain() && (
+                            <Text style={styles.saveLaterHint}>One retry every 5 minutes</Text>
+                        )}
+                    </View>
+                </>
             ) : (
                 <View style={styles.proofContainer}>
                     <View style={styles.proofIconsRow}>
@@ -609,7 +634,12 @@ export const ChallengeScreen = () => {
                     <View style={styles.centerSection}>
                         {!challenge ? (
                             <View style={styles.wheelWrapper}>
-                                <SpinWheel options={WHEEL_SEGMENTS} onSpinEnd={handleSpinEnd} canSpin={!isGenerating} />
+                                <SpinWheel
+                                    options={WHEEL_SEGMENTS}
+                                    onSpinEnd={handleSpinEnd}
+                                    onSpinStart={SoundService.spinStart}
+                                    canSpin={!isGenerating}
+                                />
                                 <View style={styles.instructionContainer}>
                                     <View style={styles.swipeIndicator} />
                                     <Text style={styles.instructionText}>Spin the wheel</Text>
@@ -835,8 +865,32 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 12,
     },
-    saveLaterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 16 },
-    saveLaterText: { color: '#A7BBC7', fontSize: 13, fontWeight: '500' },
+    saveLaterBtn: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        borderRadius: 18,
+        backgroundColor: '#E9EFF5',
+        borderWidth: 1,
+        borderColor: '#D1D1D6',
+        marginTop: 16,
+    },
+    saveLaterText: { color: '#2D3A4B', fontSize: 14, fontWeight: '600' },
+    bottomControls: { marginTop: 16, width: '100%' },
+    rejectBtn: {
+        width: '100%',
+        marginTop: 10,
+        paddingVertical: 14,
+        borderRadius: 18,
+        backgroundColor: '#DDE3EB',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    disabledButton: { opacity: 0.55 },
+    saveLaterHint: { marginTop: 8, color: '#7E8D9D', fontSize: 12, textAlign: 'center' },
     resetButton: { marginTop: 48, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 24, backgroundColor: '#FFF', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
     resetText: { color: '#AEAEB2', fontSize: 11, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 2, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     footer: { alignItems: 'center', paddingBottom: 20 },

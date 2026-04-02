@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Switch, Platform, TextInput, ImageBackground, PanResponder, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useToast } from '../contexts/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
@@ -120,9 +121,12 @@ export const ProfileScreen = ({
 
     // Global Theme
     const { darkMode, toggleTheme } = useTheme();
+    const { showToast } = useToast();
 
     const [soundEffects, setSoundEffects] = useState(true);
     const [notifications, setNotifications] = useState(true);
+    const [privateAccount, setPrivateAccount] = useState(false);
+    const [activityStatus, setActivityStatus] = useState(true);
     const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main'); // kept for compat but no longer used
     const [userPosts, setUserPosts] = useState<Post[]>([]);
 
@@ -181,10 +185,10 @@ export const ProfileScreen = ({
             onUpdateProfile({ username: newUsername });
 
             if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert("Success", "Username updated! It may take a moment for changes to appear everywhere.");
+            showToast("Username updated! It may take a moment for changes to appear everywhere.", { type: 'success' });
         } catch (error: any) {
             console.error("Username update failed:", error);
-            Alert.alert("Error", `Could not update username: ${error.message || 'Unknown error'}`);
+            showToast(`Could not update username: ${error.message || 'Unknown error'}`, { type: 'error' });
             setEditUsername(userProfile.username); // Revert on error
         }
     };
@@ -254,7 +258,7 @@ export const ProfileScreen = ({
     const handleCamera = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Camera access is required.');
+            showToast('Camera access is required.', { type: 'error' });
             return;
         }
 
@@ -273,7 +277,7 @@ export const ProfileScreen = ({
     const handleGallery = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Gallery access is required.');
+            showToast('Gallery access is required.', { type: 'error' });
             return;
         }
 
@@ -309,11 +313,11 @@ export const ProfileScreen = ({
             );
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert("Posted! 🎉", "Your challenge has been shared with the community!");
+            showToast("Your challenge has been shared with the community!", { type: 'success' });
             closeSpinner();
         } catch (error: any) {
             console.error("Post submission error:", error);
-            Alert.alert("Error", "Could not post your challenge. Please try again.");
+            showToast("Could not post your challenge. Please try again.", { type: 'error' });
         } finally {
             setIsSubmittingChallenge(false);
         }
@@ -338,10 +342,56 @@ export const ProfileScreen = ({
         }).start(() => setShowSettings(false));
     };
 
+    const openSupportEmail = async (subject: string) => {
+        const url = `mailto:support@spindare.app?subject=${encodeURIComponent(subject)}`;
+        try {
+            await Linking.openURL(url);
+        } catch (error) {
+            showToast('Unable to open email. Please make sure your device can send email.', { type: 'error' });
+        }
+    };
+
+    const handleSettingsOption = (option: string) => {
+        switch (option) {
+            case 'email':
+                return showToast('Update your email in account settings.', { type: 'info' });
+            case 'security':
+                return showToast('Change your password, enable 2FA, or review active sessions.', { type: 'info' });
+            case 'linkedAccounts':
+                return showToast('Connect other social accounts here once supported.', { type: 'info' });
+            case 'language':
+                return showToast('Language support will be available soon.', { type: 'info' });
+            case 'accessibility':
+                return showToast('Accessibility options will arrive in a future release.', { type: 'info' });
+            case 'messages':
+                return showToast('Control message preferences from your notification settings.', { type: 'info' });
+            case 'blockedAccounts':
+                return showToast('No blocked users yet.', { type: 'info' });
+            case 'downloadData':
+                return showToast('A data export request has been received. We will email you when it is ready.', { type: 'info' });
+            case 'helpCenter':
+                return openSupportEmail('Help Center');
+            case 'contactUs':
+                return openSupportEmail('Contact Us');
+            case 'reportProblem':
+                return openSupportEmail('Report a Problem');
+            case 'about':
+                return showToast('Spindare is an anti-scroll social experiment built to help you try physical world challenges.', { type: 'info' });
+            case 'terms':
+                return Linking.openURL('https://spindare.app/terms').catch(() => showToast('Unable to open link. Please try again later.', { type: 'error' }));
+            case 'privacy':
+                return Linking.openURL('https://spindare.app/privacy').catch(() => showToast('Unable to open link. Please try again later.', { type: 'error' }));
+            case 'guidelines':
+                return Linking.openURL('https://spindare.app/guidelines').catch(() => showToast('Unable to open link. Please try again later.', { type: 'error' }));
+            default:
+                return showToast('This action is not available yet.', { type: 'info' });
+        }
+    };
+
     const handleUpdatePfp = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Gallery access is required.');
+            showToast('Gallery access is required.', { type: 'error' });
             return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -357,7 +407,7 @@ export const ProfileScreen = ({
                 if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (err) {
                 console.error("Error uploading PFP:", err);
-                Alert.alert("Error", "Could not upload profile picture.");
+                showToast("Could not upload profile picture.", { type: 'error' });
             }
         }
     };
@@ -398,9 +448,7 @@ export const ProfileScreen = ({
                             <Pressable onPress={handleUpdatePfp} style={styles.pfpContainer}>
                                 <Image
                                     source={{
-                                        uri: (userProfile.username === 'rashica07' || userProfile.username === 'example' || !userProfile.photoURL)
-                                            ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
-                                            : userProfile.photoURL
+                                        uri: userProfile.photoURL || Image.resolveAssetSource(require('../../assets/icon.png')).uri
                                     }}
                                     style={styles.pfp}
                                 />
@@ -521,9 +569,7 @@ export const ProfileScreen = ({
                                 >
                                     <Image
                                         source={{
-                                            uri: (userProfile.username === 'rashica07' || !userProfile.photoURL)
-                                                ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
-                                                : userProfile.photoURL
+                                            uri: userProfile.photoURL || Image.resolveAssetSource(require('../../assets/icon.png')).uri
                                         }}
                                         style={styles.stAvatar}
                                     />
@@ -569,7 +615,7 @@ export const ProfileScreen = ({
                                 {/* ─── ACCOUNT ────────────────────────────────── */}
                                 <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Account</Text>
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('email')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="mail" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -577,7 +623,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('security')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="key" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -585,7 +631,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('linkedAccounts')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="shield-checkmark" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -610,7 +656,7 @@ export const ProfileScreen = ({
                                         />
                                     </View>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('language')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="language" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -619,7 +665,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('accessibility')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="accessibility" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -657,7 +703,7 @@ export const ProfileScreen = ({
                                         />
                                     </View>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('messages')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="mail-unread" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -677,7 +723,7 @@ export const ProfileScreen = ({
                                             <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Private account</Text>
                                             <Text style={styles.stSublabel}>Only followers see your posts</Text>
                                         </View>
-                                        <Switch value={false} onValueChange={() => {}} trackColor={{ false: '#E5E5EA', true: '#007AFF' }} thumbColor="#FFF" />
+                                        <Switch value={privateAccount} onValueChange={setPrivateAccount} trackColor={{ false: '#E5E5EA', true: '#007AFF' }} thumbColor="#FFF" />
                                     </View>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <View style={[styles.stRow, darkMode && styles.stRowDark]}>
@@ -688,10 +734,10 @@ export const ProfileScreen = ({
                                             <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Activity status</Text>
                                             <Text style={styles.stSublabel}>Others can see when you're active</Text>
                                         </View>
-                                        <Switch value={true} onValueChange={() => {}} trackColor={{ false: '#E5E5EA', true: '#34C759' }} thumbColor="#FFF" />
+                                        <Switch value={activityStatus} onValueChange={setActivityStatus} trackColor={{ false: '#E5E5EA', true: '#34C759' }} thumbColor="#FFF" />
                                     </View>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('blockedAccounts')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="ban" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -699,7 +745,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('downloadData')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="download" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -711,7 +757,7 @@ export const ProfileScreen = ({
                                 {/* ─── SUPPORT & ABOUT ────────────────────────── */}
                                 <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Support & About</Text>
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('helpCenter')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="help-circle" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -719,7 +765,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('contactUs')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="chatbubble-ellipses" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -727,7 +773,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('reportProblem')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="flag" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -735,7 +781,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('about')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="information-circle" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -748,7 +794,7 @@ export const ProfileScreen = ({
                                 {/* ─── LEGAL ──────────────────────────────────── */}
                                 <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Legal</Text>
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('terms')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="document-text" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -756,7 +802,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('privacy')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="eye" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
@@ -764,7 +810,7 @@ export const ProfileScreen = ({
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
-                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                    <Pressable onPress={() => handleSettingsOption('guidelines')} style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
                                             <Ionicons name="people" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>

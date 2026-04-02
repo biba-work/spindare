@@ -1,5 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAuth, useClerk, useUser } from '@clerk/clerk-expo';
+import { useToast } from '../contexts/ToastContext';
 
 export const Show = ({ when, children }: { when: 'signed-in' | 'signed-out', children: React.ReactNode }) => {
   const { isLoaded, isSignedIn } = useAuth();
@@ -14,9 +15,10 @@ export const Show = ({ when, children }: { when: 'signed-in' | 'signed-out', chi
 
 export const SignInButton = () => {
   const { signOut } = useAuth();
+  const { showToast } = useToast();
   
   const handlePress = () => {
-    Alert.alert("Clerk Sign In", "This button is now functional! You can now integrate your custom login flow here.");
+    showToast("Sign in flow started", { type: 'info' });
     console.log("Sign In pressed");
   };
 
@@ -31,8 +33,10 @@ export const SignInButton = () => {
 };
 
 export const SignUpButton = () => {
+  const { showToast } = useToast();
+
   const handlePress = () => {
-    Alert.alert("Clerk Sign Up", "This button is now functional! Integrate your signup flow here.");
+    showToast("Sign up flow started", { type: 'info' });
     console.log("Sign Up pressed");
   };
 

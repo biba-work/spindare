@@ -175,7 +175,7 @@ export const ImageViewer = ({ imageUri, children, onTap }: ImageViewerProps) => 
             </TapGestureHandler>
 
             {/* Overlay content (reactions, text) */}
-            <Animated.View style={[styles.overlayContainer, { opacity: overlayOpacity }]} pointerEvents={overlayVisible ? 'auto' : 'none'}>
+            <Animated.View style={[styles.overlayContainer, { opacity: overlayOpacity }]} pointerEvents={overlayVisible ? 'box-none' : 'none'}>
                 {children}
             </Animated.View>
 

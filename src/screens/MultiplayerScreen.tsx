@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Animated, Pressable, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useToast } from '../contexts/ToastContext';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
@@ -10,6 +11,20 @@ export const MultiplayerScreen = ({ onClose }: { onClose: () => void }) => {
     const [tab, setTab] = useState<'code' | 'qr'>('code');
     const [rounds, setRounds] = useState(5);
     const [code, setCode] = useState('');
+    const { showToast } = useToast();
+
+    const handleStartSession = () => {
+        showToast(`Session started with ${rounds} rounds. Invite code 734 621`, { type: 'success' });
+    };
+
+    const handleJoinNow = () => {
+        const trimmed = code.replace(/\s+/g, '');
+        if (trimmed.length !== 6) {
+            showToast('Enter a valid 6-digit server code to join.', { type: 'info' });
+            return;
+        }
+        showToast(`Joined server ${trimmed}`, { type: 'success' });
+    };
 
     const renderMain = () => (
         <View style={styles.menu}>
@@ -69,7 +84,7 @@ export const MultiplayerScreen = ({ onClose }: { onClose: () => void }) => {
                         </Pressable>
                     ))}
                 </View>
-                <Pressable style={styles.startBtn}>
+                <Pressable style={styles.startBtn} onPress={handleStartSession}>
                     <Text style={styles.startText}>START SESSION</Text>
                 </Pressable>
             </View>
@@ -99,7 +114,7 @@ export const MultiplayerScreen = ({ onClose }: { onClose: () => void }) => {
                         value={code}
                         onChangeText={setCode}
                     />
-                    <Pressable style={[styles.startBtn, code.length === 6 && styles.startBtnActive]}>
+                    <Pressable style={[styles.startBtn, code.length === 6 && styles.startBtnActive]} onPress={handleJoinNow}>
                         <Text style={styles.startText}>JOIN NOW</Text>
                     </Pressable>
                 </View>
