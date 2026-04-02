@@ -354,11 +354,11 @@ export const ProfileScreen = ({
     const handleSettingsOption = (option: string) => {
         switch (option) {
             case 'email':
-                return showToast('Update your email in account settings.', { type: 'info' });
+                return openSupportEmail('Update email address');
             case 'security':
-                return showToast('Change your password, enable 2FA, or review active sessions.', { type: 'info' });
+                return openSupportEmail('Security support');
             case 'linkedAccounts':
-                return showToast('Connect other social accounts here once supported.', { type: 'info' });
+                return openSupportEmail('Linked accounts');
             case 'language':
                 return showToast('Language support will be available soon.', { type: 'info' });
             case 'accessibility':
@@ -368,7 +368,7 @@ export const ProfileScreen = ({
             case 'blockedAccounts':
                 return showToast('No blocked users yet.', { type: 'info' });
             case 'downloadData':
-                return showToast('A data export request has been received. We will email you when it is ready.', { type: 'info' });
+                return openSupportEmail('Data export request');
             case 'helpCenter':
                 return openSupportEmail('Help Center');
             case 'contactUs':

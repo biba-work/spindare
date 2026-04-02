@@ -473,56 +473,171 @@ export const ChallengeScreen = () => {
             )}
 
             {!proofMode ? (
-                <>
-                    <View style={styles.actionRow}>
-                        <Animated.View style={{ flex: 1, opacity: actionBtnAnim1, transform: [{ translateY: actionBtnAnim1.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
-                            <Pressable style={styles.actionBtn} onPress={showShare}>
-                                <ShareIcon color="#8E8E93" />
-                                <Text style={styles.actionBtnText}>SEND</Text>
-                            </Pressable>
-                        </Animated.View>
-                        <Animated.View style={{ flex: 1, opacity: actionBtnAnim2, transform: [{ translateY: actionBtnAnim2.interpolate({ inputRange: [0,1], outputRange: [16, 0] }) }] }}>
-                            <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
-                                <CheckIcon color="#FAF9F6" />
-                                <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
-                            </Pressable>
-                        </Animated.View>
-                    </View>
-
-                    <View style={styles.bottomControls}>
-                        <Pressable style={styles.saveLaterBtn} onPress={handleSaveForLater}>
-                            <ClockIcon color="#AEAEB2" />
-                            <Text style={styles.saveLaterText}>Save for later</Text>
+                <View style={styles.actionRow}>
+                    <Animated.View
+                        style={[
+                            styles.actionBtnWrapper,
+                            {
+                                opacity: actionBtnAnim1,
+                                transform: [
+                                    { translateY: actionBtnAnim1.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                ],
+                            }
+                        ]}
+                        renderToHardwareTextureAndroid={true}
+                    >
+                        <Pressable style={styles.actionBtn} onPress={showShare}>
+                            <ShareIcon color="#8E8E93" />
+                            <Text style={styles.actionBtnText}>SEND</Text>
                         </Pressable>
-                        <Pressable
-                            style={[styles.rejectBtn, !canRejectAgain() && styles.disabledButton]}
-                            onPress={handleRejectChallenge}
-                            disabled={!canRejectAgain() || isAILoading}
-                        >
-                            <Text style={[styles.saveLaterText, !canRejectAgain() && { color: '#8E8E93' }]}>
-                                {isAILoading ? 'Generating...' : 'Not this one'}
-                            </Text>
+                    </Animated.View>
+                    <Animated.View
+                        style={[
+                            styles.actionBtnWrapper,
+                            {
+                                opacity: actionBtnAnim2,
+                                transform: [
+                                    { translateY: actionBtnAnim2.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                ],
+                            }
+                        ]}
+                        renderToHardwareTextureAndroid={true}
+                    >
+                        <Pressable style={[styles.actionBtn, styles.primaryActionBtn]} onPress={() => setProofMode(true)}>
+                            <CheckIcon color="#FAF9F6" />
+                            <Text style={[styles.actionBtnText, { color: '#FAF9F6' }]}>DO IT</Text>
                         </Pressable>
-                        {!canRejectAgain() && (
-                            <Text style={styles.saveLaterHint}>One retry every 5 minutes</Text>
-                        )}
-                    </View>
-                </>
+                    </Animated.View>
+                </View>
             ) : (
                 <View style={styles.proofContainer}>
                     <View style={styles.proofIconsRow}>
-                        <Animated.View style={{ opacity: proofIconAnim1, transform: [{ scale: proofIconAnim1 }, { translateY: proofIconAnim1.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
-                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('camera')}>
+                        <Animated.View
+                            style={[
+                                {
+                                    opacity: proofIconAnim1,
+                                    transform: [
+                                        { scale: proofIconAnim1.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
+                                        { translateY: proofIconAnim1.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                    ],
+                                }
+                            ]}
+                            renderToHardwareTextureAndroid={true}
+                        >
+                            <Pressable
+                                style={styles.proofIconBtn}
+                                onPressIn={() => {
+                                    Animated.spring(proofIconAnim1, {
+                                        toValue: 0.88,
+                                        useNativeDriver: true,
+                                        friction: 3,
+                                        tension: 180,
+                                    }).start();
+                                }}
+                                onPressOut={() => {
+                                    Animated.sequence([
+                                        Animated.spring(proofIconAnim1, {
+                                            toValue: 1.1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                        Animated.spring(proofIconAnim1, {
+                                            toValue: 1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                    ]).start();
+                                }}
+                                onPress={() => handleMediaAction('camera')}
+                            >
                                 <CameraIcon color="#FAF9F6" />
                             </Pressable>
                         </Animated.View>
-                        <Animated.View style={{ opacity: proofIconAnim2, transform: [{ scale: proofIconAnim2 }, { translateY: proofIconAnim2.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
-                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('gallery')}>
+                        <Animated.View
+                            style={[
+                                {
+                                    opacity: proofIconAnim2,
+                                    transform: [
+                                        { scale: proofIconAnim2.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
+                                        { translateY: proofIconAnim2.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                    ],
+                                }
+                            ]}
+                            renderToHardwareTextureAndroid={true}
+                        >
+                            <Pressable
+                                style={styles.proofIconBtn}
+                                onPressIn={() => {
+                                    Animated.spring(proofIconAnim2, {
+                                        toValue: 0.88,
+                                        useNativeDriver: true,
+                                        friction: 3,
+                                        tension: 180,
+                                    }).start();
+                                }}
+                                onPressOut={() => {
+                                    Animated.sequence([
+                                        Animated.spring(proofIconAnim2, {
+                                            toValue: 1.1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                        Animated.spring(proofIconAnim2, {
+                                            toValue: 1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                    ]).start();
+                                }}
+                                onPress={() => handleMediaAction('gallery')}
+                            >
                                 <GalleryIcon color="#FAF9F6" />
                             </Pressable>
                         </Animated.View>
-                        <Animated.View style={{ opacity: proofIconAnim3, transform: [{ scale: proofIconAnim3 }, { translateY: proofIconAnim3.interpolate({inputRange:[0,1],outputRange:[20,0]}) }] }} renderToHardwareTextureAndroid={true}>
-                            <Pressable style={styles.proofIconBtn} onPress={() => handleMediaAction('text')}>
+                        <Animated.View
+                            style={[
+                                {
+                                    opacity: proofIconAnim3,
+                                    transform: [
+                                        { scale: proofIconAnim3.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }) },
+                                        { translateY: proofIconAnim3.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }
+                                    ],
+                                }
+                            ]}
+                            renderToHardwareTextureAndroid={true}
+                        >
+                            <Pressable
+                                style={styles.proofIconBtn}
+                                onPressIn={() => {
+                                    Animated.spring(proofIconAnim3, {
+                                        toValue: 0.88,
+                                        useNativeDriver: true,
+                                        friction: 3,
+                                        tension: 180,
+                                    }).start();
+                                }}
+                                onPressOut={() => {
+                                    Animated.sequence([
+                                        Animated.spring(proofIconAnim3, {
+                                            toValue: 1.1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                        Animated.spring(proofIconAnim3, {
+                                            toValue: 1,
+                                            useNativeDriver: true,
+                                            friction: 3,
+                                            tension: 180,
+                                        }),
+                                    ]).start();
+                                }}
+                                onPress={() => handleMediaAction('text')}
+                            >
                                 <TextIcon color="#FAF9F6" />
                             </Pressable>
                         </Animated.View>
@@ -535,27 +650,6 @@ export const ChallengeScreen = () => {
             )}
         </>
     );
-
-    useEffect(() => {
-        const unsubscribe = PostService.subscribeToFeed((updatedPosts) => {
-            setPosts(updatedPosts);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        if (proofMode) {
-            Animated.stagger(60, [
-                Animated.spring(proofIconAnim1, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
-                Animated.spring(proofIconAnim2, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
-                Animated.spring(proofIconAnim3, { toValue: 1, useNativeDriver: true, friction: 5, tension: 40 }),
-            ]).start();
-        } else {
-            proofIconAnim1.setValue(0);
-            proofIconAnim2.setValue(0);
-            proofIconAnim3.setValue(0);
-        }
-    }, [proofMode]);
 
     useEffect(() => {
         if (challenge) {
@@ -610,9 +704,80 @@ export const ChallengeScreen = () => {
             SoundService.challengeDone();
         } catch (err) {
             console.error("AI personalise error:", err);
+            showToast('Could not personalise the challenge right now.', { type: 'error' });
         } finally {
             setIsAILoading(false);
         }
+    };
+
+    const canRejectAgain = () => {
+        return !lastRejectTimestamp || Date.now() - lastRejectTimestamp > 5 * 60 * 1000;
+    };
+
+    const handleSaveForLater = async () => {
+        if (!challenge) return;
+
+        if (userId) {
+            try {
+                await SocialService.saveChallenge(userId, challenge);
+                showToast('Saved challenge for later');
+            } catch (err) {
+                console.warn('Save for later failed:', err);
+                showToast('Could not save challenge right now.', { type: 'error' });
+            }
+        }
+
+        setChallenge(null);
+        setProofMode(false);
+        setReaction(null);
+    };
+
+    const handleRejectChallenge = async () => {
+        if (!canRejectAgain() || isAILoading) return;
+
+        setIsAILoading(true);
+        SoundService.tap();
+
+        try {
+            const aiChallenge = await AIService.generateChallenge({
+                ...userProfile,
+                userId: userId || 'anonymous',
+            });
+            setChallenge(aiChallenge);
+            setIsAIChallenge(true);
+            setLastRejectTimestamp(Date.now());
+            SoundService.challengeDone();
+        } catch (err) {
+            console.error('Challenge reroll failed:', err);
+            showToast('Could not get a new challenge. Try again later.', { type: 'error' });
+        } finally {
+            setIsAILoading(false);
+        }
+    };
+
+    const renderChallengeControls = () => {
+        if (!challenge || proofMode) return null;
+
+        return (
+            <View style={styles.bottomControls}>
+                <Pressable style={styles.saveLaterBtn} onPress={handleSaveForLater}>
+                    <ClockIcon color="#AEAEB2" />
+                    <Text style={styles.saveLaterText}>Save for later</Text>
+                </Pressable>
+                <Pressable
+                    style={[styles.rejectBtn, !canRejectAgain() && styles.disabledButton]}
+                    onPress={handleRejectChallenge}
+                    disabled={!canRejectAgain() || isAILoading}
+                >
+                    <Text style={[styles.saveLaterText, !canRejectAgain() && { color: '#8E8E93' }]}> 
+                        {isAILoading ? 'Generating...' : 'Not this one'}
+                    </Text>
+                </Pressable>
+                {!canRejectAgain() && (
+                    <Text style={styles.saveLaterHint}>One retry every 5 minutes</Text>
+                )}
+            </View>
+        );
     };
 
     return (
@@ -670,6 +835,8 @@ export const ChallengeScreen = () => {
                                         </View>
                                     </View>
                                 )}
+
+                                {renderChallengeControls()}
 
                                 <Pressable
                                     onPress={() => setChallenge(null)}

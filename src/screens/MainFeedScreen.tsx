@@ -26,9 +26,9 @@ import { SoundService } from '../services/SoundService';
 import * as ImagePicker from 'expo-image-picker';
 import { PostCreationScreen } from './PostCreationScreen';
 import { UserProfileView } from './UserProfileView';
-import { LogViewerScreen } from './LogViewerScreen';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { SearchService } from '../services/SearchService';
 import { NotificationService } from '../services/NotificationService';
 import { useAuth, useUser, useClerk } from '@clerk/clerk-expo';
@@ -99,22 +99,14 @@ export const MainFeedScreen = () => {
     const [searchResults, setSearchResults] = useState<{ users: (UserProfile & { uid?: string })[], posts: Post[] }>({ users: [], posts: [] });
     const [isMessagesVisible, setIsMessagesVisible] = useState(false);
     const [activeChat, setActiveChat] = useState<{ conversationId: string; otherUsername: string; otherAvatar: string } | null>(null);
-    const [isLogViewerVisible, setIsLogViewerVisible] = useState(false);
     const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
     const [spinsLeft, setSpinsLeft] = useState(2);
 
-    // ── Hidden log viewer ────────────────────────────────────────────────────
-    const versionTapCount = useRef(0);
-    const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { showToast } = useToast();
+
     const handleVersionTap = () => {
-        versionTapCount.current += 1;
-        if (versionTapTimer.current) clearTimeout(versionTapTimer.current);
-        versionTapTimer.current = setTimeout(() => { versionTapCount.current = 0; }, 2000);
-        if (versionTapCount.current >= 5) {
-            versionTapCount.current = 0;
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setIsLogViewerVisible(true);
-        }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        showToast('Spindare v1.1.0', { type: 'info' });
     };
 
     // ── Animations ───────────────────────────────────────────────────────────
@@ -604,8 +596,6 @@ export const MainFeedScreen = () => {
                     />
                 </View>
             )}
-
-            {isLogViewerVisible && <LogViewerScreen onClose={() => setIsLogViewerVisible(false)} />}
 
             {viewingProfile && (
                 <View style={s.fullOverlay}>

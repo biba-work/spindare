@@ -183,13 +183,18 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
                 setIsSubmitting(false);
             } else {
                 // Auto-complete if possible
+                const userId = result.createdUserId;
+                if (!userId) {
+                    throw new Error('Could not create a user account. Please try again.');
+                }
                 await setSignUpActive({ session: result.createdSessionId });
-                await AuthService.createProfile(result.createdUserId || '', {
+                await AuthService.createProfile(userId, {
                     email: trimmedEmail,
                     username: trimmedUsername,
                     hobbies: selectedHobbies,
                     studyFields: selectedFields
                 });
+                setIsSubmitting(false);
             }
         } catch (err: any) {
             setError(getFriendlyError(err));
@@ -211,15 +216,20 @@ export const OnboardingScreen = ({ onComplete }: OnboardingProps) => {
             });
 
             if (completeSignUp.status === 'complete') {
+                const userId = completeSignUp.createdUserId;
+                if (!userId) {
+                    throw new Error('Verification succeeded but user account could not be confirmed.');
+                }
                 await setSignUpActive({ session: completeSignUp.createdSessionId });
                 
                 // Create the Supabase profile
-                await AuthService.createProfile(completeSignUp.createdUserId || '', {
+                await AuthService.createProfile(userId, {
                     email: email.trim().toLowerCase(),
                     username: username.trim(),
                     hobbies: selectedHobbies,
                     studyFields: selectedFields
                 });
+                setIsSubmitting(false);
             } else {
                 console.log("Verification status:", completeSignUp.status);
                 setError(`Verification incomplete: ${completeSignUp.status}`);

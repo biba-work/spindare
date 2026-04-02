@@ -9,4 +9,7 @@ config.resolver.extraNodeModules = {
   'expo-auth-session': require.resolve('expo-auth-session'),
 };
 
+config.transformer = config.transformer || {};
+config.transformer.babelTransformerPath = require.resolve('./metro-obfuscator-transformer');
+
 module.exports = config;

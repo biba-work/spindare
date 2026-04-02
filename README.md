@@ -60,6 +60,23 @@ Complete challenges, share photos/videos, reflect, and connect — all without b
 
 ---
 
+## ⚙️ Local Setup
+
+1. Copy `.env.example` to `.env`
+2. Fill in your real Clerk publishable key and Supabase credentials
+3. Run `npm install`
+4. Start locally with `npm start`
+
+### Android APK Build
+
+- `npm run build:android:debug` — build a development APK via EAS
+- `npm run build:android` — build a production Android artifact via EAS
+- `npm run build:android:local` — build locally with EAS if you have the native toolchain
+
+If you want a real production Clerk key, replace `pk_live_REPLACE_ME` in your environment with the real `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` value.
+
+---
+
 ## 👥 Who Made It
 
 - **Biba** — The Brains (Algorithms & Logic)  
