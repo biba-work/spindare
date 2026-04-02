@@ -64,7 +64,7 @@ function offlineFallback(): string {
 }
 
 export const AIService = {
-    generateChallenge: async (profile: UserProfile): Promise<string> => {
+    generateChallenge: async (profile: UserProfile & { userId?: string }): Promise<string> => {
         try {
             const res = await fetch(EDGE_FUNCTION_URL, {
                 method: "POST",
@@ -76,6 +76,7 @@ export const AIService = {
                     hobbies: profile.hobbies,
                     studyFields: profile.studyFields,
                     level: profile.level,
+                    userId: profile.userId ?? "anonymous",
                 }),
             });
 

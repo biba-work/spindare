@@ -4,6 +4,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 import Svg, { Path, Polyline, Circle } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -87,7 +88,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
 
     const triggerSuccess = () => {
         setSuccess(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        SoundService.postSuccess();
 
         // 1. Fade in overlay
         Animated.timing(overlayOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
@@ -138,7 +139,7 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
     };
 
     const removeImage = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        SoundService.tap();
         setImageUri(null);
     };
 

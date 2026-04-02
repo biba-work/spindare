@@ -19,6 +19,7 @@ import { SocialService } from '../services/SocialService';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 import * as ImagePicker from 'expo-image-picker';
 import { PostCreationScreen } from './PostCreationScreen';
 import { UserProfileView } from './UserProfileView';
@@ -313,7 +314,7 @@ export const MainFeedScreen = () => {
     };
 
     const handleMediaAction = async (type: 'camera' | 'gallery' | 'text', itemChallenge: string) => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        SoundService.tap();
         setChallenge(itemChallenge);
         if (type === 'camera') {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();

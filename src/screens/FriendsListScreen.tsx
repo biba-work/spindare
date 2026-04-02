@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Dimensions, FlatList, Animated, Pressable, Plat
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 import { SocialService } from '../services/SocialService';
 import { ChatService } from '../services/ChatService';
 import { SearchService } from '../services/SearchService';
@@ -188,14 +189,14 @@ const FriendItem = ({ friend, onSend, darkMode }: FriendItemProps) => {
     const handleSend = async () => {
         if (!sent && !sending) {
             setSending(true);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            SoundService.tap();
             const success = await onSend();
             setSending(false);
             if (success) {
                 setSent(true);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                SoundService.postSuccess();
             } else {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                SoundService.error();
             }
         }
     };

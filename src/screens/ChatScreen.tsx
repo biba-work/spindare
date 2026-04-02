@@ -8,6 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ChatService, Message } from '../services/ChatService';
 import Svg, { Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 
 const BackIcon = ({ color }: { color: string }) => (
     <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -101,7 +102,7 @@ export const ChatScreen = ({ conversationId, currentUserId, otherUsername, other
         if (!trimmed || sending) return;
         setText('');
         setSending(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        SoundService.messageSent();
         try {
             await ChatService.sendMessage(conversationId, currentUserId, trimmed);
         } catch (e) {

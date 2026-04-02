@@ -11,22 +11,166 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
-const CHALLENGES = [
+// Wheel display segments (visual only — what the spinning wheel shows)
+const WHEEL_SEGMENTS = [
+    "Photograph silence", "Write the unsaid", "Ask a stranger",
+    "Walk screenless", "Draw your mood", "Chase a shadow",
+    "Fix something broken", "Watch the sky", "Write the unsent",
+    "Eat undistracted", "Sit in silence", "Touch textures",
+    "Ignore the mirror", "Spot the unnoticed", "Just listen",
+    "Do it now", "Change your route", "Be present",
+    "Create something", "Move your body",
+];
+
+// Full local challenge pool — spin picks from here instantly (no AI call)
+const LOCAL_CHALLENGES = [
+    // ── Observation ──────────────────────────────────────────────────────────
     "Photograph something that reminds you of silence.",
-    "Write one thing you've never told anyone.",
-    "Ask a stranger what their favourite memory is.",
-    "Walk 10 minutes without looking at any screen.",
-    "Draw how you feel using only circles.",
-    "Trace the outline of a shadow with your finger.",
-    "Find something broken and make it beautiful.",
-    "Stare at the sky for exactly 60 seconds.",
-    "Write a letter you'll never send.",
-    "Eat your next meal with zero distractions.",
-    "Spend 2 hours in complete silence.",
-    "Touch 5 different textures in the next 5 minutes.",
-    "Go the whole day without checking how you look.",
     "Photograph something that no one else would notice.",
+    "Find the most interesting texture within 10 steps of you.",
+    "Stare at the sky for exactly 60 seconds.",
+    "Watch people pass by for 5 minutes without touching your phone.",
+    "Find a shadow and trace its outline with your finger.",
+    "Look for something beautiful you'd normally walk straight past.",
+    "Spot one thing in your environment that doesn't belong.",
+    "Find the oldest object within 5 metres of you.",
+    "Notice 5 sounds you've never paid attention to before.",
+    "Find something that's been in the same place for years.",
+    "Look at a familiar place as if it's your first time seeing it.",
+    "Find the most ordinary object near you and make it interesting.",
+    "Photograph your shadow at this exact moment.",
+    "Find something that's perfectly symmetrical.",
+    "Look up. What's above you that you never notice?",
+    "Find the most forgotten thing in the room.",
+    "Spot something that's been broken but still being used.",
+    "Find a colour you haven't seen today until now.",
+    "Photograph something that moves but isn't alive.",
+    // ── Reflection ───────────────────────────────────────────────────────────
+    "Write one thing you've never told anyone.",
+    "Write a letter you'll never send.",
+    "Write 3 things you're genuinely proud of this week.",
+    "Write down what you were thinking about before you picked up your phone.",
+    "Write your current mood as a weather report.",
+    "Write the name of one person who made you better.",
+    "Write what you'd say to yourself a year ago.",
+    "Write one honest thing about today.",
+    "Write down a fear you've never said out loud.",
+    "Write one goal. Give it a deadline. Put it somewhere you'll see it.",
+    "Write what you want more of. Write what you want less of.",
+    "Think about someone you've been meaning to contact. Do it now.",
+    "Identify one thing you're avoiding. Decide if today's the day.",
+    "Think of your last 24 hours. What's one moment worth keeping?",
+    "What's one belief you hold that you've never questioned?",
+    "Reflect on a mistake you made. What would you do differently?",
+    "Name 3 things that are going right that you haven't appreciated.",
+    "Think of the last time you felt genuinely proud. What caused it?",
+    "What would you do today if you knew no one was watching?",
+    "Write your ideal day. Every hour. In detail.",
+    // ── Social ───────────────────────────────────────────────────────────────
+    "Ask a stranger what their favourite memory is.",
+    "Compliment someone in a way that's specific, not generic.",
+    "Start a conversation with someone you usually only nod at.",
+    "Text someone you haven't spoken to in over a month.",
+    "Call someone instead of texting them today.",
+    "Tell someone something you appreciate about them — out loud.",
+    "Ask someone what they're most excited about right now.",
+    "Listen to someone for 5 minutes without interrupting once.",
+    "Help someone with something without being asked.",
+    "Make someone laugh today. It counts even if it's small.",
+    "Say yes to a social plan you'd normally decline.",
+    "Ask an older person about their biggest lesson in life.",
+    "Do something kind anonymously.",
+    "Ask someone about their weekend — and actually listen.",
+    "Introduce yourself to someone you've seen around but never spoken to.",
+    "Send a voice note instead of a text today.",
+    "Tell someone how much they mean to you. Actually tell them.",
+    "Ask someone what they're struggling with right now.",
+    "Smile first at the next 5 people you see.",
+    "Write a review for someone's work or business who deserves it.",
+    // ── Movement ─────────────────────────────────────────────────────────────
+    "Walk 10 minutes without looking at any screen.",
+    "Take a completely different route to somewhere familiar.",
+    "Walk somewhere with no destination for 15 minutes.",
+    "Go outside right now. No reason needed.",
+    "Do 20 pushups before you do anything else.",
+    "Hold a plank for 1 minute.",
+    "Stretch every part of your body for 5 minutes.",
+    "Run for 5 minutes at a pace you haven't tried before.",
+    "Do 30 squats.",
+    "Walk to the furthest point you can see, then keep going.",
+    "Take the stairs instead of the lift all day.",
+    "Do 10 jumping jacks every hour for the rest of the day.",
+    "Find a hill. Walk up it.",
+    "Stand somewhere unfamiliar for 5 minutes and just exist there.",
+    "Walk somewhere without headphones. Notice what changes.",
+    "Do a 10-minute stretch. Actually 10 minutes.",
+    "Walk somewhere you've never been in your neighbourhood.",
+    "Explore a part of your city you've driven through but never walked.",
+    "Sit on the floor. Stretch. Think.",
+    "Move your body right now for exactly 2 minutes.",
+    // ── Creativity ───────────────────────────────────────────────────────────
+    "Draw how you feel using only circles.",
+    "Eat your next meal with zero distractions.",
+    "Draw something you can see in under 3 minutes.",
+    "Write 10 ideas — any ideas. Quantity over quality.",
+    "Make something with whatever is within arm's reach.",
+    "Write a poem. It doesn't need to be good.",
+    "Build something. Anything. With anything nearby.",
+    "Sketch your current view in 90 seconds.",
+    "Create a playlist that matches your exact mood right now.",
+    "Take 10 photos that tell a story without words.",
+    "Design your dream space. Describe it in detail.",
+    "Write a short story in under 5 minutes. Go.",
+    "Draw your day so far as a map.",
+    "Find an object and give it a backstory.",
+    "Rearrange something around you. Notice how it changes the feel.",
+    "Write the opening line of a book you'd actually read.",
+    "Invent a simple rule for your day and follow it.",
+    "Take one great photo. Only one. Make it count.",
+    "Write 5 questions you've never thought to ask.",
+    "Describe yourself in exactly 6 words.",
+    // ── Presence ─────────────────────────────────────────────────────────────
+    "Touch 5 different textures in the next 5 minutes.",
     "Close your eyes for 3 minutes and just listen.",
+    "Spend 2 hours in complete silence.",
+    "Go the whole day without checking how you look.",
+    "Sit somewhere quietly for 10 minutes. No phone. No music.",
+    "Put your phone face down for the next 30 minutes.",
+    "Avoid social media entirely until after 6pm.",
+    "Eat your next meal without any screen in sight.",
+    "Stay off your phone for the first hour after waking up.",
+    "Be still for 5 minutes. Just breathe.",
+    "Stop multitasking for the next hour. One thing at a time.",
+    "Notice 3 things you can feel right now. Focus on each for 30 seconds.",
+    "Notice 3 things you can hear. Focus on each for 30 seconds.",
+    "Take 10 deep breaths. Actually slow ones.",
+    "Sit in natural light for 10 minutes and do nothing.",
+    "Go one hour with all notifications off.",
+    "Meditate for 5 minutes. No app needed.",
+    "Finish your next meal before picking up your phone.",
+    "Stay present for one full conversation. No distraction.",
+    "Observe one thing in your environment changing in real time.",
+    // ── Challenge ────────────────────────────────────────────────────────────
+    "Do the hardest thing on your to-do list first.",
+    "Finish something you've been putting off for a week.",
+    "Say no to the next thing you want to say yes to out of obligation.",
+    "Do one thing today that slightly scares you.",
+    "Start something you've been 'about to start' for a month.",
+    "Fix something broken in your space that you've been ignoring.",
+    "Delete something on your phone you haven't used in 3 months.",
+    "Clean one space you've been avoiding.",
+    "Have a conversation you've been putting off.",
+    "Do one thing without checking if it's perfect first.",
+    "Wake up earlier than usual tomorrow. Decide now what you'll do with that time.",
+    "Choose one screen to turn off for the day.",
+    "Set one boundary you've been meaning to set.",
+    "Ask for something you need but haven't asked for.",
+    "Do something for future-you that present-you doesn't feel like doing.",
+    "Commit to one habit for the next 7 days. Write it down.",
+    "Spend 30 minutes on something creative, not productive.",
+    "Take a full break — no guilt — for 20 minutes.",
+    "Pick one thing to stop doing. Decide right now.",
+    "Do something that has no ROI except making you feel alive.",
 ];
 
 const SendIcon = ({ color }: { color: string }) => (
@@ -85,6 +229,7 @@ import { FriendsListScreen } from './FriendsListScreen';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
+import { SoundService } from '../services/SoundService';
 import { useTheme } from '../contexts/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
 
@@ -98,6 +243,8 @@ export const ChallengeScreen = () => {
     const [isSharing, setIsSharing] = useState(false);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isAILoading, setIsAILoading] = useState(false);
+    const [isAIChallenge, setIsAIChallenge] = useState(false);
     const [proofMode, setProofMode] = useState(false);
     const [posts, setPosts] = useState<Post[]>([]);
 
@@ -219,7 +366,7 @@ export const ChallengeScreen = () => {
 
 
     const handleMediaAction = async (type: 'camera' | 'gallery' | 'text') => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        SoundService.tap();
         setReaction(type);
 
         if (type === 'camera') {
@@ -296,11 +443,30 @@ export const ChallengeScreen = () => {
         <>
             <View style={styles.cardHeader}>
                 <View style={styles.cardLine} />
+                {isAIChallenge && (
+                    <View style={styles.aiBadge}>
+                        <Text style={styles.aiBadgeText}>✦ AI</Text>
+                    </View>
+                )}
             </View>
 
             <Text style={styles.challengeText}>
                 {challenge}
             </Text>
+
+            {!proofMode && !isAIChallenge && (
+                <Pressable
+                    onPress={handleAIPersonalise}
+                    disabled={isAILoading}
+                    style={styles.personaliseBtn}
+                >
+                    {isAILoading ? (
+                        <Text style={styles.personaliseBtnText}>Personalising...</Text>
+                    ) : (
+                        <Text style={styles.personaliseBtnText}>✦ Personalise with AI</Text>
+                    )}
+                </Pressable>
+            )}
 
             {!proofMode ? (
                 <View style={styles.actionRow}>
@@ -396,17 +562,31 @@ export const ChallengeScreen = () => {
         }
     }, [challenge]);
 
-    const handleSpinEnd = async () => {
-        setIsGenerating(true);
+    const handleSpinEnd = () => {
+        // Instant local pick — no AI call, no loading state
+        const random = LOCAL_CHALLENGES[Math.floor(Math.random() * LOCAL_CHALLENGES.length)];
+        setChallenge(random);
+        setReaction(null);
+        setIsAIChallenge(false);
+        SoundService.spinLand();
+    };
+
+    const handleAIPersonalise = async () => {
+        if (isAILoading) return;
+        setIsAILoading(true);
+        SoundService.tap();
         try {
-            const newChallenge = await AIService.generateChallenge(userProfile);
-            setChallenge(newChallenge);
-            setReaction(null);
-        } catch (error) {
-            console.error("Spin Error:", error);
-            setChallenge("Take a photo of something that reminds you of silence.");
+            const aiChallenge = await AIService.generateChallenge({
+                ...userProfile,
+                userId: userId || 'anonymous',
+            });
+            setChallenge(aiChallenge);
+            setIsAIChallenge(true);
+            SoundService.challengeDone();
+        } catch (err) {
+            console.error("AI personalise error:", err);
         } finally {
-            setIsGenerating(false);
+            setIsAILoading(false);
         }
     };
 
@@ -429,12 +609,10 @@ export const ChallengeScreen = () => {
                     <View style={styles.centerSection}>
                         {!challenge ? (
                             <View style={styles.wheelWrapper}>
-                                <SpinWheel options={CHALLENGES} onSpinEnd={handleSpinEnd} canSpin={!isGenerating} />
+                                <SpinWheel options={WHEEL_SEGMENTS} onSpinEnd={handleSpinEnd} canSpin={!isGenerating} />
                                 <View style={styles.instructionContainer}>
                                     <View style={styles.swipeIndicator} />
-                                    <Text style={styles.instructionText}>
-                                        {isGenerating ? "Consulting the AI..." : "Spin the wheel"}
-                                    </Text>
+                                    <Text style={styles.instructionText}>Spin the wheel</Text>
                                     <Text style={styles.instructionSubtext}>or swipe up for feed</Text>
                                 </View>
                             </View>
@@ -573,8 +751,37 @@ const styles = StyleSheet.create({
     cardGradient: {
         width: '100%',
     },
-    cardHeader: { alignItems: 'center', marginBottom: 24 },
+    cardHeader: { alignItems: 'center', marginBottom: 24, flexDirection: 'row', justifyContent: 'center', gap: 8 },
     cardLine: { width: 40, height: 1.5, backgroundColor: 'rgba(0,0,0,0.03)' },
+    aiBadge: {
+        backgroundColor: 'rgba(88, 86, 214, 0.12)',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    aiBadgeText: {
+        color: '#5856D6',
+        fontSize: 11,
+        fontWeight: '600',
+        letterSpacing: 0.4,
+    },
+    personaliseBtn: {
+        alignSelf: 'center',
+        marginTop: -24,
+        marginBottom: 20,
+        paddingVertical: 7,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(88, 86, 214, 0.3)',
+        backgroundColor: 'rgba(88, 86, 214, 0.06)',
+    },
+    personaliseBtnText: {
+        color: '#5856D6',
+        fontSize: 13,
+        fontWeight: '500',
+        letterSpacing: 0.2,
+    },
     challengeText: {
         color: '#2C2C2C',
         fontSize: 26,

@@ -204,13 +204,13 @@ const PostItem = memo(({
 
     const handleProfilePress = () => {
         if (!isOwner && onProfilePress) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            SoundService.tap();
             onProfilePress(post.userId, post.author, post.avatar);
         }
     };
 
     const handleChallengeAction = (action: 'send' | 'camera' | 'gallery' | 'text') => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        SoundService.tap();
         setShowChallengeMenu(false);
 
         // Notify the post author via DM that someone challenged them
@@ -230,7 +230,7 @@ const PostItem = memo(({
     };
 
     const openChallengeMenu = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        SoundService.tap();
         setShowChallengeMenu(true);
     };
 
