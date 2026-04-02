@@ -61,16 +61,48 @@ export const PostService = {
         }
     },
 
-    // Upload a video file to Supabase Storage
-    async uploadVideo(uri: string): Promise<string> {
+    // Upload a video file to Supabase Storage using streaming (no base64 OOM).
+    // Uses a signed upload URL + FileSystem.uploadAsync so the entire video
+    // is never held in JS memory — safe for files up to several hundred MB.
+    async uploadVideo(uri: string, onProgress?: (pct: number) => void): Promise<string> {
         try {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            const filename = `posts/video_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
-            const { data, error } = await supabase.storage
+            // Detect MIME from extension
+            const ext = uri.split('?')[0].split('.').pop()?.toLowerCase() || 'mp4';
+            const mimeMap: Record<string, string> = {
+                mp4: 'video/mp4',
+                mov: 'video/quicktime',
+                avi: 'video/x-msvideo',
+                webm: 'video/webm',
+                '3gp': 'video/3gpp',
+            };
+            const contentType = mimeMap[ext] || 'video/mp4';
+            const filename = `posts/video_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+
+            // Get a signed upload URL so we can PUT directly without base64
+            const { data: signedData, error: signError } = await supabase.storage
                 .from('spindare-assets')
-                .upload(filename, decode(base64), { contentType: 'video/mp4' });
-            if (error) throw error;
-            const { data: { publicUrl } } = supabase.storage.from('spindare-assets').getPublicUrl(data.path);
+                .createSignedUploadUrl(filename);
+
+            if (signError) throw signError;
+
+            // Stream upload — FileSystem.uploadAsync sends raw bytes, no base64
+            const uploadResult = await FileSystem.uploadAsync(signedData.signedUrl, uri, {
+                httpMethod: 'PUT',
+                headers: { 'Content-Type': contentType, 'x-upsert': 'true' },
+                uploadType: (FileSystem as any).FileSystemUploadType?.BINARY_CONTENT ?? 0,
+                sessionType: (FileSystem as any).FileSystemSessionType?.BACKGROUND ?? 1,
+            });
+
+            if (uploadResult.status < 200 || uploadResult.status >= 300) {
+                throw new Error(`Video upload failed (HTTP ${uploadResult.status})`);
+            }
+
+            onProgress?.(100);
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('spindare-assets')
+                .getPublicUrl(filename);
+
             return publicUrl;
         } catch (error) {
             console.error("Video Upload Error:", error);
@@ -79,13 +111,23 @@ export const PostService = {
     },
 
     // Create a new challenge post
-    async createPost(userId: string, username: string, avatar: string, challenge: string, content: string, mediaUri: string | null) {
+    async createPost(
+        userId: string,
+        username: string,
+        avatar: string,
+        challenge: string,
+        content: string,
+        mediaUri: string | null,
+        onUploadProgress?: (pct: number) => void
+    ) {
         if (!userId) throw new Error("Must be logged in to post");
 
         let finalMediaUrl = mediaUri;
         if (mediaUri && !mediaUri.startsWith('http')) {
             const isVideo = /\.(mp4|mov|avi|webm|3gp)$/i.test(mediaUri);
-            finalMediaUrl = isVideo ? await this.uploadVideo(mediaUri) : await this.uploadImage(mediaUri);
+            finalMediaUrl = isVideo
+                ? await this.uploadVideo(mediaUri, onUploadProgress)
+                : await this.uploadImage(mediaUri);
         }
 
         // Calculate functional Spin Count

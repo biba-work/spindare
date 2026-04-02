@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground, Linking } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Image, ScrollView, Pressable, Animated, Alert, Switch, Platform, TextInput, ImageBackground, PanResponder } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +9,6 @@ import { PostService } from '../services/PostService';
 import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { SoundService } from '../services/SoundService';
 import { Post } from '../services/PostService';
 import { BlurView } from 'expo-blur';
 import { SpinWheel } from '../components/molecules/SpinWheel';
@@ -81,6 +80,12 @@ const TextIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const ChevronRightIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M9 18l6-6-6-6" />
+    </Svg>
+);
+
 interface ProfileScreenProps {
     userId: string;
     onBack: () => void;
@@ -93,7 +98,6 @@ interface ProfileScreenProps {
     onUpdateProfile: (updates: Partial<UserProfile>) => void;
     onShare?: () => void;
     onOpenCamera?: () => void;
-    onSaveChallenge?: (challenge: string) => void;
 }
 
 import { useTheme } from '../contexts/ThemeContext';
@@ -110,7 +114,6 @@ export const ProfileScreen = ({
     onUpdateProfile,
     onShare,
     onOpenCamera,
-    onSaveChallenge,
 }: ProfileScreenProps) => {
     const [mode, setMode] = useState<'list' | 'grid'>('grid');
     const [showSettings, setShowSettings] = useState(false);
@@ -120,7 +123,7 @@ export const ProfileScreen = ({
 
     const [soundEffects, setSoundEffects] = useState(true);
     const [notifications, setNotifications] = useState(true);
-    const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main');
+    const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main'); // kept for compat but no longer used
     const [userPosts, setUserPosts] = useState<Post[]>([]);
 
     const [showSpinner, setShowSpinner] = useState(false);
@@ -130,8 +133,18 @@ export const ProfileScreen = ({
     const spinnerAnim = useRef(new Animated.Value(height)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    const [postCountDisplay, setPostCountDisplay] = useState(0);
-    const postCountAnim = useRef(new Animated.Value(0)).current;
+    const settingsPan = useRef(PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gs) => gs.dy > 8 && Math.abs(gs.dy) > Math.abs(gs.dx),
+        onPanResponderMove: (_, gs) => { if (gs.dy > 0) settingsAnim.setValue(gs.dy); },
+        onPanResponderRelease: (_, gs) => {
+            if (gs.dy > 100 || gs.vy > 0.7) {
+                Animated.timing(settingsAnim, { toValue: height, duration: 300, useNativeDriver: true })
+                    .start(() => setShowSettings(false));
+            } else {
+                Animated.spring(settingsAnim, { toValue: 0, useNativeDriver: true, friction: 8, tension: 40 }).start();
+            }
+        },
+    })).current;
 
     const SPIN_REWARDS = [
         'Read 10 pages of a book 📚',
@@ -167,7 +180,7 @@ export const ProfileScreen = ({
             // Update locally in parent component
             onUpdateProfile({ username: newUsername });
 
-            SoundService.postSuccess();
+            if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert("Success", "Username updated! It may take a moment for changes to appear everywhere.");
         } catch (error: any) {
             console.error("Username update failed:", error);
@@ -186,17 +199,13 @@ export const ProfileScreen = ({
         if (userId) {
             const unsub = PostService.subscribeToUserPosts(userId, (posts) => {
                 setUserPosts(posts);
-                postCountAnim.setValue(0);
-                Animated.timing(postCountAnim, { toValue: posts.length, duration: 800, useNativeDriver: false }).start();
-                const listenerId = postCountAnim.addListener(({ value }) => setPostCountDisplay(Math.round(value)));
-                return () => postCountAnim.removeListener(listenerId);
             });
             return () => unsub();
         }
     }, [userId]);
 
     const openSpinner = () => {
-        SoundService.tap();
+        if (soundEffects) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setShowSpinner(true);
         setSpinResult(null);
         setSubmissionStep('idle');
@@ -223,7 +232,7 @@ export const ProfileScreen = ({
     };
 
     const handleSpinEnd = (result: string) => {
-        SoundService.spinLand(); // haptic + sound — always fires, respects silent switch
+        if (soundEffects) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // No limit check
         // if (spinsLeft > 0) setSpinsLeft(spinsLeft - 1);
@@ -231,6 +240,9 @@ export const ProfileScreen = ({
         setSpinResult(result);
         setSubmissionStep('result');
         onChallengeReceived(result);
+
+        // Haptic success
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
     const handleActionChoose = () => {
@@ -266,7 +278,7 @@ export const ProfileScreen = ({
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images', 'videos'],
+            mediaTypes: ['images'],
             quality: 0.8,
         });
 
@@ -409,20 +421,13 @@ export const ProfileScreen = ({
                             {/* Stats */}
                             <View style={styles.statsRow}>
                                 <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{postCountDisplay}</Text>
+                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>{userPosts.length}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Posts</Text>
                                 </View>
                                 <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
                                 <View style={styles.statItem}>
                                     <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
-                                </View>
-                                <View style={[styles.statDivider, darkMode && styles.dividerDark]} />
-                                <View style={styles.statItem}>
-                                    <Text style={[styles.statValue, darkMode && styles.textDark]}>
-                                        {(userProfile as any).streak > 0 ? `🔥 ${(userProfile as any).streak}` : '—'}
-                                    </Text>
-                                    <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Streak</Text>
                                 </View>
                             </View>
                         </View>
@@ -487,146 +492,305 @@ export const ProfileScreen = ({
                     </Animated.ScrollView>
                 </SafeAreaView>
 
-                {/* Settings Modal */}
+                {/* ── SETTINGS ─────────────────────────────────────────── */}
                 {showSettings && (
                     <Animated.View style={[styles.modalOverlay, { transform: [{ translateY: settingsAnim }] }]}>
-                        <View style={[styles.solidModalBg, darkMode && styles.solidModalBgDark]} />
-                        <BlurView intensity={40} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill}>
-                            <SafeAreaView style={styles.modalContainer}>
-                                <View style={[styles.modalHeader, darkMode && styles.modalHeaderDark]}>
-                                    {settingsPage !== 'main' && (
-                                        <Pressable onPress={() => setSettingsPage('main')} style={styles.backBtn}>
-                                            <BackIcon color={darkMode ? "#FFF" : "#4A4A4A"} />
+                        <View style={[styles.stBg, darkMode && styles.stBgDark]} />
+
+                        <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+
+                            {/* drag handle — swipe down to close */}
+                            <View style={styles.stHandle} {...settingsPan.panHandlers}>
+                                <View style={[styles.stHandlePill, darkMode && { backgroundColor: 'rgba(255,255,255,0.18)' }]} />
+                            </View>
+
+                            {/* header row */}
+                            <View style={[styles.stHeader, darkMode && styles.stHeaderDark]}>
+                                <Text style={[styles.stHeaderTitle, darkMode && { color: '#FFF' }]}>Settings</Text>
+                                <Pressable onPress={closeSettings} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}>
+                                    <Ionicons name="close" size={22} color={darkMode ? '#8E8E93' : '#AEAEB2'} />
+                                </Pressable>
+                            </View>
+
+                            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+
+                                {/* ─── PROFILE BLOCK ──────────────────────────── */}
+                                <Pressable
+                                    onPress={handleUpdatePfp}
+                                    style={({ pressed }) => [styles.stProfileBlock, darkMode && styles.stProfileBlockDark, pressed && { opacity: 0.8 }]}
+                                >
+                                    <Image
+                                        source={{
+                                            uri: (userProfile.username === 'rashica07' || !userProfile.photoURL)
+                                                ? Image.resolveAssetSource(require('../../assets/rashica_pfp.jpg')).uri
+                                                : userProfile.photoURL
+                                        }}
+                                        style={styles.stAvatar}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.stProfileName, darkMode && { color: '#FFF' }]}>{userProfile.username}</Text>
+                                        <Text style={styles.stProfileSub}>{userPosts.length} posts · {totalReactions} reactions</Text>
+                                    </View>
+                                    <View style={[styles.stCamBadge, darkMode && { borderColor: '#1C1C1E' }]}>
+                                        <Ionicons name="camera" size={13} color="#FFF" />
+                                    </View>
+                                </Pressable>
+
+                                {/* ─── USERNAME EDIT ──────────────────────────── */}
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="at" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Username</Text>
+                                            <TextInput
+                                                style={[styles.stInlineInput, darkMode && styles.stInlineInputDk]}
+                                                value={editUsername}
+                                                onChangeText={setEditUsername}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
+                                                placeholder="your_username"
+                                                placeholderTextColor={darkMode ? '#555' : '#C7C7CC'}
+                                                returnKeyType="done"
+                                                onSubmitEditing={handleSaveUsername}
+                                            />
+                                        </View>
+                                        <Pressable
+                                            onPress={handleSaveUsername}
+                                            disabled={editUsername.trim().length < 1}
+                                            style={[styles.stSaveBtn, { opacity: editUsername.trim().length < 1 ? 0.3 : 1 }]}
+                                        >
+                                            <Text style={styles.stSaveTxt}>Save</Text>
                                         </Pressable>
-                                    )}
-                                    <Text style={[styles.modalTitle, darkMode && styles.modalTitleDark]}>
-                                        {settingsPage === 'main' ? 'Settings' : settingsPage === 'privacy' ? 'Privacy & Security' : 'Help & Support'}
-                                    </Text>
-                                    <Pressable onPress={closeSettings} style={styles.closeBtn}>
-                                        <Text style={[styles.closeBtnText, darkMode && styles.closeBtnTextDark]}>Done</Text>
+                                    </View>
+                                </View>
+
+                                {/* ─── ACCOUNT ────────────────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Account</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="mail" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Email address</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="key" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Security</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="shield-checkmark" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Linked accounts</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                 </View>
 
-                                <ScrollView style={styles.settingsContent}>
-                                    {settingsPage === 'main' && (
-                                        <>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Dark Mode</Text>
-                                                <Switch value={darkMode} onValueChange={toggleTheme} />
-                                            </View>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Notifications</Text>
-                                                <Switch value={notifications} onValueChange={setNotifications} />
-                                            </View>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Sound Effects</Text>
-                                                <Switch value={soundEffects} onValueChange={setSoundEffects} />
-                                            </View>
+                                {/* ─── CONTENT & DISPLAY ──────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Content & Display</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name={darkMode ? 'moon' : 'sunny'} size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Dark mode</Text>
+                                        <Switch
+                                            value={darkMode}
+                                            onValueChange={toggleTheme}
+                                            trackColor={{ false: '#E5E5EA', true: '#5856D6' }}
+                                            thumbColor="#FFF"
+                                        />
+                                    </View>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="language" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Language</Text>
+                                        <Text style={styles.stValue}>English</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="accessibility" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Accessibility</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                </View>
 
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
+                                {/* ─── NOTIFICATIONS ──────────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Notifications</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="notifications" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Push notifications</Text>
+                                        <Switch
+                                            value={notifications}
+                                            onValueChange={setNotifications}
+                                            trackColor={{ false: '#E5E5EA', true: '#FF3B30' }}
+                                            thumbColor="#FFF"
+                                        />
+                                    </View>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="musical-notes" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Sounds & haptics</Text>
+                                        <Switch
+                                            value={soundEffects}
+                                            onValueChange={setSoundEffects}
+                                            trackColor={{ false: '#E5E5EA', true: '#30D158' }}
+                                            thumbColor="#FFF"
+                                        />
+                                    </View>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="mail-unread" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>In-app messages</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                </View>
 
-                                            <View style={[styles.settingGroup, { paddingHorizontal: 0 }]}>
-                                                <Text style={[styles.sectionHeader, darkMode && styles.textDark, { paddingHorizontal: 20, marginBottom: 8 }]}>CHANGE USERNAME</Text>
-                                                <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 10 }}>
-                                                    <TextInput
-                                                        style={[styles.usernameInput, darkMode && styles.usernameInputDark]}
-                                                        placeholder="New username"
-                                                        placeholderTextColor={darkMode ? "#777" : "#CCC"}
-                                                        value={editUsername}
-                                                        onChangeText={setEditUsername}
-                                                        autoCapitalize="none"
-                                                    />
-                                                    <Pressable
-                                                        style={[styles.saveBtn, { opacity: editUsername.length < 1 ? 0.5 : 1 }]}
-                                                        disabled={editUsername.length < 1}
-                                                        onPress={handleSaveUsername}
-                                                    >
-                                                        <Text style={styles.saveBtnText}>Save</Text>
-                                                    </Pressable>
-                                                </View>
-                                            </View>
+                                {/* ─── PRIVACY ────────────────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Privacy</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="lock-closed" size={15} color="#FFF" />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Private account</Text>
+                                            <Text style={styles.stSublabel}>Only followers see your posts</Text>
+                                        </View>
+                                        <Switch value={false} onValueChange={() => {}} trackColor={{ false: '#E5E5EA', true: '#007AFF' }} thumbColor="#FFF" />
+                                    </View>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <View style={[styles.stRow, darkMode && styles.stRowDark]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="radio" size={15} color="#FFF" />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Activity status</Text>
+                                            <Text style={styles.stSublabel}>Others can see when you're active</Text>
+                                        </View>
+                                        <Switch value={true} onValueChange={() => {}} trackColor={{ false: '#E5E5EA', true: '#34C759' }} thumbColor="#FFF" />
+                                    </View>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#FF6B6B' }]}>
+                                            <Ionicons name="ban" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Blocked accounts</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#5AC8FA' }]}>
+                                            <Ionicons name="download" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Download my data</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                </View>
 
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
+                                {/* ─── SUPPORT & ABOUT ────────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Support & About</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#5AC8FA' }]}>
+                                            <Ionicons name="help-circle" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Help Center</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="chatbubble-ellipses" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Contact us</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#FF6B6B' }]}>
+                                            <Ionicons name="flag" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Report a problem</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#636366' }]}>
+                                            <Ionicons name="information-circle" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>About Spindare</Text>
+                                        <Text style={styles.stValue}>V1.1.0</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                </View>
 
-                                            <Pressable onPress={() => setSettingsPage('privacy')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy & Security</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => setSettingsPage('help')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Help & Support</Text>
-                                            </Pressable>
+                                {/* ─── LEGAL ──────────────────────────────────── */}
+                                <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Legal</Text>
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
+                                            <Ionicons name="document-text" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Terms of service</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
+                                            <Ionicons name="eye" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Privacy policy</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                    <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
+                                    <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
+                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
+                                            <Ionicons name="people" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Community guidelines</Text>
+                                        <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
+                                    </Pressable>
+                                </View>
 
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
+                                {/* ─── LOG OUT ────────────────────────────────── */}
+                                <View style={[styles.stSection, darkMode && styles.stSectionDark, { marginBottom: 0 }]}>
+                                    <Pressable
+                                        onPress={onLogout}
+                                        style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}
+                                    >
+                                        <View style={[styles.stIco, { backgroundColor: '#FF3B30' }]}>
+                                            <Ionicons name="log-out" size={15} color="#FFF" />
+                                        </View>
+                                        <Text style={[styles.stLabel, { color: '#FF3B30' }]}>Log out</Text>
+                                    </Pressable>
+                                </View>
 
-                                            <Pressable onPress={onLogout} style={[styles.logoutButton, darkMode && styles.logoutButtonDark]}>
-                                                <Text style={styles.logoutButtonText}>Log Out</Text>
-                                            </Pressable>
-                                        </>
-                                    )}
+                                {/* ─── FOOTER ─────────────────────────────────── */}
+                                <Text style={styles.stFooter}>SPINDARE · V1.1.0 · PRE-ALPHA</Text>
 
-                                    {settingsPage === 'privacy' && (
-                                        <>
-                                            <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Manage your privacy and security settings</Text>
-
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Private Account</Text>
-                                                <Switch value={false} onValueChange={() => { }} />
-                                            </View>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Show Activity Status</Text>
-                                                <Switch value={true} onValueChange={() => { }} />
-                                            </View>
-
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
-                                            <Pressable onPress={() => Alert.alert('Blocked Users', 'Block list coming in a future update.')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Blocked Users</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Alert.alert('Data & Storage', 'Data management coming in a future update.')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Data & Storage</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Linking.openURL('https://clerk.com/docs/security')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Account Security</Text>
-                                            </Pressable>
-                                        </>
-                                    )}
-
-                                    {settingsPage === 'help' && (
-                                        <>
-                                            <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Get help and support</Text>
-
-                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/faq')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>FAQs</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Linking.openURL('mailto:support@spindare.app')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Contact Support</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Linking.openURL('mailto:support@spindare.app?subject=Problem%20Report')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Report a Problem</Text>
-                                            </Pressable>
-
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
-                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/terms')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Terms of Service</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/privacy')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy Policy</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => Linking.openURL('https://spindare.app/guidelines')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Community Guidelines</Text>
-                                            </Pressable>
-
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
-                                            <View style={styles.versionInfo}>
-                                                <Text style={[styles.versionText, darkMode && styles.textDark]}>Spindare v0.61.59</Text>
-                                                <Text style={styles.versionSubtext}>Pre-Alpha Testing</Text>
-                                            </View>
-                                        </>
-                                    )}
-                                </ScrollView>
-                            </SafeAreaView>
-                        </BlurView>
+                            </ScrollView>
+                        </SafeAreaView>
                     </Animated.View>
                 )}
 
@@ -663,21 +827,6 @@ export const ProfileScreen = ({
                                                         <Text style={styles.actionBtnTextPrimary}>Do It</Text>
                                                     </Pressable>
                                                 </View>
-
-                                                {/* Save for later — tappable text below the main buttons */}
-                                                <Pressable
-                                                    onPress={() => {
-                                                        if (spinResult) {
-                                                            SoundService.save();
-                                                            onSaveChallenge?.(spinResult);
-                                                        }
-                                                        closeSpinner();
-                                                    }}
-                                                    style={styles.saveLaterRow}
-                                                    hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
-                                                >
-                                                    <Text style={styles.saveLaterText}>🕐 Save for later</Text>
-                                                </Pressable>
                                             </Animated.View>
                                         )}
 
@@ -1026,110 +1175,243 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         backgroundColor: '#FAF9F6',
     },
-    modalContainer: {
-        flex: 1,
+    // ══════════════════════════════════════════════════════════════════════
+    //  SETTINGS — from scratch (st* prefix)
+    // ══════════════════════════════════════════════════════════════════════
+    stBg: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#F2F2F7',
     },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    stBgDark: { backgroundColor: '#0A0A0F' },
+    stDragZone: {
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
+        paddingTop: 14,
+        paddingBottom: 6,
     },
-    backBtn: {
-        padding: 4,
-        position: 'absolute',
-        left: 20,
-        zIndex: 10,
+    stDragPill: {
+        width: 44,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: 'rgba(0,0,0,0.18)',
     },
-    modalTitle: {
-        color: '#2C2C2C',
-        fontSize: 18,
+    stDragPillDark: { backgroundColor: 'rgba(255,255,255,0.22)' },
+    stTopBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 22,
+        paddingTop: 4,
+        paddingBottom: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.1)',
+    },
+    stTopBarDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+    stTopTitle: {
+        fontSize: 20,
         fontWeight: '700',
-        letterSpacing: -0.4,
-        flex: 1,
-        textAlign: 'center',
+        color: '#0A0A0F',
+        letterSpacing: -0.5,
     },
-    closeBtn: {
-        padding: 4,
+    stTopTitleDark: { color: '#F5F5F5' },
+    stDoneBtn: {
+        backgroundColor: 'rgba(0,122,255,0.1)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
     },
-    closeBtnText: {
-        color: '#4A4A4A',
+    stDoneTxt: {
+        color: '#007AFF',
         fontSize: 15,
         fontWeight: '600',
     },
-    settingsContent: {
-        flex: 1,
-        paddingHorizontal: 24,
+    stDoneTxtDark: { color: '#4DA6FF' },
+    stScroll: {
+        paddingHorizontal: 16,
         paddingTop: 20,
+        paddingBottom: 60,
     },
-    pageDescription: {
-        color: '#8E8E93',
-        fontSize: 14,
-        fontWeight: '500',
-        marginBottom: 24,
-        lineHeight: 20,
-    },
-    settingItem: {
+    // ── Hero profile card ─────────────────────────────────────────────────
+    stHero: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.04)',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 28,
+        gap: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
     },
-    settingLabel: {
-        color: '#2C2C2C',
-        fontSize: 16,
-        fontWeight: '500',
+    stHeroDark: { backgroundColor: '#1C1C1E' },
+    stHeroLeft: { position: 'relative' },
+    stHeroAvatar: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#E0E0E0',
     },
-    settingsDivider: {
-        height: 1,
-        backgroundColor: 'rgba(0,0,0,0.08)',
-        marginVertical: 24,
-    },
-    settingButton: {
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.04)',
-    },
-    settingButtonText: {
-        color: '#4A4A4A',
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    logoutButton: {
-        paddingVertical: 18,
-        borderRadius: 16,
-        backgroundColor: '#FFF',
+    stHeroAvatarBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: '#007AFF',
+        justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 40,
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.08)',
+        borderWidth: 2,
+        borderColor: '#FFF',
     },
-    logoutButtonText: {
-        color: '#FF3B30',
-        fontSize: 16,
+    stHeroMeta: { flex: 1 },
+    stHeroName: {
+        fontSize: 17,
         fontWeight: '700',
+        color: '#0A0A0F',
+        letterSpacing: -0.3,
+        marginBottom: 3,
     },
-    versionInfo: {
+    stHeroSub: {
+        fontSize: 13,
+        color: '#8E8E93',
+        fontWeight: '400',
+    },
+    stHeroBadge: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        justifyContent: 'center',
         alignItems: 'center',
-        paddingVertical: 32,
     },
-    versionText: {
-        color: '#2C2C2C',
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    versionSubtext: {
-        color: '#AEAEB2',
+    stHeroBadgeDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
+    // ── Section label ─────────────────────────────────────────────────────
+    stSectionLabel: {
         fontSize: 12,
-        fontWeight: '500',
+        fontWeight: '700',
+        color: '#8E8E93',
+        letterSpacing: 0.8,
+        marginBottom: 8,
+        marginLeft: 4,
     },
+    stSectionLabelDark: { color: '#636366' },
+    // ── Group card ────────────────────────────────────────────────────────
+    stGroup: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        marginBottom: 24,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 1,
+    },
+    stGroupDark: { backgroundColor: '#1C1C1E' },
+    // ── Individual row ────────────────────────────────────────────────────
+    stRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 13,
+        gap: 13,
+        minHeight: 56,
+    },
+    stRowDark: {},
+    stRowLast: { borderBottomWidth: 0 },
+    stRowLabel: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0A0A0F',
+        letterSpacing: -0.2,
+    },
+    stRowLabelDark: { color: '#F0F0F0' },
+    stRowSub: {
+        fontSize: 12,
+        color: '#AEAEB2',
+        marginTop: 2,
+    },
+    stRowSubDark: { color: '#636366' },
+    // ── Coloured icon square ──────────────────────────────────────────────
+    stIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexShrink: 0,
+    },
+    // ── Username inline input ─────────────────────────────────────────────
+    stUsernameInput: {
+        fontSize: 14,
+        color: '#0A0A0F',
+        paddingVertical: 0,
+        marginTop: 2,
+    },
+    stUsernameInputDark: { color: '#AEAEB2' },
+    // ── Save button ───────────────────────────────────────────────────────
+    stSaveBtn: {
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        borderRadius: 10,
+    },
+    stSaveBtnTxt: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    // ── Log out ───────────────────────────────────────────────────────────
+    stLogout: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 15,
+        marginBottom: 24,
+        gap: 13,
+        shadowColor: '#FF3B30',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 1,
+    },
+    stLogoutDark: { backgroundColor: '#1C1C1E' },
+    stLogoutTxt: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FF3B30',
+        flex: 1,
+    },
+    // ── Version footer ────────────────────────────────────────────────────
+    stVersion: {
+        alignItems: 'center',
+        paddingBottom: 20,
+        gap: 4,
+    },
+    stVersionApp: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#C7C7CC',
+        letterSpacing: 2,
+    },
+    stVersionNum: {
+        fontSize: 12,
+        color: '#AEAEB2',
+        fontWeight: '400',
+    },
+    // ── Kept stubs so spinner modal + existing non-settings code still works
+    solidModalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#F2F2F7' },
+    solidModalBgDark: { backgroundColor: '#0A0A0F' },
+    modalContainer: { flex: 1 },
+    modalOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 5000 },
+    versionInfo: { alignItems: 'center', paddingVertical: 32 },
+    versionText: { color: '#2C2C2C', fontSize: 14, fontWeight: '600', marginBottom: 4 },
+    versionSubtext: { color: '#AEAEB2', fontSize: 12 },
     spinnerModalBg: {
         flex: 1,
         justifyContent: 'center',
@@ -1195,17 +1477,6 @@ const styles = StyleSheet.create({
         gap: 12,
         width: '100%',
         marginTop: 8,
-    },
-    saveLaterRow: {
-        alignSelf: 'center',
-        marginTop: 16,
-        paddingVertical: 4,
-    },
-    saveLaterText: {
-        color: '#A7BBC7',
-        fontSize: 14,
-        fontWeight: '500',
-        letterSpacing: -0.2,
     },
     actionBtnPrimary: {
         flex: 1,
@@ -1307,20 +1578,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
     },
-    // Dark Mode for Settings
-    solidModalBgDark: { backgroundColor: '#1C1C1E' },
-    modalTitleDark: { color: '#FFF' },
-    closeBtnTextDark: { color: '#FFF' },
-    modalHeaderDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
-    settingLabelDark: { color: '#FFF' },
-    settingButtonTextDark: { color: '#FFF' },
-    settingsDividerDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
-    settingItemDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
-    logoutButtonDark: {
-        backgroundColor: '#2C2C2E',
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    pageDescriptionDark: { color: '#8E8E93' },
     cardDark: { backgroundColor: '#2C2C2E' },
     secondaryBtnDark: { backgroundColor: '#3A3A3C' },
     // Username Edit
@@ -1393,5 +1650,165 @@ const styles = StyleSheet.create({
     },
     proofActionBtnDark: {
         backgroundColor: '#3A3A3C',
+    },
+
+    // ── Settings v3 (TikTok-style flat) ── missing style names ──────────────
+    stHandle: {
+        alignItems: 'center',
+        paddingTop: 12,
+        paddingBottom: 6,
+    },
+    stHandlePill: {
+        width: 40,
+        height: 5,
+        borderRadius: 3,
+        backgroundColor: 'rgba(0,0,0,0.18)',
+    },
+    stHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.08)',
+    },
+    stHeaderDark: {
+        borderBottomColor: 'rgba(255,255,255,0.08)',
+    },
+    stHeaderTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#0A0A0F',
+        letterSpacing: -0.5,
+    },
+    stProfileBlock: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 16,
+        marginTop: 16,
+        marginBottom: 8,
+        padding: 16,
+        backgroundColor: '#FFF',
+        borderRadius: 16,
+        gap: 14,
+    },
+    stProfileBlockDark: {
+        backgroundColor: '#1C1C1E',
+    },
+    stAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#E0E0E0',
+    },
+    stCamBadge: {
+        position: 'absolute',
+        right: 16,
+        bottom: 16,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: 'rgba(60,60,67,0.14)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFF',
+    },
+    stProfileName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#0A0A0F',
+        letterSpacing: -0.3,
+        marginBottom: 2,
+    },
+    stProfileSub: {
+        fontSize: 13,
+        color: '#8E8E93',
+    },
+    stSecLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#8E8E93',
+        letterSpacing: 0.6,
+        marginLeft: 32,
+        marginTop: 20,
+        marginBottom: 6,
+        textTransform: 'uppercase',
+    },
+    stSecLabelDk: {
+        color: '#636366',
+    },
+    stSection: {
+        marginHorizontal: 16,
+        backgroundColor: '#FFF',
+        borderRadius: 14,
+        overflow: 'hidden',
+        marginBottom: 4,
+    },
+    stSectionDark: {
+        backgroundColor: '#1C1C1E',
+    },
+    stIco: {
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexShrink: 0,
+        backgroundColor: 'rgba(60,60,67,0.08)',
+    },
+    stIcoDark: {
+        backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    stDivider: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: 'rgba(0,0,0,0.08)',
+        marginLeft: 60,
+    },
+    stDividerDk: {
+        backgroundColor: 'rgba(255,255,255,0.06)',
+    },
+    stLabel: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#0A0A0F',
+        letterSpacing: -0.2,
+    },
+    stLabelDk: {
+        color: '#F0F0F0',
+    },
+    stSublabel: {
+        fontSize: 12,
+        color: '#AEAEB2',
+        marginTop: 2,
+    },
+    stValue: {
+        fontSize: 14,
+        color: '#AEAEB2',
+        marginRight: 4,
+    },
+    stInlineInput: {
+        fontSize: 14,
+        color: '#0A0A0F',
+        paddingVertical: 0,
+        marginTop: 2,
+    },
+    stInlineInputDk: {
+        color: '#AEAEB2',
+    },
+    stSaveTxt: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    stFooter: {
+        textAlign: 'center',
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#C7C7CC',
+        letterSpacing: 2,
+        paddingVertical: 28,
     },
 });

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable, ScrollView, Dimensions, Image, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image, Platform, PanResponder } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
 import Svg, { Path, Circle, Rect, G } from 'react-native-svg';
@@ -70,7 +69,6 @@ interface OverlayProps {
     animation: Animated.Value;
     onOpenMessages?: () => void;
     onViewProfile?: (userId: string, username: string, avatar: string) => void;
-    userId?: string;
 }
 
 const MOCK_CHALLENGES = {
@@ -83,25 +81,62 @@ const MOCK_CHALLENGES = {
     ]
 };
 
-export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile, userId }: OverlayProps) => {
+export const GenericOverlay = ({ visible, type, onClose, data, onAction, animation, onOpenMessages, onViewProfile }: OverlayProps) => {
     const { darkMode } = useTheme();
+    const scrollOffset = useRef(0);
+    const dragY = useRef(new Animated.Value(0)).current;
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => false,
+            onMoveShouldSetPanResponder: (_, gestureState) => {
+                return scrollOffset.current <= 0 && Math.abs(gestureState.dy) > 12 && gestureState.dy > 0;
+            },
+            onPanResponderMove: (_, gestureState) => {
+                if (gestureState.dy > 0) {
+                    dragY.setValue(gestureState.dy);
+                }
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                if (gestureState.dy > 120 || gestureState.vy > 0.9) {
+                    dragY.setValue(0);
+                    onClose();
+                } else {
+                    Animated.spring(dragY, { toValue: 0, useNativeDriver: true, friction: 7 }).start();
+                }
+            },
+            onPanResponderTerminate: () => {
+                Animated.spring(dragY, { toValue: 0, useNativeDriver: true, friction: 7 }).start();
+            },
+            onPanResponderTerminationRequest: () => true,
+        })
+    ).current;
+    const translateY = Animated.add(animation, dragY);
+    const scrollProps = {
+        onScroll: (event: any) => {
+            scrollOffset.current = event.nativeEvent.contentOffset.y;
+        },
+        scrollEventThrottle: 16,
+        bounces: true,
+        overScrollMode: 'always' as const,
+        showsVerticalScrollIndicator: false,
+    };
     const [subTab, setSubTab] = useState<'notifs' | 'inbox' | 'messages'>('notifs');
     const [activeProofId, setActiveProofId] = useState<string | null>(null);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [requests, setRequests] = useState<any[]>([]);
 
     React.useEffect(() => {
-        if (visible && type === 'notifications' && userId) {
-            const notifUnsub = NotificationService.subscribeToNotifications(userId, setNotifications);
-            const reqUnsub = SocialService.subscribeToRequests(userId, setRequests);
+        if (visible && type === 'notifications') {
+            const notifUnsub = NotificationService.subscribeToNotifications(setNotifications);
+            const reqUnsub = SocialService.subscribeToRequests(setRequests);
             // Mark all as read when opening
-            NotificationService.markAllAsRead(userId);
+            NotificationService.markAllAsRead();
             return () => {
                 notifUnsub();
                 reqUnsub();
             };
         }
-    }, [visible, type, userId]);
+    }, [visible, type]);
 
     if (!visible) return null;
 
@@ -121,7 +156,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
             const generalNotifs = notifications.filter(n => n.type !== 'follow' || !connectionRequests.some(r => r.id === n.fromUserId));
 
             return (
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                <ScrollView {...scrollProps} contentContainerStyle={styles.scrollContent}>
                     {/* Connection Requests */}
                     {connectionRequests.length > 0 && (
                         <View style={{ marginBottom: 20 }}>
@@ -210,7 +245,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
         }
 
         return (
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView {...scrollProps} contentContainerStyle={styles.scrollContent}>
                 <View style={styles.sectionHeader}>
                     <View style={styles.sectionBadge}>
                         <Text style={styles.sectionBadgeText}>{MOCK_CHALLENGES.new.length}</Text>
@@ -270,7 +305,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
     };
 
     return (
-        <Animated.View style={[styles.overlay, { transform: [{ translateY: animation }] }]}>
+        <Animated.View style={[styles.overlay, { transform: [{ translateY }] }]} {...panResponder.panHandlers}>
             <View style={[styles.solidBackground, darkMode && styles.solidBackgroundDark]} />
             <BlurView intensity={20} tint={darkMode ? "dark" : "light"} style={StyleSheet.absoluteFill}>
                 <SafeAreaView style={styles.container}>
@@ -301,7 +336,7 @@ export const GenericOverlay = ({ visible, type, onClose, data, onAction, animati
 
                     <View style={styles.mainContent}>
                         {type === 'saved' ? (
-                            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                            <ScrollView {...scrollProps} contentContainerStyle={styles.scrollContent}>
                                 {data.map((item, index) => (
                                     <View key={index} style={[styles.savedCard, darkMode && styles.savedCardDark]}>
                                         <Text style={[styles.savedText, darkMode && styles.savedTextDark]}>{item}</Text>

@@ -24,8 +24,6 @@ const BUBBLES = Array.from({ length: BUBBLE_COUNT }, (_, i) => {
     };
 });
 
-const isVideoUri = (uri: string) => /\.(mp4|mov|avi|webm|3gp)$/i.test(uri);
-
 // Separate component so useVideoPlayer hook is valid
 const VideoPreview = ({ uri, style }: { uri: string; style: any }) => {
     const player = useVideoPlayer(uri, p => { p.pause(); });
@@ -52,12 +50,16 @@ const CheckIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const isVideoUri = (uri?: string | null) => !!uri && /\.(mp4|mov|avi|webm|3gp)$/i.test(uri);
+
 export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClose, onPost }: PostCreationScreenProps) => {
     const { darkMode } = useTheme();
-    const [content, setContent]         = useState('');
-    const [imageUri, setImageUri]       = useState(initialImageUri);
-    const [submitting, setSubmitting]   = useState(false);
-    const [success, setSuccess]         = useState(false);
+    const [content, setContent]           = useState('');
+    const [imageUri, setImageUri]         = useState(initialImageUri);
+    const [submitting, setSubmitting]     = useState(false);
+    const [success, setSuccess]           = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0); // 0–100 for video uploads
+    const isVideo = isVideoUri(imageUri);
 
     // Entry animation
     const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -129,12 +131,14 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
     const handleAction = async (target: 'feed' | 'friend') => {
         if ((!content.trim() && !imageUri) || submitting || success) return;
         setSubmitting(true);
+        setUploadProgress(0);
         try {
-            await onPost(content, imageUri, target);
+            // Pass a progress handler so video uploads can report back
+            await (onPost as any)(content, imageUri, target, (pct: number) => setUploadProgress(pct));
             triggerSuccess();
         } catch {
-            // Post failed — let user retry
             setSubmitting(false);
+            setUploadProgress(0);
         }
     };
 
@@ -184,11 +188,17 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                 </View>
 
                                 {imageUri && (
-                                    <View style={styles.imageWrapper}>
-                                        {isVideoUri(imageUri) ? (
+                                    <View style={[styles.imageWrapper, isVideo && styles.videoWrapper]}>
+                                        {isVideo ? (
                                             <VideoPreview uri={imageUri} style={styles.image} />
                                         ) : (
-                                            <Image source={{ uri: imageUri }} style={styles.image} />
+                                            <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+                                        )}
+                                        {/* Video type badge */}
+                                        {isVideo && (
+                                            <View style={styles.videoBadge}>
+                                                <Text style={styles.videoBadgeText}>VIDEO</Text>
+                                            </View>
                                         )}
                                         <Pressable style={styles.removeImageButton} onPress={removeImage} disabled={submitting}>
                                             <View style={styles.removeIconWrapper}>
@@ -213,6 +223,18 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
                                     />
                                 </View>
                             </ScrollView>
+
+                            {/* Video upload progress bar */}
+                            {submitting && isVideo && uploadProgress > 0 && uploadProgress < 100 && (
+                                <View style={styles.progressWrap}>
+                                    <View style={styles.progressTrack}>
+                                        <View style={[styles.progressBar, { width: `${uploadProgress}%` }]} />
+                                    </View>
+                                    <Text style={[styles.progressLabel, darkMode && { color: '#8E8E93' }]}>
+                                        Uploading video… {Math.round(uploadProgress)}%
+                                    </Text>
+                                </View>
+                            )}
 
                             <View style={[styles.actionFooter, darkMode && styles.borderDark]}>
                                 <Pressable
@@ -316,7 +338,23 @@ const styles = StyleSheet.create({
     challengeLabel: { color: '#A7BBC7', fontSize: 9, fontWeight: '500', letterSpacing: 2, marginBottom: 8, textTransform: 'uppercase' },
     challengeText: { color: '#4A4A4A', fontSize: 16, fontWeight: '400', lineHeight: 24 },
     imageWrapper: { width: '100%', aspectRatio: 1.25, borderRadius: 24, overflow: 'hidden', marginBottom: 20, backgroundColor: '#F0F0F0' },
+    videoWrapper: { aspectRatio: 9 / 16 },
     image: { width: '100%', height: '100%' },
+    videoBadge: {
+        position: 'absolute',
+        bottom: 12,
+        left: 12,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    videoBadgeText: {
+        color: '#FFF',
+        fontSize: 9,
+        fontWeight: '700',
+        letterSpacing: 1.5,
+    },
     removeImageButton: { position: 'absolute', top: 12, right: 12 },
     removeIconWrapper: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.85)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
     inputContainer: {
@@ -340,6 +378,30 @@ const styles = StyleSheet.create({
     primaryText: { color: '#FAF9F6', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     actionText: { color: '#8E8E93', fontWeight: '500', fontSize: 12, letterSpacing: 1, paddingRight: Platform.OS === 'android' ? 6 : 0 },
     disabledText: { color: '#AEAEB2' },
+
+    // ── Video upload progress ─────────────────────────────────────────────────
+    progressWrap: {
+        paddingHorizontal: 0,
+        paddingBottom: 12,
+        gap: 6,
+    },
+    progressTrack: {
+        height: 3,
+        backgroundColor: 'rgba(0,0,0,0.06)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    progressBar: {
+        height: '100%',
+        backgroundColor: '#A7BBC7',
+        borderRadius: 2,
+    },
+    progressLabel: {
+        fontSize: 11,
+        color: '#8E8E93',
+        fontWeight: '500',
+        letterSpacing: 0.2,
+    },
 
     // ── Success overlay ───────────────────────────────────────────────────────
     successOverlay: {

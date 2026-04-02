@@ -145,7 +145,7 @@ const IntriguedIcon = ({ active }: { active: boolean }) => {
     );
 };
 
-export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean }) => {
+export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut, onImage }: { type: 'felt' | 'thought' | 'intrigued', count: number, active: boolean, onSelect: () => void, isOwner?: boolean, fadeOut?: boolean, onImage?: boolean }) => {
     const { darkMode } = useTheme();
     const scale = useRef(new Animated.Value(1)).current;
     const opacity = useRef(new Animated.Value(1)).current;
@@ -181,10 +181,14 @@ export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }
 
     return (
         <Pressable onPress={handlePress} style={styles.reactionBtn} disabled={fadeOut}>
+            {/* Shadow wrapper — separate from the circle so Android elevation stays round */}
             <Animated.View style={[
                 styles.iconBox,
-                darkMode && styles.iconBoxDark,
-                active && (darkMode ? styles.iconBoxActiveDark : styles.iconBoxActive),
+                darkMode && !onImage && styles.iconBoxDark,
+                onImage && styles.iconBoxOnImage,
+                active && styles.iconBoxActive,
+                active && darkMode && !onImage && styles.iconBoxActiveDark,
+                active && onImage && styles.iconBoxActiveOnImage,
                 { transform: [{ scale }], opacity }
             ]}>
                 {renderIcon()}
@@ -216,38 +220,45 @@ export const ReactionItem = ({ type, count, active, onSelect, isOwner, fadeOut }
 const styles = StyleSheet.create({
     reactionBtn: {
         alignItems: 'center',
-        marginVertical: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 12,   // wide tap target for thumbs
     },
     iconBox: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: 'rgba(255,255,255,0.82)',
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(0,0,0,0.09)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: 'rgba(0,0,0,0.10)',             // visible border BEFORE click
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        elevation: 2,
+        // no overflow:hidden — animated icons render outside their bounds
+        // no elevation — Android elevation ignores borderRadius → square shadow
     },
     iconBoxDark: {
-        backgroundColor: 'rgba(44,44,46,0.82)',
-        borderColor: 'rgba(255,255,255,0.18)',        // visible border in dark too
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        borderColor: 'rgba(255,255,255,0.14)',
     },
+    // Floating on an image — solid background + stronger border so it reads against any photo
+    iconBoxOnImage: {
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        borderColor: 'rgba(255,255,255,0.22)',
+    },
+    // Active states — border gets bolder, background goes opaque
     iconBoxActive: {
-        borderColor: 'rgba(74,74,74,0.8)',
-        backgroundColor: 'rgba(255,255,255,0.95)',
+        backgroundColor: 'rgba(255,255,255,0.97)',
+        borderColor: 'rgba(0,0,0,0.22)',
         borderWidth: 2,
-        shadowOpacity: 0.12,
     },
     iconBoxActiveDark: {
-        borderColor: 'rgba(255,255,255,0.6)',
-        backgroundColor: 'rgba(44,44,46,0.95)',
+        backgroundColor: 'rgba(58,58,60,0.97)',
+        borderColor: 'rgba(255,255,255,0.35)',
         borderWidth: 2,
-        shadowOpacity: 0.25,
+    },
+    iconBoxActiveOnImage: {
+        backgroundColor: 'rgba(255,255,255,0.97)',
+        borderColor: 'rgba(0,0,0,0.18)',
+        borderWidth: 2,
     },
     infoBox: {
         alignItems: 'center',
