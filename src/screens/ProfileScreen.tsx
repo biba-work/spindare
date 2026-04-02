@@ -671,7 +671,7 @@ export const ProfileScreen = ({
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
                                     <View style={[styles.stRow, darkMode && styles.stRowDark]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
-                                            <Ionicons name="lock-closed" size={15} color="#FFF" />
+                                            <Ionicons name="lock-closed" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Private account</Text>
@@ -682,7 +682,7 @@ export const ProfileScreen = ({
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <View style={[styles.stRow, darkMode && styles.stRowDark]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
-                                            <Ionicons name="radio" size={15} color="#FFF" />
+                                            <Ionicons name="radio" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <View style={{ flex: 1 }}>
                                             <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Activity status</Text>
@@ -692,16 +692,16 @@ export const ProfileScreen = ({
                                     </View>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#FF6B6B' }]}>
-                                            <Ionicons name="ban" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="ban" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Blocked accounts</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#5AC8FA' }]}>
-                                            <Ionicons name="download" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="download" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Download my data</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
@@ -712,8 +712,8 @@ export const ProfileScreen = ({
                                 <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Support & About</Text>
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#5AC8FA' }]}>
-                                            <Ionicons name="help-circle" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="help-circle" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Help Center</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
@@ -721,23 +721,23 @@ export const ProfileScreen = ({
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
                                         <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
-                                            <Ionicons name="chatbubble-ellipses" size={15} color="#FFF" />
+                                            <Ionicons name="chatbubble-ellipses" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Contact us</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#FF6B6B' }]}>
-                                            <Ionicons name="flag" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="flag" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Report a problem</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#636366' }]}>
-                                            <Ionicons name="information-circle" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="information-circle" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>About Spindare</Text>
                                         <Text style={styles.stValue}>V1.1.0</Text>
@@ -749,24 +749,24 @@ export const ProfileScreen = ({
                                 <Text style={[styles.stSecLabel, darkMode && styles.stSecLabelDk]}>Legal</Text>
                                 <View style={[styles.stSection, darkMode && styles.stSectionDark]}>
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
-                                            <Ionicons name="document-text" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="document-text" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Terms of service</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
-                                            <Ionicons name="eye" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="eye" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Privacy policy</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
                                     </Pressable>
                                     <View style={[styles.stDivider, darkMode && styles.stDividerDk]} />
                                     <Pressable style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}>
-                                        <View style={[styles.stIco, { backgroundColor: '#8E8E93' }]}>
-                                            <Ionicons name="people" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="people" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, darkMode && styles.stLabelDk]}>Community guidelines</Text>
                                         <Ionicons name="chevron-forward" size={16} color={darkMode ? '#3A3A3C' : '#C7C7CC'} />
@@ -779,8 +779,8 @@ export const ProfileScreen = ({
                                         onPress={onLogout}
                                         style={({ pressed }) => [styles.stRow, darkMode && styles.stRowDark, pressed && { opacity: 0.5 }]}
                                     >
-                                        <View style={[styles.stIco, { backgroundColor: '#FF3B30' }]}>
-                                            <Ionicons name="log-out" size={15} color="#FFF" />
+                                        <View style={[styles.stIco, darkMode && styles.stIcoDark]}>
+                                            <Ionicons name="log-out" size={15} color={darkMode ? '#D1D1D6' : '#3A3A3C'} />
                                         </View>
                                         <Text style={[styles.stLabel, { color: '#FF3B30' }]}>Log out</Text>
                                     </Pressable>
