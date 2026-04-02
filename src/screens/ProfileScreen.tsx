@@ -80,6 +80,12 @@ const TextIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+const ChevronRightIcon = ({ color }: { color: string }) => (
+    <Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M9 18l6-6-6-6" />
+    </Svg>
+);
+
 interface ProfileScreenProps {
     userId: string;
     onBack: () => void;
@@ -496,28 +502,39 @@ export const ProfileScreen = ({
                                 <ScrollView style={styles.settingsContent}>
                                     {settingsPage === 'main' && (
                                         <>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Dark Mode</Text>
-                                                <Switch value={darkMode} onValueChange={toggleTheme} />
-                                            </View>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Notifications</Text>
-                                                <Switch value={notifications} onValueChange={setNotifications} />
-                                            </View>
-                                            <View style={[styles.settingItem, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Sound Effects</Text>
-                                                <Switch value={soundEffects} onValueChange={setSoundEffects} />
+                                            <View style={[styles.sectionCard, darkMode && styles.sectionCardDark]}>
+                                                <Text style={[styles.sectionHeading, darkMode && styles.sectionHeadingDark]}>Preferences</Text>
+                                                <View style={[styles.settingRow, darkMode && styles.settingRowDark]}>
+                                                    <View>
+                                                        <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Dark Mode</Text>
+                                                        <Text style={[styles.settingDescription, darkMode && styles.settingDescriptionDark]}>Switch the look of the app for low-light or daytime use.</Text>
+                                                    </View>
+                                                    <Switch value={darkMode} onValueChange={toggleTheme} />
+                                                </View>
+                                                <View style={[styles.settingRow, darkMode && styles.settingRowDark]}>
+                                                    <View>
+                                                        <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Push Notifications</Text>
+                                                        <Text style={[styles.settingDescription, darkMode && styles.settingDescriptionDark]}>Get notified about new activity and messages.</Text>
+                                                    </View>
+                                                    <Switch value={notifications} onValueChange={setNotifications} />
+                                                </View>
+                                                <View style={[styles.settingRow, darkMode && styles.settingRowDark, styles.lastRow]}>
+                                                    <View>
+                                                        <Text style={[styles.settingLabel, darkMode && styles.settingLabelDark]}>Sound Effects</Text>
+                                                        <Text style={[styles.settingDescription, darkMode && styles.settingDescriptionDark]}>Enable subtle audio feedback and interactions.</Text>
+                                                    </View>
+                                                    <Switch value={soundEffects} onValueChange={setSoundEffects} />
+                                                </View>
                                             </View>
 
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
-                                            <View style={[styles.settingGroup, { paddingHorizontal: 0 }]}>
-                                                <Text style={[styles.sectionHeader, darkMode && styles.textDark, { paddingHorizontal: 20, marginBottom: 8 }]}>CHANGE USERNAME</Text>
-                                                <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 10 }}>
+                                            <View style={[styles.sectionCard, darkMode && styles.sectionCardDark]}>
+                                                <Text style={[styles.sectionHeading, darkMode && styles.sectionHeadingDark]}>Account</Text>
+                                                <Text style={[styles.settingDescription, darkMode && styles.settingDescriptionDark, { marginBottom: 12 }]}>Keep your profile details current and secure.</Text>
+                                                <View style={[styles.settingRow, darkMode && styles.settingRowDark, styles.inputRow]}>
                                                     <TextInput
                                                         style={[styles.usernameInput, darkMode && styles.usernameInputDark]}
                                                         placeholder="New username"
-                                                        placeholderTextColor={darkMode ? "#777" : "#CCC"}
+                                                        placeholderTextColor={darkMode ? "#777" : "#A0A0A0"}
                                                         value={editUsername}
                                                         onChangeText={setEditUsername}
                                                         autoCapitalize="none"
@@ -532,17 +549,21 @@ export const ProfileScreen = ({
                                                 </View>
                                             </View>
 
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
-                                            <Pressable onPress={() => setSettingsPage('privacy')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy & Security</Text>
-                                            </Pressable>
-                                            <Pressable onPress={() => setSettingsPage('help')} style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Help & Support</Text>
-                                            </Pressable>
-
-                                            <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
-
+                                            <View style={[styles.sectionCard, darkMode && styles.sectionCardDark, styles.quickActionsCard]}>
+                                                <Text style={[styles.sectionHeading, darkMode && styles.sectionHeadingDark]}>Quick access</Text>
+                                                <Pressable onPress={() => setSettingsPage('privacy')} style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                    <View style={styles.settingButtonRow}>
+                                                        <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy & Security</Text>
+                                                        <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                    </View>
+                                                </Pressable>
+                                                <Pressable onPress={() => setSettingsPage('help')} style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                    <View style={styles.settingButtonRow}>
+                                                        <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Help & Support</Text>
+                                                        <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                    </View>
+                                                </Pressable>
+                                            </View>
                                             <Pressable onPress={onLogout} style={[styles.logoutButton, darkMode && styles.logoutButtonDark]}>
                                                 <Text style={styles.logoutButtonText}>Log Out</Text>
                                             </Pressable>
@@ -580,26 +601,44 @@ export const ProfileScreen = ({
                                         <>
                                             <Text style={[styles.pageDescription, darkMode && styles.pageDescriptionDark]}>Get help and support</Text>
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>FAQs</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>FAQs</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Contact Support</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Contact Support</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Report a Problem</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Report a Problem</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
 
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Terms of Service</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Terms of Service</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy Policy</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Privacy Policy</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
-                                            <Pressable style={[styles.settingButton, darkMode && styles.settingItemDark]}>
-                                                <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Community Guidelines</Text>
+                                            <Pressable style={[styles.settingButton, darkMode && styles.settingButtonDark]}>
+                                                <View style={styles.settingButtonRow}>
+                                                    <Text style={[styles.settingButtonText, darkMode && styles.settingButtonTextDark]}>Community Guidelines</Text>
+                                                    <ChevronRightIcon color={darkMode ? '#FFF' : '#4A4A4A'} />
+                                                </View>
                                             </Pressable>
 
                                             <View style={[styles.settingsDivider, darkMode && styles.settingsDividerDark]} />
@@ -1062,24 +1101,91 @@ const styles = StyleSheet.create({
         marginVertical: 24,
     },
     settingButton: {
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.04)',
+        paddingVertical: 18,
+        paddingHorizontal: 18,
+        borderRadius: 18,
+        backgroundColor: '#F7F7F9',
+        marginBottom: 12,
+    },
+    settingButtonRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     settingButtonText: {
-        color: '#4A4A4A',
+        color: '#2C2C2C',
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '600',
+    },
+    settingButtonDark: {
+        backgroundColor: '#2C2C2E',
     },
     logoutButton: {
         paddingVertical: 18,
-        borderRadius: 16,
+        borderRadius: 18,
         backgroundColor: '#FFF',
         alignItems: 'center',
         marginTop: 20,
         marginBottom: 40,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.08)',
+    },
+    sectionCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 18,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.05,
+        shadowRadius: 20,
+        elevation: 4,
+    },
+    sectionCardDark: {
+        backgroundColor: '#252528',
+    },
+    sectionHeading: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#4A4A4A',
+        marginBottom: 18,
+    },
+    sectionHeadingDark: {
+        color: '#FFF',
+    },
+    settingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.07)',
+    },
+    settingRowDark: {
+        borderBottomColor: 'rgba(255,255,255,0.08)',
+    },
+    settingDescription: {
+        color: '#8E8E93',
+        fontSize: 13,
+        lineHeight: 18,
+        marginTop: 6,
+    },
+    settingDescriptionDark: {
+        color: '#A3A3A8',
+    },
+    lastRow: {
+        borderBottomWidth: 0,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 0,
+        borderBottomWidth: 0,
+    },
+    quickActionsCard: {
+        paddingTop: 22,
+        paddingBottom: 16,
     },
     logoutButtonText: {
         color: '#FF3B30',
