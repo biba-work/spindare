@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { SoundService } from '../services/SoundService';
 import Svg, { Path, Polyline, Circle } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
+import { uploadToR2 } from '../services/StorageService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -133,8 +134,13 @@ export const PostCreationScreen = ({ challenge, imageUri: initialImageUri, onClo
         setSubmitting(true);
         setUploadProgress(0);
         try {
-            // Pass a progress handler so video uploads can report back
-            await (onPost as any)(content, imageUri, target, (pct: number) => setUploadProgress(pct));
+            let mediaUrl: string | null | undefined = imageUri;
+            if (imageUri) {
+                const mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
+                const { publicUrl } = await uploadToR2(imageUri, 'posts', mimeType, (pct) => setUploadProgress(pct));
+                mediaUrl = publicUrl;
+            }
+            await onPost(content, mediaUrl, target);
             triggerSuccess();
         } catch {
             setSubmitting(false);

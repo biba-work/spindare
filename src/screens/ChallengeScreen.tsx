@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { ReactionButton } from '../components/atoms/ReactionButton';
 import { AIService, UserProfile } from '../services/AIService';
 import { Post, PostService } from '../services/PostService';
+import { uploadToR2 } from '../services/StorageService';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
@@ -421,13 +422,19 @@ export const ChallengeScreen = () => {
 
         if (target === 'feed') {
             try {
+                // Safety net: upload local proof URIs that weren't uploaded in PostCreationScreen
+                let mediaUrl = imageUri || null;
+                if (mediaUrl?.startsWith('file://')) {
+                    const { publicUrl } = await uploadToR2(mediaUrl, 'proofs', 'image/jpeg');
+                    mediaUrl = publicUrl;
+                }
                 await PostService.createPost(
                     userId || 'guest',
                     userProfile.username,
                     userProfile.photoURL || '',
                     challenge || 'Daily Spin',
                     content,
-                    imageUri || null
+                    mediaUrl
                 );
             } catch (err) {
                 console.error("Error creating post from Challenge Screen:", err);
