@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, Pressable, ScrollView, SafeAreaView, Dimensions, Image, Platform, PanResponder } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { AppButton } from '../atoms/AppButton';
@@ -60,17 +60,36 @@ const MessageIcon = ({ color }: { color: string }) => (
     </Svg>
 );
 
+export interface SavedChallengeItem {
+    challenge: string;
+    expiresAt: string;
+}
+
 interface OverlayProps {
     visible: boolean;
     type: 'saved' | 'notifications';
     userId?: string;
     onClose: () => void;
-    data: string[];
+    data: SavedChallengeItem[];
     onAction: (item: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     animation: Animated.Value;
     onOpenMessages?: () => void;
     onViewProfile?: (userId: string, username: string, avatar: string) => void;
 }
+
+// Returns a human-readable countdown like "1d 4h left" or "2h 30m left"
+const formatTimeLeft = (expiresAt: string): { label: string; urgent: boolean } => {
+    const ms = new Date(expiresAt).getTime() - Date.now();
+    if (ms <= 0) return { label: 'Expired', urgent: true };
+    const totalMinutes = Math.floor(ms / 60000);
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    const urgent = ms < 6 * 60 * 60 * 1000; // < 6 hours = red
+    if (days > 0) return { label: `${days}d ${hours}h left`, urgent };
+    if (hours > 0) return { label: `${hours}h ${minutes}m left`, urgent };
+    return { label: `${minutes}m left`, urgent: true };
+};
 
 const MOCK_CHALLENGES = {
     new: [
@@ -187,7 +206,7 @@ export const GenericOverlay = ({ visible, type, userId, onClose, data, onAction,
                                         <Pressable
                                             onPress={async () => {
                                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                                await SocialService.acceptConnectionRequest(req.id);
+                                                await SocialService.acceptConnectionRequest(userId || '', req.id, req.username, req.photoURL || null);
                                             }}
                                             style={[styles.acceptBtn, { flex: 1 }]}
                                         >
@@ -196,7 +215,7 @@ export const GenericOverlay = ({ visible, type, userId, onClose, data, onAction,
                                         <Pressable
                                             onPress={async () => {
                                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                                await SocialService.declineConnectionRequest(req.id);
+                                                await SocialService.declineConnectionRequest(userId || '', req.id);
                                             }}
                                             style={[styles.acceptBtn, { flex: 1, backgroundColor: darkMode ? '#3A3A3C' : '#E5E5EA' }]}
                                         >
@@ -230,7 +249,7 @@ export const GenericOverlay = ({ visible, type, userId, onClose, data, onAction,
                                     </Text> {notif.content}
                                 </Text>
                                 <Text style={styles.notifTime}>
-                                    {notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate ? notif.timestamp.toDate() : new Date(), { addSuffix: true }) : 'just now'}
+                                    {notif.timestamp ? formatDistanceToNow((notif.timestamp as any).toDate ? (notif.timestamp as any).toDate() : new Date(notif.timestamp), { addSuffix: true }) : 'just now'}
                                 </Text>
                             </View>
                         </Pressable>
@@ -338,22 +357,30 @@ export const GenericOverlay = ({ visible, type, userId, onClose, data, onAction,
                     <View style={styles.mainContent}>
                         {type === 'saved' ? (
                             <ScrollView {...scrollProps} contentContainerStyle={styles.scrollContent}>
-                                {data.map((item, index) => (
-                                    <View key={index} style={[styles.savedCard, darkMode && styles.savedCardDark]}>
-                                        <Text style={[styles.savedText, darkMode && styles.savedTextDark]}>{item}</Text>
-                                        <View style={styles.savedActions}>
-                                            <Pressable onPress={() => onAction(item, 'send')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
-                                                <SendIcon color="#FAF9F6" />
-                                            </Pressable>
-                                            <Pressable onPress={() => onAction(item, 'camera')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
-                                                <CameraIcon color="#FAF9F6" />
-                                            </Pressable>
-                                            <Pressable onPress={() => onAction(item, 'gallery')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
-                                                <GalleryIcon color="#FAF9F6" />
-                                            </Pressable>
+                                {data.map((item, index) => {
+                                    const timer = formatTimeLeft(item.expiresAt);
+                                    return (
+                                        <View key={index} style={[styles.savedCard, darkMode && styles.savedCardDark]}>
+                                            <View style={styles.savedCardHeader}>
+                                                <Text style={[styles.savedText, darkMode && styles.savedTextDark]}>{item.challenge}</Text>
+                                                <View style={[styles.timerPill, timer.urgent && styles.timerPillUrgent]}>
+                                                    <Text style={[styles.timerText, timer.urgent && styles.timerTextUrgent]}>⏱ {timer.label}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={styles.savedActions}>
+                                                <Pressable onPress={() => onAction(item.challenge, 'send')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
+                                                    <SendIcon color="#FAF9F6" />
+                                                </Pressable>
+                                                <Pressable onPress={() => onAction(item.challenge, 'camera')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
+                                                    <CameraIcon color="#FAF9F6" />
+                                                </Pressable>
+                                                <Pressable onPress={() => onAction(item.challenge, 'gallery')} style={[styles.savedActionBtn, darkMode && styles.savedActionBtnDark]}>
+                                                    <GalleryIcon color="#FAF9F6" />
+                                                </Pressable>
+                                            </View>
                                         </View>
-                                    </View>
-                                ))}
+                                    );
+                                })}
                                 {data.length === 0 && (
                                     <View style={styles.emptyState}>
                                         <Text style={[styles.emptyText, darkMode && styles.emptyTextDark]}>No saved challenges yet.</Text>
@@ -571,12 +598,34 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.04)',
     },
+    savedCardHeader: {
+        marginBottom: 14,
+        gap: 8,
+    },
+    timerPill: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,122,255,0.10)',
+    },
+    timerPillUrgent: {
+        backgroundColor: 'rgba(255,59,48,0.12)',
+    },
+    timerText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#007AFF',
+        paddingRight: Platform.OS === 'android' ? 4 : 0,
+    },
+    timerTextUrgent: {
+        color: '#FF3B30',
+    },
     savedText: {
         color: '#4A4A4A',
         fontSize: 15,
         fontWeight: '400',
         lineHeight: 22,
-        marginBottom: 16,
     },
     savedActions: {
         flexDirection: 'row',

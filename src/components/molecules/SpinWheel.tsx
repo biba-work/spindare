@@ -129,11 +129,11 @@ export const SpinWheel = ({ options, onSpinEnd, canSpin, onPress, onSpinStart }:
     };
 
     const onLayout = () => {
-        wheelRef.current?.measure((x, y, width, height, pageX, pageY) => {
-            setWheelCenter({
-                x: pageX + width / 2,
-                y: pageY + height / 2
-            });
+        // measureInWindow is reliable on both iOS and Android because it queries
+        // the native window coordinates directly, avoiding the frame-of-reference
+        // issues that cause measure() to return zeros on iOS.
+        wheelRef.current?.measureInWindow((x, y, w, h) => {
+            setWheelCenter({ x: x + w / 2, y: y + h / 2 });
         });
     };
 

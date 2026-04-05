@@ -1,18 +1,25 @@
-// LogService MUST be the first import — it patches console.* immediately.
+// Gesture Handler must load before components that use native gestures (e.g. SpinWheel).
+// Do not import react-native-reanimated here unless you use it in-app — on Expo Go it
+// can boot the worklet runtime and trigger Hermes "Property 'require' doesn't exist".
+import 'react-native-gesture-handler';
+
+// LogService patches console.* — keep soon after native entry imports above.
 import "./src/services/LogService";
 import { SoundService } from "./src/services/SoundService";
 // Preload all sounds so first interactions feel instant
 SoundService.preloadAll();
-import React, { useCallback } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from 'expo-splash-screen';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
-import { ClerkProvider, ClerkLoaded, SignedIn, SignedOut } from '@clerk/clerk-expo';
+import * as Sentry from '@sentry/react-native';
+import { ClerkProvider, ClerkLoaded, ClerkLoading, SignedIn, SignedOut, useAuth } from '@clerk/clerk-expo';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
+import { setSupabaseToken } from './src/services/supabaseConfig';
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
 import { MainFeedScreen } from "./src/screens/MainFeedScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -20,8 +27,44 @@ import { AppConfig } from "./src/config/AppConfig";
 
 SplashScreen.preventAutoHideAsync();
 
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || "https://placeholder@sentry.io/123",
+  debug: false,
+});
+
 import { ThemeProvider } from "./src/contexts/ThemeContext";
 import { ToastProvider } from "./src/contexts/ToastContext";
+
+// Keeps the Supabase client's Authorization header in sync with the active
+// Clerk session. This allows RLS owner-policies to work once you configure
+// a Clerk JWT template named "supabase" in your Clerk dashboard pointing at
+// your Supabase JWT secret (Settings → API → JWT Secret).
+// If the template isn't set up yet, getToken() returns null and the client
+// falls back to the anon key — the app keeps working either way.
+const SupabaseAuthSync = ({ children }: { children: React.ReactNode }) => {
+  const { getToken, isSignedIn } = useAuth();
+
+  useEffect(() => {
+    if (!isSignedIn) { setSupabaseToken(null); return; }
+
+    const sync = async () => {
+      try {
+        const token = await getToken({ template: 'supabase' });
+        setSupabaseToken(token);
+      } catch {
+        // Template not configured yet — silently fall back to anon key
+        setSupabaseToken(null);
+      }
+    };
+
+    sync();
+    // Clerk JWTs expire after 60 min — refresh every 55 min
+    const interval = setInterval(sync, 55 * 60 * 1000);
+    return () => { clearInterval(interval); setSupabaseToken(null); };
+  }, [isSignedIn, getToken]);
+
+  return <>{children}</>;
+};
 
 const tokenCache = {
   async getToken(key: string) {
@@ -55,24 +98,38 @@ const publishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY
   || expoExtras.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY
   || '';
 
-export default function App() {
+function App() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_700Bold,
   });
 
-  console.log('App starting. Fonts loaded:', fontsLoaded, 'Font error:', fontError);
+  const splashHiddenRef = useRef(false);
 
-  const onLayoutRootView = useCallback(async () => {
-    console.log('onLayoutRootView triggered. fontsLoaded:', fontsLoaded);
-    if (fontsLoaded || fontError) {
-      // Small delay to ensure layout is ready before hiding splash
-      setTimeout(async () => {
-        console.log('Hiding splash screen');
-        await SplashScreen.hideAsync();
-      }, 50);
+  const hideSplash = useCallback(async () => {
+    if (splashHiddenRef.current) return;
+    splashHiddenRef.current = true;
+    try {
+      await SplashScreen.hideAsync();
+      console.log('Splash screen hidden');
+    } catch (e) {
+      console.warn('SplashScreen.hideAsync failed', e);
     }
-  }, [fontsLoaded, fontError]);
+  }, []);
+
+  // Hide native splash when fonts are done — do not wait for ClerkLoaded (it renders null until Clerk is ready).
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+    const t = setTimeout(() => void hideSplash(), 50);
+    return () => clearTimeout(t);
+  }, [fontsLoaded, fontError, hideSplash]);
+
+  useEffect(() => {
+    const t = setTimeout(() => void hideSplash(), 12000);
+    return () => clearTimeout(t);
+  }, [hideSplash]);
+
+  console.log('App starting. Fonts loaded:', fontsLoaded, 'Font error:', fontError);
 
   if (!fontsLoaded && !fontError) {
     console.log('Waiting for fonts...');
@@ -82,7 +139,7 @@ export default function App() {
   if (!publishableKey) {
     return (
       <SafeAreaProvider>
-        <View style={styles.errorContainer} onLayout={onLayoutRootView}>
+        <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>Missing Clerk publishable key</Text>
           <Text style={styles.errorText}>
             Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY or VITE_CLERK_PUBLISHABLE_KEY in your Expo environment/app config.
@@ -94,35 +151,39 @@ export default function App() {
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <SafeAreaProvider>
-          <ToastProvider>
-            <ThemeProvider>
-              <View style={styles.container} onLayout={onLayoutRootView}>
-                <View style={styles.deadzone} />
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <StatusBar style="light" />
-                  
+      <SafeAreaProvider>
+        <ToastProvider>
+          <ThemeProvider>
+            <View style={styles.container}>
+              <View style={styles.deadzone} />
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style="light" />
+                <ClerkLoaded>
                   <SignedIn>
+                    <SupabaseAuthSync>
                     {AppConfig.useRestructuredLayout ? (
                       <MainFeedScreen />
                     ) : (
                       <ChallengeScreen />
                     )}
+                    </SupabaseAuthSync>
                   </SignedIn>
-                  
                   <SignedOut>
                     <OnboardingScreen onComplete={async () => {
                       // Logic is handled by Clerk hooks inside OnboardingScreen
                     }} />
                   </SignedOut>
-                  
-                </GestureHandlerRootView>
-              </View>
-            </ThemeProvider>
-          </ToastProvider>
-        </SafeAreaProvider>
-      </ClerkLoaded>
+                </ClerkLoaded>
+                <ClerkLoading>
+                  <View style={styles.clerkLoading}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
+                  </View>
+                </ClerkLoading>
+              </GestureHandlerRootView>
+            </View>
+          </ThemeProvider>
+        </ToastProvider>
+      </SafeAreaProvider>
     </ClerkProvider>
   );
 }
@@ -171,4 +232,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
+  clerkLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+
+export default Sentry.wrap(App);

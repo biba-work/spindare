@@ -5,7 +5,7 @@ import { useToast } from '../contexts/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
-import { UserProfile } from '../services/AIService';
+import { UserProfile, AIService } from '../services/AIService';
 import { PostService } from '../services/PostService';
 import { AuthService } from '../services/AuthService';
 import * as ImagePicker from 'expo-image-picker';
@@ -99,6 +99,7 @@ interface ProfileScreenProps {
     onUpdateProfile: (updates: Partial<UserProfile>) => void;
     onShare?: () => void;
     onOpenCamera?: () => void;
+    onSaveChallenge?: (challenge: string) => void;
 }
 
 import { useTheme } from '../contexts/ThemeContext';
@@ -115,6 +116,7 @@ export const ProfileScreen = ({
     onUpdateProfile,
     onShare,
     onOpenCamera,
+    onSaveChallenge,
 }: ProfileScreenProps) => {
     const [mode, setMode] = useState<'list' | 'grid'>('grid');
     const [showSettings, setShowSettings] = useState(false);
@@ -129,9 +131,11 @@ export const ProfileScreen = ({
     const [activityStatus, setActivityStatus] = useState(true);
     const [settingsPage, setSettingsPage] = useState<'main' | 'privacy' | 'help'>('main'); // kept for compat but no longer used
     const [userPosts, setUserPosts] = useState<Post[]>([]);
+    const streak = userProfile.streak ?? 0;
 
     const [showSpinner, setShowSpinner] = useState(false);
     const [spinResult, setSpinResult] = useState<string | null>(null);
+    const [isRetrying, setIsRetrying] = useState(false);
 
     const settingsAnim = useRef(new Animated.Value(height)).current;
     const spinnerAnim = useRef(new Animated.Value(height)).current;
@@ -163,6 +167,7 @@ export const ProfileScreen = ({
 
     const [submissionStep, setSubmissionStep] = useState<'idle' | 'result' | 'choose' | 'preview_media' | 'input_text'>('idle');
     const [mediaUri, setMediaUri] = useState<string | null>(null);
+    const [mediaFromCamera, setMediaFromCamera] = useState(false);
     const [textContent, setTextContent] = useState('');
     const [mediaAspectRatio, setMediaAspectRatio] = useState(1);
     const [isSubmittingChallenge, setIsSubmittingChallenge] = useState(false);
@@ -249,6 +254,21 @@ export const ProfileScreen = ({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     };
 
+    const handleRetryWithAI = async () => {
+        if (isRetrying) return;
+        setIsRetrying(true);
+        try {
+            const newChallenge = await AIService.generateChallenge(userProfile);
+            setSpinResult(newChallenge);
+            onChallengeReceived(newChallenge);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (e) {
+            showToast('Could not generate a new challenge. Try again.', { type: 'error' });
+        } finally {
+            setIsRetrying(false);
+        }
+    };
+
     const handleActionChoose = () => {
         setSubmissionStep('choose');
         // Layout animation for smoothness
@@ -269,6 +289,7 @@ export const ProfileScreen = ({
 
         if (!result.canceled && result.assets[0]) {
             setMediaUri(result.assets[0].uri);
+            setMediaFromCamera(true);
             setMediaAspectRatio(result.assets[0].width / result.assets[0].height);
             setSubmissionStep('preview_media');
         }
@@ -288,6 +309,7 @@ export const ProfileScreen = ({
 
         if (!result.canceled && result.assets[0]) {
             setMediaUri(result.assets[0].uri);
+            setMediaFromCamera(false);
             setMediaAspectRatio(result.assets[0].width / result.assets[0].height);
             setSubmissionStep('preview_media');
         }
@@ -309,7 +331,9 @@ export const ProfileScreen = ({
                 userProfile.photoURL || '',
                 spinResult,
                 textContent || 'Challenge completed! 🎯',
-                mediaUri
+                mediaUri,
+                undefined,
+                mediaFromCamera
             );
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -463,7 +487,6 @@ export const ProfileScreen = ({
                             <Pressable onPress={openSpinner} style={styles.spinBtn}>
                                 <SpinnerIcon color="#FAF9F6" />
                                 <Text style={styles.spinBtnText}>SPIN WHEEL</Text>
-
                             </Pressable>
 
                             {/* Stats */}
@@ -477,6 +500,13 @@ export const ProfileScreen = ({
                                     <Text style={[styles.statValue, darkMode && styles.textDark]}>{totalReactions}</Text>
                                     <Text style={[styles.statLabel, darkMode && styles.bioDark]}>Reactions</Text>
                                 </View>
+                            </View>
+
+                            {/* Streak — below stats */}
+                            <View style={[styles.streakChip, darkMode && styles.streakChipDark]}>
+                                <Text style={[styles.streakChipText, darkMode && styles.streakChipTextDark]}>
+                                    {streak > 0 ? `🔥 ${streak}-day streak` : '🔥 Start your first streak'}
+                                </Text>
                             </View>
                         </View>
 
@@ -862,15 +892,42 @@ export const ProfileScreen = ({
                                                 <Text style={styles.resultLabel}>CHALLENGE UNLOCKED</Text>
                                                 <Text style={[styles.resultText, darkMode && styles.textDark]}>{spinResult}</Text>
 
+                                                {/* Primary row: Share + Do It */}
                                                 <View style={styles.actionRow}>
                                                     <Pressable onPress={() => { onShare?.(); }} style={[styles.actionBtnSecondary, darkMode && styles.secondaryBtnDark]}>
                                                         <Ionicons name="share-outline" size={24} color={darkMode ? "#FFF" : "#1C1C1E"} />
                                                         <Text style={[styles.actionBtnTextSecondary, darkMode && styles.textDark]}>Share</Text>
                                                     </Pressable>
-
                                                     <Pressable onPress={handleActionChoose} style={styles.actionBtnPrimary}>
                                                         <Ionicons name="camera-outline" size={24} color="#FFF" />
                                                         <Text style={styles.actionBtnTextPrimary}>Do It</Text>
+                                                    </Pressable>
+                                                </View>
+
+                                                {/* Secondary row: Save + Retry with AI */}
+                                                <View style={styles.actionRowSecondary}>
+                                                    <Pressable
+                                                        onPress={() => {
+                                                            if (spinResult && onSaveChallenge) {
+                                                                onSaveChallenge(spinResult);
+                                                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                                                showToast('Challenge saved! You have 2 days to complete it.', { type: 'success' });
+                                                            }
+                                                        }}
+                                                        style={[styles.actionBtnGhost, darkMode && styles.actionBtnGhostDark]}
+                                                    >
+                                                        <Ionicons name="bookmark-outline" size={18} color={darkMode ? '#E5E5EA' : '#3A3A3C'} />
+                                                        <Text style={[styles.actionBtnGhostText, darkMode && styles.actionBtnGhostTextDark]}>Save</Text>
+                                                    </Pressable>
+                                                    <Pressable
+                                                        onPress={handleRetryWithAI}
+                                                        disabled={isRetrying}
+                                                        style={[styles.actionBtnGhost, darkMode && styles.actionBtnGhostDark, isRetrying && { opacity: 0.5 }]}
+                                                    >
+                                                        <Ionicons name="sparkles-outline" size={18} color={darkMode ? '#E5E5EA' : '#3A3A3C'} />
+                                                        <Text style={[styles.actionBtnGhostText, darkMode && styles.actionBtnGhostTextDark]}>
+                                                            {isRetrying ? 'Thinking...' : 'Retry with AI'}
+                                                        </Text>
                                                     </Pressable>
                                                 </View>
                                             </Animated.View>
@@ -1082,6 +1139,44 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 1,
     },
+    streakChip: {
+        alignSelf: 'center',
+        marginTop: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,159,10,0.14)',
+    },
+    streakChipDark: {
+        backgroundColor: 'rgba(255,159,10,0.22)',
+    },
+    streakChipText: {
+        color: '#FF9F0A',
+        fontSize: 12,
+        fontWeight: '700',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
+    },
+    streakChipTextDark: {
+        color: '#FFD60A',
+    },
+    streakRow: {
+        marginTop: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 18,
+        backgroundColor: 'rgba(118,84,255,0.08)',
+    },
+    streakRowDark: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    streakText: {
+        color: '#5E34FF',
+        textAlign: 'center',
+        fontWeight: '700',
+    },
+    streakTextDark: {
+        color: '#E7E7FF',
+    },
     statDivider: {
         width: 1,
         height: 36,
@@ -1213,251 +1308,6 @@ const styles = StyleSheet.create({
         fontWeight: '400',
         marginTop: 6,
     },
-    modalOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        zIndex: 5000,
-    },
-    solidModalBg: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#FAF9F6',
-    },
-    // ══════════════════════════════════════════════════════════════════════
-    //  SETTINGS — from scratch (st* prefix)
-    // ══════════════════════════════════════════════════════════════════════
-    stBg: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#F2F2F7',
-    },
-    stBgDark: { backgroundColor: '#0A0A0F' },
-    stDragZone: {
-        alignItems: 'center',
-        paddingTop: 14,
-        paddingBottom: 6,
-    },
-    stDragPill: {
-        width: 44,
-        height: 5,
-        borderRadius: 3,
-        backgroundColor: 'rgba(0,0,0,0.18)',
-    },
-    stDragPillDark: { backgroundColor: 'rgba(255,255,255,0.22)' },
-    stTopBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 22,
-        paddingTop: 4,
-        paddingBottom: 16,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
-    },
-    stTopBarDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
-    stTopTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#0A0A0F',
-        letterSpacing: -0.5,
-    },
-    stTopTitleDark: { color: '#F5F5F5' },
-    stDoneBtn: {
-        backgroundColor: 'rgba(0,122,255,0.1)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-    },
-    stDoneTxt: {
-        color: '#007AFF',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    stDoneTxtDark: { color: '#4DA6FF' },
-    stScroll: {
-        paddingHorizontal: 16,
-        paddingTop: 20,
-        paddingBottom: 60,
-    },
-    // ── Hero profile card ─────────────────────────────────────────────────
-    stHero: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 28,
-        gap: 14,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 2,
-    },
-    stHeroDark: { backgroundColor: '#1C1C1E' },
-    stHeroLeft: { position: 'relative' },
-    stHeroAvatar: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: '#E0E0E0',
-    },
-    stHeroAvatarBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 22,
-        height: 22,
-        borderRadius: 11,
-        backgroundColor: '#007AFF',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#FFF',
-    },
-    stHeroMeta: { flex: 1 },
-    stHeroName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: '#0A0A0F',
-        letterSpacing: -0.3,
-        marginBottom: 3,
-    },
-    stHeroSub: {
-        fontSize: 13,
-        color: '#8E8E93',
-        fontWeight: '400',
-    },
-    stHeroBadge: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    stHeroBadgeDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
-    // ── Section label ─────────────────────────────────────────────────────
-    stSectionLabel: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#8E8E93',
-        letterSpacing: 0.8,
-        marginBottom: 8,
-        marginLeft: 4,
-    },
-    stSectionLabelDark: { color: '#636366' },
-    // ── Group card ────────────────────────────────────────────────────────
-    stGroup: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        marginBottom: 24,
-        overflow: 'hidden',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-        elevation: 1,
-    },
-    stGroupDark: { backgroundColor: '#1C1C1E' },
-    // ── Individual row ────────────────────────────────────────────────────
-    stRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 13,
-        gap: 13,
-        minHeight: 56,
-    },
-    stRowDark: {},
-    stRowLast: { borderBottomWidth: 0 },
-    stRowLabel: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#0A0A0F',
-        letterSpacing: -0.2,
-    },
-    stRowLabelDark: { color: '#F0F0F0' },
-    stRowSub: {
-        fontSize: 12,
-        color: '#AEAEB2',
-        marginTop: 2,
-    },
-    stRowSubDark: { color: '#636366' },
-    // ── Coloured icon square ──────────────────────────────────────────────
-    stIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexShrink: 0,
-    },
-    // ── Username inline input ─────────────────────────────────────────────
-    stUsernameInput: {
-        fontSize: 14,
-        color: '#0A0A0F',
-        paddingVertical: 0,
-        marginTop: 2,
-    },
-    stUsernameInputDark: { color: '#AEAEB2' },
-    // ── Save button ───────────────────────────────────────────────────────
-    stSaveBtn: {
-        backgroundColor: '#007AFF',
-        paddingHorizontal: 14,
-        paddingVertical: 7,
-        borderRadius: 10,
-    },
-    stSaveBtnTxt: {
-        color: '#FFF',
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    // ── Log out ───────────────────────────────────────────────────────────
-    stLogout: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 15,
-        marginBottom: 24,
-        gap: 13,
-        shadowColor: '#FF3B30',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        elevation: 1,
-    },
-    stLogoutDark: { backgroundColor: '#1C1C1E' },
-    stLogoutTxt: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#FF3B30',
-        flex: 1,
-    },
-    // ── Version footer ────────────────────────────────────────────────────
-    stVersion: {
-        alignItems: 'center',
-        paddingBottom: 20,
-        gap: 4,
-    },
-    stVersionApp: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: '#C7C7CC',
-        letterSpacing: 2,
-    },
-    stVersionNum: {
-        fontSize: 12,
-        color: '#AEAEB2',
-        fontWeight: '400',
-    },
-    // ── Kept stubs so spinner modal + existing non-settings code still works
-    solidModalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#F2F2F7' },
-    solidModalBgDark: { backgroundColor: '#0A0A0F' },
-    modalContainer: { flex: 1 },
-    modalOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 5000 },
-    versionInfo: { alignItems: 'center', paddingVertical: 32 },
-    versionText: { color: '#2C2C2C', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-    versionSubtext: { color: '#AEAEB2', fontSize: 12 },
     spinnerModalBg: {
         flex: 1,
         justifyContent: 'center',
@@ -1568,6 +1418,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 20,
     },
+    proofActionsRow: { flexDirection: 'row', gap: 20, justifyContent: 'center', marginTop: 16 },
+    proofActionBtn: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#4A4A4A',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    proofActionBtnDark: { backgroundColor: '#2C2C2E' },
     miniChallengeText: {
         fontSize: 14,
         color: '#8E8E93',
@@ -1626,90 +1486,43 @@ const styles = StyleSheet.create({
     },
     cardDark: { backgroundColor: '#2C2C2E' },
     secondaryBtnDark: { backgroundColor: '#3A3A3C' },
-    // Username Edit
-    settingGroup: {
-        marginBottom: 24,
-    },
-    sectionHeader: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#8E8E93',
-        marginBottom: 12,
-        letterSpacing: 1.5,
-        textTransform: 'uppercase',
-    },
-    usernameInput: {
-        flex: 1,
-        height: 44,
-        backgroundColor: '#F2F2F7',
-        borderRadius: 10,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        color: '#1C1C1E',
-    },
-    usernameInputDark: {
-        backgroundColor: '#2C2C2E',
-        color: '#FFF',
-    },
-    saveBtn: {
-        backgroundColor: '#007AFF',
-        height: 44,
-        paddingHorizontal: 16,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    saveBtnText: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    // Icon circle for spinner action buttons
-    iconCircle: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    chooseSubtitle: {
-        fontSize: 14,
-        color: '#8E8E93',
-        textAlign: 'center',
-        marginBottom: 20,
-        marginTop: -8,
-    },
-    // SPIND-style proof action buttons
-    proofActionsRow: {
+    actionRowSecondary: {
         flexDirection: 'row',
         gap: 10,
-        marginTop: 8,
+        width: '100%',
+        marginTop: 10,
     },
-    proofActionBtn: {
+    actionBtnGhost: {
         flex: 1,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#4A4A4A',
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: 7,
+        paddingVertical: 13,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.07)',
     },
-    proofActionBtnDark: {
-        backgroundColor: '#3A3A3C',
+    actionBtnGhostDark: {
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    actionBtnGhostText: {
+        color: '#3A3A3C',
+        fontSize: 14,
+        fontWeight: '600',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
+    },
+    actionBtnGhostTextDark: {
+        color: '#E5E5EA',
     },
 
-    // ── Settings v3 (TikTok-style flat) ── missing style names ──────────────
-    stHandle: {
-        alignItems: 'center',
-        paddingTop: 12,
-        paddingBottom: 6,
-    },
-    stHandlePill: {
-        width: 40,
-        height: 5,
-        borderRadius: 3,
-        backgroundColor: 'rgba(0,0,0,0.18)',
-    },
+    // ── Settings v3 — TikTok-style flat (st* prefix) ──────────────────────
+    stBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#F2F2F7' },
+    stBgDark: { backgroundColor: '#0A0A0F' },
+    stHandle: { alignItems: 'center', paddingTop: 12, paddingBottom: 6 },
+    stHandlePill: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.18)' },
     stHeader: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1719,15 +1532,8 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(0,0,0,0.08)',
     },
-    stHeaderDark: {
-        borderBottomColor: 'rgba(255,255,255,0.08)',
-    },
-    stHeaderTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#0A0A0F',
-        letterSpacing: -0.5,
-    },
+    stHeaderDark: { borderBottomColor: 'rgba(255,255,255,0.08)' },
+    stHeaderTitle: { fontSize: 20, fontWeight: '700', color: '#0A0A0F', letterSpacing: -0.5 },
     stProfileBlock: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1739,15 +1545,8 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         gap: 14,
     },
-    stProfileBlockDark: {
-        backgroundColor: '#1C1C1E',
-    },
-    stAvatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: '#E0E0E0',
-    },
+    stProfileBlockDark: { backgroundColor: '#1C1C1E' },
+    stAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E0E0E0' },
     stCamBadge: {
         position: 'absolute',
         right: 16,
@@ -1755,23 +1554,14 @@ const styles = StyleSheet.create({
         width: 26,
         height: 26,
         borderRadius: 13,
-        backgroundColor: 'rgba(60,60,67,0.14)',
+        backgroundColor: '#007AFF',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
         borderColor: '#FFF',
     },
-    stProfileName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#0A0A0F',
-        letterSpacing: -0.3,
-        marginBottom: 2,
-    },
-    stProfileSub: {
-        fontSize: 13,
-        color: '#8E8E93',
-    },
+    stProfileName: { fontSize: 16, fontWeight: '700', color: '#0A0A0F', letterSpacing: -0.3, marginBottom: 2 },
+    stProfileSub: { fontSize: 13, color: '#8E8E93' },
     stSecLabel: {
         fontSize: 12,
         fontWeight: '600',
@@ -1782,79 +1572,31 @@ const styles = StyleSheet.create({
         marginBottom: 6,
         textTransform: 'uppercase',
     },
-    stSecLabelDk: {
-        color: '#636366',
-    },
-    stSection: {
-        marginHorizontal: 16,
-        backgroundColor: '#FFF',
-        borderRadius: 14,
-        overflow: 'hidden',
-        marginBottom: 4,
-    },
-    stSectionDark: {
-        backgroundColor: '#1C1C1E',
-    },
-    stIco: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-        flexShrink: 0,
-        backgroundColor: 'rgba(60,60,67,0.08)',
-    },
-    stIcoDark: {
-        backgroundColor: 'rgba(255,255,255,0.08)',
-    },
-    stDivider: {
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: 'rgba(0,0,0,0.08)',
-        marginLeft: 60,
-    },
-    stDividerDk: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
-    },
-    stLabel: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#0A0A0F',
-        letterSpacing: -0.2,
-    },
-    stLabelDk: {
-        color: '#F0F0F0',
-    },
-    stSublabel: {
-        fontSize: 12,
-        color: '#AEAEB2',
-        marginTop: 2,
-    },
-    stValue: {
-        fontSize: 14,
-        color: '#AEAEB2',
-        marginRight: 4,
-    },
-    stInlineInput: {
-        fontSize: 14,
-        color: '#0A0A0F',
-        paddingVertical: 0,
-        marginTop: 2,
-    },
-    stInlineInputDk: {
-        color: '#AEAEB2',
-    },
-    stSaveTxt: {
-        color: '#FFF',
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    stFooter: {
-        textAlign: 'center',
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#C7C7CC',
-        letterSpacing: 2,
-        paddingVertical: 28,
-    },
+    stSecLabelDk: { color: '#636366' },
+    stSection: { marginHorizontal: 16, backgroundColor: '#FFF', borderRadius: 14, overflow: 'hidden', marginBottom: 4 },
+    stSectionDark: { backgroundColor: '#1C1C1E' },
+    stRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 13, minHeight: 56 },
+    stRowDark: {},
+    stIco: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+    stIcoDark: { backgroundColor: '#2C2C2E' },
+    stDivider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)', marginLeft: 60 },
+    stDividerDk: { backgroundColor: 'rgba(255,255,255,0.06)' },
+    stLabel: { flex: 1, fontSize: 16, fontWeight: '500', color: '#0A0A0F', letterSpacing: -0.2 },
+    stLabelDk: { color: '#F0F0F0' },
+    stSublabel: { fontSize: 12, color: '#AEAEB2', marginTop: 2 },
+    stValue: { fontSize: 14, color: '#AEAEB2', marginRight: 4 },
+    stInlineInput: { fontSize: 14, color: '#0A0A0F', paddingVertical: 0, marginTop: 2 },
+    stInlineInputDk: { color: '#AEAEB2' },
+    stSaveBtn: { backgroundColor: '#007AFF', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
+    stSaveTxt: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+    stFooter: { textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#C7C7CC', letterSpacing: 2, paddingVertical: 28 },
+
+    // ── Compat stubs (spinner modal + non-settings refs) ──────────────────
+    solidModalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FAF9F6' },
+    solidModalBgDark: { backgroundColor: '#0A0A0F' },
+    modalContainer: { flex: 1 },
+    modalOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 5000 },
+    versionInfo: { alignItems: 'center', paddingVertical: 32 },
+    versionText: { color: '#2C2C2C', fontSize: 14, fontWeight: '600', marginBottom: 4 },
+    versionSubtext: { color: '#AEAEB2', fontSize: 12 },
 });

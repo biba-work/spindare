@@ -32,6 +32,8 @@ export const AuthService = {
                 level: 1,
                 spinsLeft: 2,
                 lastSpinTimestamp: 0,
+                streak: 0,
+                lastChallengeDate: '',
             };
 
             const { error } = await supabase

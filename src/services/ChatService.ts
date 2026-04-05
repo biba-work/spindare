@@ -1,6 +1,12 @@
+import { StreamChat } from 'stream-chat';
 import { supabase } from './supabaseConfig';
 
-// Message shape matching react-native-gifted-chat's IMessage
+const STREAM_KEY = process.env.EXPO_PUBLIC_STREAM_KEY || "";
+const TOKEN_SERVER_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/get-stream-token`;
+
+// Stream Chat client singleton
+const client = StreamChat.getInstance(STREAM_KEY);
+
 export interface Message {
     _id: string;
     text: string;
@@ -22,54 +28,78 @@ export interface Conversation {
     lastMessageAt: string;
 }
 
-// Generate a stable, sorted conversation ID for two users
-const makeConversationId = (userId1: string, userId2: string): string => {
-    return [userId1, userId2].sort().join('__');
-};
-
 export const ChatService = {
+
+    /**
+     * Connects the current user to the Stream Chat client.
+     * Fetches a server-side generated token from a Supabase Edge Function.
+     */
+    async connectUser(userId: string, username: string, avatar?: string): Promise<void> {
+        if (client.userID) return; // Already connected
+
+        try {
+            // Fetch token from our new Edge Function
+            const res = await fetch(TOKEN_SERVER_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
+                },
+                body: JSON.stringify({ userId }),
+            });
+
+            if (!res.ok) throw new Error(`Token server error: ${res.status}`);
+            const { token } = await res.json();
+
+            await client.connectUser(
+                {
+                    id: userId,
+                    name: username,
+                    image: avatar,
+                },
+                token
+            );
+        } catch (error) {
+            console.error("[ChatService] Failed to connect user:", error);
+            throw error;
+        }
+    },
+
+    async disconnectUser(): Promise<void> {
+        await client.disconnectUser();
+    },
 
     // Get or create a conversation between two users
     async getOrCreateConversation(
         currentUserId: string,
         otherUserId: string
     ): Promise<string> {
-        const convoId = makeConversationId(currentUserId, otherUserId);
-
-        const { data: existing } = await supabase
-            .from('conversations')
-            .select('id')
-            .eq('id', convoId)
-            .single();
-
-        if (!existing) {
-            await supabase.from('conversations').insert({
-                id: convoId,
-                user1: currentUserId,
-                user2: otherUserId,
-            });
-        }
-
-        return convoId;
+        // Stream uses 'messaging' channel type by default
+        const channel = client.channel('messaging', {
+            members: [currentUserId, otherUserId],
+        });
+        
+        await channel.create();
+        return channel.id!;
     },
 
     // Send a challenge as a DM
     async sendChallengeToUser(
         currentUserId: string,
         recipientId: string,
-        recipientName: string,
+        _recipientName: string, // Kept for compatibility with old API call
         challenge: string,
-        recipientAvatar?: string
+        _recipientAvatar?: string // Kept for compatibility
     ): Promise<void> {
-        if (!currentUserId) throw new Error('Must be logged in to send challenges');
+        if (!client.userID) throw new Error('Must be connected to Stream Chat');
 
-        const convoId = await this.getOrCreateConversation(currentUserId, recipientId);
+        const channel = client.channel('messaging', {
+            members: [currentUserId, recipientId],
+        });
 
-        await this.sendMessage(
-            convoId,
-            currentUserId,
-            `🎯 Challenge: "${challenge}"`
-        );
+        await channel.sendMessage({
+            text: `🎯 Challenge: "${challenge}"`,
+        });
     },
 
     // Fetch all conversations for a user
@@ -78,41 +108,26 @@ export const ChatService = {
         callback: (convos: Conversation[]) => void
     ) {
         const fetchConvos = async () => {
-            const { data, error } = await supabase
-                .from('conversations')
-                .select('*')
-                .or(`user1.eq.${currentUserId},user2.eq.${currentUserId}`)
-                .order('last_message_at', { ascending: false });
-
-            if (error || !data) { callback([]); return; }
-
-            // Resolve profiles for the "other" person
-            const otherIds = data.map(c =>
-                c.user1 === currentUserId ? c.user2 : c.user1
-            );
-
-            if (otherIds.length === 0) { callback([]); return; }
-
-            const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, username, "photoURL"')
-                .in('id', otherIds);
-
-            const profileMap: Record<string, any> = {};
-            (profiles || []).forEach((p: any) => {
-                profileMap[p.id] = p;
+            const filter = { members: { $in: [currentUserId] } };
+            const sort = [{ last_message_at: -1 }];
+            
+            const channels = await client.queryChannels(filter, sort as any, {
+                watch: true,
+                state: true,
             });
 
-            const convos: Conversation[] = data.map(c => {
-                const otherId = c.user1 === currentUserId ? c.user2 : c.user1;
-                const profile = profileMap[otherId];
+            const convos: Conversation[] = channels.map((channel: any) => {
+                const otherMember: any = Object.values(channel.state.members).find(
+                    (m: any) => m.user?.id !== currentUserId
+                );
+                
                 return {
-                    id: c.id,
-                    otherUserId: otherId,
-                    otherUsername: profile?.username || 'User',
-                    otherAvatar: profile?.photoURL || '',
-                    lastMessage: c.last_message || '',
-                    lastMessageAt: c.last_message_at,
+                    id: channel.id!,
+                    otherUserId: otherMember?.user?.id || 'unknown',
+                    otherUsername: otherMember?.user?.name || 'User',
+                    otherAvatar: otherMember?.user?.image || '',
+                    lastMessage: channel.state.messages[channel.state.messages.length - 1]?.text || '',
+                    lastMessageAt: channel.state.last_message_at?.toISOString() || new Date().toISOString(),
                 };
             });
 
@@ -121,101 +136,69 @@ export const ChatService = {
 
         fetchConvos();
 
-        const channel = supabase
-            .channel(`convos:${currentUserId}`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'conversations' },
-                () => fetchConvos()
-            )
-            .subscribe();
+        // Stream handles real-time updates via internal listeners when watch: true is used
+        const listener = client.on((event: any) => {
+            if (event.type === 'message.new' || event.type === 'notification.added_to_channel') {
+                fetchConvos();
+            }
+        });
 
-        return () => { supabase.removeChannel(channel); };
+        return () => {
+            listener.unsubscribe();
+        };
     },
 
-    // Subscribe to messages in a conversation (returns gifted-chat-shaped messages)
+    // Subscribe to messages in a conversation
     subscribeToMessages(
         conversationId: string,
         callback: (messages: Message[]) => void
     ) {
+        const channel = client.channel('messaging', conversationId);
+
         const fetchMessages = async () => {
-            const { data } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('conversation_id', conversationId)
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            if (!data) { callback([]); return; }
-
-            const senderIds = [...new Set(data.map(m => m.sender_id))];
-            const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, username, "photoURL"')
-                .in('id', senderIds);
-
-            const profileMap: Record<string, any> = {};
-            (profiles || []).forEach((p: any) => { profileMap[p.id] = p; });
-
-            const messages: Message[] = data.map(m => ({
+            await channel.watch();
+            const streamMessages = channel.state.messages;
+            
+            const messages: Message[] = streamMessages.map((m: any) => ({
                 _id: m.id,
-                text: m.text,
+                text: m.text || '',
                 createdAt: new Date(m.created_at),
-                image: m.image || undefined,
+                image: (m.attachments?.[0]?.type === 'image' ? m.attachments[0].image_url : undefined),
                 user: {
-                    _id: m.sender_id,
-                    name: profileMap[m.sender_id]?.username || 'User',
-                    avatar: profileMap[m.sender_id]?.photoURL || undefined,
+                    _id: m.user?.id || 'unknown',
+                    name: m.user?.name || 'User',
+                    avatar: m.user?.image || undefined,
                 },
             }));
 
-            callback(messages);
+            callback(messages.reverse()); // latest first for display
         };
 
         fetchMessages();
 
-        const channel = supabase
-            .channel(`msgs:${conversationId}`)
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-                () => fetchMessages()
-            )
-            .subscribe();
+        const listener = channel.on('message.new', () => fetchMessages());
 
-        return () => { supabase.removeChannel(channel); };
+        return () => {
+            listener.unsubscribe();
+        };
     },
 
     // Send a message
     async sendMessage(
         conversationId: string,
-        senderId: string,
+        _senderId: string, // Stream uses the connected user context
         text: string,
         image?: string
     ) {
-        const { error } = await supabase
-            .from('messages')
-            .insert({
-                conversation_id: conversationId,
-                sender_id: senderId,
-                text,
-                image: image || null,
-            });
-
-        if (error) throw error;
-
-        // Update conversation preview
-        await supabase
-            .from('conversations')
-            .update({
-                last_message: text || '📷 Photo',
-                last_message_at: new Date().toISOString(),
-            })
-            .eq('id', conversationId);
+        const channel = client.channel('messaging', conversationId);
+        
+        await channel.sendMessage({
+            text,
+            attachments: image ? [{ type: 'image', image_url: image }] : [],
+        });
     },
 
-    // Helpers to match old API shape used elsewhere
-    isConnected(): boolean { return true; },
-    async connectUser() { },
-    async disconnectUser() { },
+    isConnected(): boolean {
+        return !!client.userID;
+    },
 };

@@ -9,7 +9,11 @@ config.resolver.extraNodeModules = {
   'expo-auth-session': require.resolve('expo-auth-session'),
 };
 
+// Custom obfuscation is opt-in — it has broken Metro/Babel in dev and is easy to misconfigure.
+// Set SPIN_METRO_OBFUSCATE=1 when intentionally obfuscating release bundles.
 config.transformer = config.transformer || {};
-config.transformer.babelTransformerPath = require.resolve('./metro-obfuscator-transformer');
+if (process.env.SPIN_METRO_OBFUSCATE === '1') {
+  config.transformer.babelTransformerPath = require.resolve('./metro-obfuscator-transformer');
+}
 
 module.exports = config;

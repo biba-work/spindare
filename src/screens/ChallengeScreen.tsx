@@ -681,7 +681,26 @@ export const ChallengeScreen = () => {
         }
     }, [challenge]);
 
+    // ── Spin Rate Limiting ──────────────────────────────────────────────────
+    const MAX_SPINS_PER_DAY = 10;
+    const [spinTimestamps, setSpinTimestamps] = useState<number[]>([]);
+
+    const getSpinsRemaining = (): number => {
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const recentSpins = spinTimestamps.filter(ts => ts > oneDayAgo);
+        return Math.max(0, MAX_SPINS_PER_DAY - recentSpins.length);
+    };
+
     const handleSpinEnd = () => {
+        const spinsLeft = getSpinsRemaining();
+        if (spinsLeft <= 0) {
+            showToast("You've used all 10 spins today. Come back tomorrow! 🎯", { type: 'info' });
+            return;
+        }
+
+        // Record this spin
+        setSpinTimestamps(prev => [...prev, Date.now()]);
+
         // Instant local pick — no AI call, no loading state
         const random = LOCAL_CHALLENGES[Math.floor(Math.random() * LOCAL_CHALLENGES.length)];
         setChallenge(random);
@@ -991,6 +1010,7 @@ const styles = StyleSheet.create({
         letterSpacing: -0.5,
     },
     actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, width: '100%' },
+    actionBtnWrapper: { flex: 1 },
     actionBtn: {
         flex: 1,
         flexDirection: 'row',

@@ -28,7 +28,11 @@ export const PostService = {
     // Helper to upload image to Supabase Storage.
     // Converts ANY format (RAW, HEIC, PNG, WebP, DNG, etc.) to JPEG first
     // so the rest of the app always receives a safe, displayable URL.
-    async uploadImage(uri: string): Promise<string> {
+    // deleteSource: pass true when the uri came from the camera (not gallery).
+    // This deletes the raw camera file from the cache/DCIM after upload so it
+    // never accumulates in the user's photo library or temp directories.
+    async uploadImage(uri: string, deleteSource = false): Promise<string> {
+        let convertedUri: string | null = null;
         try {
             // Step 1: Convert to JPEG regardless of source format
             const converted = await ImageManipulator.manipulateAsync(
@@ -36,9 +40,10 @@ export const PostService = {
                 [], // no resize/crop — keep original dimensions
                 { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG }
             );
+            convertedUri = converted.uri;
 
             // Step 2: Read as base64
-            const base64 = await FileSystem.readAsStringAsync(converted.uri, { encoding: 'base64' });
+            const base64 = await FileSystem.readAsStringAsync(convertedUri, { encoding: 'base64' });
             const filename = `posts/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
 
             // Step 3: Upload the guaranteed-JPEG bytes
@@ -54,8 +59,19 @@ export const PostService = {
                 .from('spindare-assets')
                 .getPublicUrl(data.path);
 
+            // Cleanup: always remove the converted temp file from cache
+            FileSystem.deleteAsync(convertedUri, { idempotent: true }).catch(() => {});
+            // Cleanup: remove the original camera capture (NOT gallery photos)
+            if (deleteSource) {
+                FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+            }
+
             return publicUrl;
         } catch (error) {
+            // Best-effort cleanup even on failure
+            if (convertedUri) {
+                FileSystem.deleteAsync(convertedUri, { idempotent: true }).catch(() => {});
+            }
             console.error("Supabase Storage Upload Error:", error);
             throw error;
         }
@@ -111,6 +127,8 @@ export const PostService = {
     },
 
     // Create a new challenge post
+    // mediaFromCamera: true when the user captured via camera (not picked from gallery).
+    //   Enables post-upload cleanup of the raw camera file so DCIM stays clean.
     async createPost(
         userId: string,
         username: string,
@@ -118,7 +136,8 @@ export const PostService = {
         challenge: string,
         content: string,
         mediaUri: string | null,
-        onUploadProgress?: (pct: number) => void
+        onUploadProgress?: (pct: number) => void,
+        mediaFromCamera = false
     ) {
         if (!userId) throw new Error("Must be logged in to post");
 
@@ -127,7 +146,7 @@ export const PostService = {
             const isVideo = /\.(mp4|mov|avi|webm|3gp)$/i.test(mediaUri);
             finalMediaUrl = isVideo
                 ? await this.uploadVideo(mediaUri, onUploadProgress)
-                : await this.uploadImage(mediaUri);
+                : await this.uploadImage(mediaUri, mediaFromCamera);
         }
 
         // Calculate functional Spin Count

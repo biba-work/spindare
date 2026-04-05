@@ -8,6 +8,7 @@ import { Post, PostService } from '../services/PostService';
 import * as Haptics from 'expo-haptics';
 import { SoundService } from '../services/SoundService';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -96,6 +97,7 @@ interface PostItemProps {
     onProfilePress?: (userId: string, username: string, avatar: string) => void;
     onChallengeAction?: (challenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     onSaveChallenge?: (challenge: string) => void;
+    savedChallenges?: { challenge: string; expiresAt: string }[];
     darkMode: boolean;
     delay?: number;
 }
@@ -109,9 +111,12 @@ const PostItem = memo(({
     onProfilePress,
     onChallengeAction,
     onSaveChallenge,
+    savedChallenges,
     darkMode,
     delay
 }: PostItemProps) => {
+    const { showToast } = useToast();
+    const isSaved = !!(post.challenge && savedChallenges?.some(s => s.challenge === post.challenge));
     const [selected, setSelected] = useState<string | null>(null);
     const [showChallengeMenu, setShowChallengeMenu] = useState(false);
     const [showDotsMenu, setShowDotsMenu] = useState(false);
@@ -436,13 +441,47 @@ const PostItem = memo(({
 
                 {/* ── Bottom action row ──────────────────────────────── */}
                 {!isOwner && post.challenge && (
-                    <Pressable
-                        onPress={openChallengeMenu}
-                        style={({ pressed }) => [s.challengeBtn, darkMode && s.challengeBtnDark, pressed && { opacity: 0.7 }]}
-                    >
-                        <Ionicons name="flash" size={14} color={darkMode ? '#E5E5EA' : '#3A3A3C'} />
-                        <Text style={[s.challengeBtnText, darkMode && s.challengeBtnTextDark]}>Try this challenge</Text>
-                    </Pressable>
+                    <View style={s.challengeActions}>
+                        <Pressable
+                            onPress={openChallengeMenu}
+                            style={({ pressed }) => [s.challengeBtn, s.challengeBtnFlex, darkMode && s.challengeBtnDark, pressed && { opacity: 0.7 }]}
+                        >
+                            <Ionicons name="flash" size={14} color={darkMode ? '#E5E5EA' : '#3A3A3C'} />
+                            <Text style={[s.challengeBtnText, darkMode && s.challengeBtnTextDark]}>Try this challenge</Text>
+                        </Pressable>
+                        {onSaveChallenge && (
+                            <Pressable
+                                onPress={() => {
+                                    if (post.challenge && onSaveChallenge && !isSaved) {
+                                        onSaveChallenge(post.challenge);
+                                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                        SoundService.save?.();
+                                        showToast('Saved! 🔖', { type: 'success' });
+                                    }
+                                }}
+                                style={({ pressed }) => [
+                                    s.saveInlineBtn,
+                                    darkMode && s.saveInlineBtnDark,
+                                    isSaved && s.saveInlineBtnSaved,
+                                    isSaved && darkMode && s.saveInlineBtnSavedDark,
+                                    pressed && !isSaved && { opacity: 0.7 },
+                                ]}
+                            >
+                                <Ionicons
+                                    name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                                    size={14}
+                                    color={isSaved ? '#fff' : (darkMode ? '#8E8E93' : '#AEAEB2')}
+                                />
+                                <Text style={[
+                                    s.saveInlineBtnText,
+                                    darkMode && s.saveInlineBtnTextDark,
+                                    isSaved && s.saveInlineBtnTextSaved,
+                                ]}>
+                                    {isSaved ? 'Saved' : 'Save'}
+                                </Text>
+                            </Pressable>
+                        )}
+                    </View>
                 )}
             </View>
 
@@ -579,6 +618,7 @@ interface FeedScreenProps {
     onProfilePress?: (userId: string, username: string, avatar: string) => void;
     onChallengeAction?: (challenge: string, action: 'send' | 'camera' | 'gallery' | 'text') => void;
     onSaveChallenge?: (challenge: string) => void;
+    savedChallenges?: { challenge: string; expiresAt: string }[];
 }
 
 export const FeedScreen = ({
@@ -592,6 +632,7 @@ export const FeedScreen = ({
     onProfilePress,
     onChallengeAction,
     onSaveChallenge,
+    savedChallenges,
 }: FeedScreenProps) => {
     const { darkMode } = useTheme();
 
@@ -610,6 +651,7 @@ export const FeedScreen = ({
                         onProfilePress={onProfilePress}
                         onChallengeAction={onChallengeAction}
                         onSaveChallenge={onSaveChallenge}
+                        savedChallenges={savedChallenges}
                         darkMode={darkMode}
                         delay={index * 70}
                     />
@@ -843,17 +885,22 @@ const s = StyleSheet.create({
     },
 
     // ── Challenge button ─────────────────────────────────────────────────
+    challengeActions: {
+        flexDirection: 'row',
+        marginHorizontal: 14,
+        marginBottom: 14,
+        gap: 8,
+    },
     challengeBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginHorizontal: 14,
-        marginBottom: 14,
         paddingVertical: 10,
         borderRadius: 12,
         backgroundColor: 'rgba(0,0,0,0.04)',
         gap: 6,
     },
+    challengeBtnFlex: { flex: 1 },
     challengeBtnDark: {
         backgroundColor: 'rgba(255,255,255,0.06)',
     },
@@ -864,6 +911,34 @@ const s = StyleSheet.create({
         paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     challengeBtnTextDark: { color: '#E5E5EA' },
+    saveInlineBtnSaved: {
+        backgroundColor: '#1C1C1E',
+    },
+    saveInlineBtnSavedDark: {
+        backgroundColor: '#000',
+    },
+    saveInlineBtnTextSaved: {
+        color: '#fff',
+        fontWeight: '600',
+    },
+    saveInlineBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        gap: 5,
+    },
+    saveInlineBtnDark: { backgroundColor: 'rgba(255,255,255,0.06)' },
+    saveInlineBtnText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#AEAEB2',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
+    },
+    saveInlineBtnTextDark: { color: '#636366' },
 
     // ── Dots context menu rows ────────────────────────────────────────────
     dotsSheet: {
@@ -966,6 +1041,7 @@ const s = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500',
         color: '#3A3A3C',
+        paddingRight: Platform.OS === 'android' ? 6 : 0,
     },
     sheetCancel: {
         paddingVertical: 14,

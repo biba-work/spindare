@@ -260,28 +260,27 @@ export const SocialService = {
     // ── Saved Challenges (kept_challenges) ─────────────────────────────────────
 
     async saveChallenge(userId: string, challenge: string, postId?: string): Promise<void> {
-        const expiresAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
+        // 2-day completion window; unique constraint prevents duplicates
+        const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
         const { error } = await supabase
             .from('kept_challenges')
-            .insert({
-                "userId": userId,
-                challenge,
-                "postId": postId || null,
-                "expiresAt": expiresAt,
-            });
+            .upsert(
+                { "userId": userId, challenge, "postId": postId || null, "expiresAt": expiresAt },
+                { onConflict: '"userId",challenge', ignoreDuplicates: true }
+            );
         if (error) throw error;
     },
 
-    async getSavedChallenges(userId: string): Promise<string[]> {
+    async getSavedChallenges(userId: string): Promise<{ challenge: string; expiresAt: string }[]> {
         const now = new Date().toISOString();
         const { data, error } = await supabase
             .from('kept_challenges')
-            .select('challenge')
+            .select('challenge, "expiresAt"')
             .eq('userId', userId)
-            .gt('expiresAt', now)
+            .gt('"expiresAt"', now)
             .order('created_at', { ascending: false });
         if (error) throw error;
-        return (data || []).map((row: any) => row.challenge);
+        return (data || []).map((row: any) => ({ challenge: row.challenge, expiresAt: row.expiresAt }));
     },
 
     async getGhostedUsers(currentUserId: string): Promise<{ id: string, name: string, username: string, photoURL?: string }[]> {

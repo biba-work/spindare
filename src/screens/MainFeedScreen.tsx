@@ -35,6 +35,7 @@ import { useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 
 import { supabase } from '../services/supabaseConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -86,7 +87,7 @@ export const MainFeedScreen = () => {
     });
 
     const [challenge, setChallenge] = useState<string | null>(null);
-    const [savedChallenges, setSavedChallenges] = useState<string[]>([]);
+    const [savedChallenges, setSavedChallenges] = useState<{ challenge: string; expiresAt: string }[]>([]);
     const [isSharing, setIsSharing] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -101,6 +102,8 @@ export const MainFeedScreen = () => {
     const [activeChat, setActiveChat] = useState<{ conversationId: string; otherUsername: string; otherAvatar: string } | null>(null);
     const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
     const [spinsLeft, setSpinsLeft] = useState(2);
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    const onboardingOpacity = useRef(new Animated.Value(0)).current;
 
     const { showToast } = useToast();
 
@@ -132,7 +135,7 @@ export const MainFeedScreen = () => {
     useEffect(() => {
         if (!userId) return;
         SocialService.getSavedChallenges(userId)
-            .then(challenges => { if (challenges.length > 0) setSavedChallenges(challenges); })
+            .then(items => { if (items.length > 0) setSavedChallenges(items); })
             .catch(e => console.warn('Failed to load saved challenges:', e));
     }, [userId]);
 
@@ -162,6 +165,29 @@ export const MainFeedScreen = () => {
         };
         loadInitialData();
     }, [isLoaded, isSignedIn, userId, user]);
+
+    // First-time onboarding
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !userId) return;
+        AsyncStorage.getItem('@spindare/onboarding_v1').then(val => {
+            if (!val) {
+                // Wait for feed to render before showing
+                const t = setTimeout(() => {
+                    setShowOnboarding(true);
+                    Animated.timing(onboardingOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+                }, 1800);
+                return () => clearTimeout(t);
+            }
+        }).catch(() => {});
+    }, [isLoaded, isSignedIn, userId]);
+
+    const dismissOnboarding = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        Animated.timing(onboardingOpacity, { toValue: 0, duration: 280, useNativeDriver: true }).start(() => {
+            setShowOnboarding(false);
+            AsyncStorage.setItem('@spindare/onboarding_v1', '1').catch(() => {});
+        });
+    };
 
     // Badge animation
     useEffect(() => {
@@ -291,9 +317,13 @@ export const MainFeedScreen = () => {
             const result = await ImagePicker.launchCameraAsync({
                 mediaTypes: ['images', 'videos'],
                 allowsEditing: true,
-                quality: 0.85
+                quality: 0.85,
             });
-            if (!result.canceled) { setSelectedImage(result.assets[0].uri); showPostCreator(); }
+            if (!result.canceled) {
+                mediaFromCameraRef.current = true;
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
         } else if (type === 'gallery') {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') return;
@@ -302,13 +332,22 @@ export const MainFeedScreen = () => {
                 quality: 0.85,
                 videoMaxDuration: 60
             });
-            if (!result.canceled) { setSelectedImage(result.assets[0].uri); showPostCreator(); }
+            if (!result.canceled) {
+                mediaFromCameraRef.current = false;
+                setSelectedImage(result.assets[0].uri);
+                showPostCreator();
+            }
         } else {
-            setSelectedImage(null); showPostCreator();
+            mediaFromCameraRef.current = false;
+            setSelectedImage(null);
+            showPostCreator();
         }
     };
 
     const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+    // Tracks whether the selected media came from the camera (true) or gallery (false).
+    // Used to delete the raw camera temp file after upload so DCIM stays clean.
+    const mediaFromCameraRef = useRef(false);
 
     const handlePostSubmit = async (content: string, imageUri?: string | null) => {
         if (isSubmittingPost) return;
@@ -317,7 +356,9 @@ export const MainFeedScreen = () => {
             if (!userId) throw new Error("User ID not available");
             await PostService.createPost(
                 userId, userProfile.username, userProfile.photoURL || '',
-                challenge || 'Inbox Challenge', content, imageUri || null
+                challenge || 'Inbox Challenge', content, imageUri || null,
+                undefined,
+                mediaFromCameraRef.current
             );
         } catch (err) {
             console.error(err);
@@ -505,18 +546,13 @@ export const MainFeedScreen = () => {
                         else handleMediaAction(action, chal);
                     }}
                     onSaveChallenge={(c) => {
-                        setSavedChallenges(prev => prev.includes(c) ? prev : [...prev, c]);
+                        const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+                        setSavedChallenges(prev => prev.some(s => s.challenge === c) ? prev : [...prev, { challenge: c, expiresAt }]);
                         if (userId) SocialService.saveChallenge(userId, c).catch(e => console.warn('Save failed:', e));
                     }}
+                    savedChallenges={savedChallenges}
                 />
             </Animated.View>
-
-            {/* ── Version footer ───────────────────────────────────────────── */}
-            <View style={[s.footer, { paddingBottom: (insets.bottom || 0) + 12 }]}>
-                <Pressable onPress={handleVersionTap} hitSlop={{ top: 12, bottom: 12, left: 20, right: 20 }}>
-                    <Text style={s.versionText}>SPINDARE V1.1.0 (PRE-ALPHA)</Text>
-                </Pressable>
-            </View>
 
             {/* ── Overlays ─────────────────────────────────────────────────── */}
 
@@ -535,7 +571,8 @@ export const MainFeedScreen = () => {
                         onShare={() => setIsSharing(true)}
                         onOpenCamera={() => { setIsProfileVisible(false); handleMediaAction('camera', challenge || ''); }}
                         onSaveChallenge={(c) => {
-                            setSavedChallenges(prev => [...prev, c]);
+                            const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+                            setSavedChallenges(prev => prev.some(s => s.challenge === c) ? prev : [...prev, { challenge: c, expiresAt }]);
                             if (userId) SocialService.saveChallenge(userId, c).catch(e => console.warn('Failed to persist saved challenge:', e));
                         }}
                     />
@@ -564,7 +601,7 @@ export const MainFeedScreen = () => {
                 visible={overlayType !== null}
                 type={overlayType || 'saved'}
                 onClose={hideOverlay}
-                data={overlayType === 'saved' ? savedChallenges : []}
+                data={overlayType === 'saved' ? savedChallenges : ([] as { challenge: string; expiresAt: string }[])}
                 onAction={handleOverlayAction}
                 animation={overlayAnim}
                 userId={userId || undefined}
@@ -595,6 +632,74 @@ export const MainFeedScreen = () => {
                         onBack={() => setActiveChat(null)}
                     />
                 </View>
+            )}
+
+            {/* ── First-time onboarding tutorial ───────────────────────── */}
+            {showOnboarding && (
+                <Animated.View style={[StyleSheet.absoluteFill, { opacity: onboardingOpacity, zIndex: 9999 }]}>
+                    <Pressable style={StyleSheet.absoluteFill} onPress={dismissOnboarding}>
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.80)' }]} />
+
+                        {/* ── Profile & Saved tip — top left ── */}
+                        <View style={[s.obTip, { top: insets.top + 70, left: 12 }]}>
+                            <Text style={s.obArrowUp}>↑</Text>
+                            <View style={s.obBubble}>
+                                <Text style={s.obIcon}>👤</Text>
+                                <View>
+                                    <Text style={s.obTitle}>Your Profile</Text>
+                                    <Text style={s.obDesc}>Tap your avatar to view{'\n'}posts &amp; spin the wheel</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* ── Saved challenges tip — left of bell ── */}
+                        <View style={[s.obTip, { top: insets.top + 70, left: width * 0.3 }]}>
+                            <Text style={s.obArrowUp}>↑</Text>
+                            <View style={s.obBubble}>
+                                <Text style={s.obIcon}>🔖</Text>
+                                <View>
+                                    <Text style={s.obTitle}>Saved</Text>
+                                    <Text style={s.obDesc}>Challenges you've{'\n'}bookmarked</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* ── Notifications tip — top right ── */}
+                        <View style={[s.obTip, { top: insets.top + 70, right: 12, alignItems: 'flex-end' }]}>
+                            <Text style={s.obArrowUp}>↑</Text>
+                            <View style={s.obBubble}>
+                                <Text style={s.obIcon}>🔔</Text>
+                                <View>
+                                    <Text style={s.obTitle}>Notifications</Text>
+                                    <Text style={s.obDesc}>See who reacted{'\n'}to your posts</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* ── Reactions tip — mid screen ── */}
+                        <View style={[s.obTipCenter, { top: height * 0.42 }]}>
+                            <View style={s.obBubbleLarge}>
+                                <Text style={s.obIconLg}>❤️ 💭 ✨</Text>
+                                <Text style={s.obTitleCenter}>React to Posts</Text>
+                                <Text style={s.obDescCenter}>Tap Felt · Thought · Intrigued{'\n'}on any post card below</Text>
+                            </View>
+                        </View>
+
+                        {/* ── Challenge save tip ── */}
+                        <View style={[s.obTipCenter, { top: height * 0.62 }]}>
+                            <View style={s.obBubbleLarge}>
+                                <Text style={s.obIconLg}>🔥  →  🔖</Text>
+                                <Text style={s.obTitleCenter}>Save Challenges</Text>
+                                <Text style={s.obDescCenter}>Hit Save on any challenge card{'\n'}to keep it for later</Text>
+                            </View>
+                        </View>
+
+                        {/* ── Dismiss hint ── */}
+                        <View style={[s.obDismiss, { bottom: insets.bottom + 32 }]}>
+                            <Text style={s.obDismissText}>✨  Tap anywhere to start exploring</Text>
+                        </View>
+                    </Pressable>
+                </Animated.View>
             )}
 
             {viewingProfile && (
@@ -833,4 +938,85 @@ const s = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         zIndex: 4000,
     },
+
+    // ── Onboarding tutorial ───────────────────────────────────────────────
+    obTip: {
+        position: 'absolute',
+        maxWidth: width * 0.38,
+        alignItems: 'flex-start',
+    },
+    obArrowUp: {
+        color: '#FFF',
+        fontSize: 20,
+        marginBottom: 2,
+        marginLeft: 10,
+    },
+    obBubble: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 14,
+        padding: 10,
+        gap: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    obIcon: { fontSize: 18 },
+    obTitle: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    obDesc: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 11,
+        lineHeight: 15,
+    },
+    obTipCenter: {
+        position: 'absolute',
+        left: 20,
+        right: 20,
+        alignItems: 'center',
+    },
+    obBubbleLarge: {
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 18,
+        padding: 16,
+        alignItems: 'center',
+        gap: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
+        width: '100%',
+    },
+    obIconLg: { fontSize: 22, marginBottom: 2 },
+    obTitleCenter: {
+        color: '#FFF',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    obDescCenter: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 12,
+        lineHeight: 17,
+        textAlign: 'center',
+    },
+    obDismiss: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+    },
+    obDismissText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 14,
+        fontWeight: '600',
+        letterSpacing: 0.3,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 24,
+        overflow: 'hidden',
+    },
 });
+

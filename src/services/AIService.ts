@@ -56,6 +56,8 @@ export interface UserProfile {
     level: number;
     spinsLeft?: number;
     lastSpinTimestamp?: number;
+    streak?: number;
+    lastChallengeDate?: string;
     photoURL?: string;
 }
 
@@ -93,14 +95,25 @@ export const AIService = {
         }
     },
 
-    // TODO: Replace with real server-side Gemini analysis once media upload works.
-    analyzeCompletion: (_challenge: string, _profile: UserProfile): string => {
-        const insights = [
-            "Your 'Adventurous' trait is growing. I noticed your speed.",
-            "Visual creativity detected. Adding +5 bonus XP for composition.",
-            "Social barrier broken. Your 'Extroverted' score has improved.",
-            "AI Analysis: Effort levels are optimal for your current Tier.",
-        ];
-        return insights[Math.floor(Math.random() * insights.length)];
+    analyzeCompletion: async (challenge: string, profile: UserProfile): Promise<string> => {
+        try {
+            const res = await fetch(
+                `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/analyze-completion`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify({ challenge, level: profile.level }),
+                }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const { analysis } = await res.json();
+            return analysis || offlineFallback();
+        } catch (error) {
+            console.error('[AIService] analyzeCompletion error:', error);
+            return offlineFallback();
+        }
     },
 };
