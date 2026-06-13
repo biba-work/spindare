@@ -1,3 +1,9 @@
+⚠️ **COPYRIGHT NOTICE**
+
+Spindare and all associated code, designs, and intellectual property are the exclusive property of Biba, Daniel, and Kristian. Unauthorized use, reproduction, modification, or distribution of this code without explicit written permission from the owners may result in legal action, including civil and criminal penalties.
+
+---
+
 # 🌀 Spindare — The Anti-Scroll Social Experiment
 
 Spindare is a **privacy-first, action-packed social app** that turns scrolling into real-world fun.  
