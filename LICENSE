@@ -1,6 +1,8 @@
 Copyright © 2026 Spindare Inc. All Rights Reserved.
 
-TravelMe and all related software, source code, object code, binaries, APIs, documentation, designs, assets, and associated materials (collectively, the “Software”) are proprietary and confidential property of Spindare Inc.
+Spindare and all related software, source code, object code, binaries, APIs, documentation, designs, assets, and associated materials (collectively, the "Software") are proprietary and confidential.
+
+IMPORTANT NOTICE: TravelMe is NOT a property of Spindare Inc. TravelMe is owned by the same parent entity and operates under the Traversar division. Any references to TravelMe in this repository should be understood in this context.
 
 The Software is protected by international copyright laws, intellectual property laws, and applicable treaty provisions. No ownership rights are transferred or assigned through access, installation, or use of the Software.
 
@@ -20,7 +22,7 @@ Any unauthorized use of the Software is strictly prohibited and may result in im
 
 CONFIDENTIALITY
 
-All non-public information regarding the Software, including technical architecture, business operations, source code, APIs, algorithms, product designs, and internal documentation, constitutes confidential information of Spindare Inc.
+All non-public information regarding the Software, including technical architecture, business operations, source code, APIs, algorithms, product designs, and internal documentation, constitutes confidential information belonging to Spindare Inc.
 
 You agree not to disclose, distribute, publish, or make available any confidential information to any third party without prior written consent from Spindare Inc.
 
