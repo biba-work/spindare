@@ -1,6 +1,7 @@
 /**
  * InstagramPromoModal Component
- * Beautiful popup modal that appears randomly to promote Instagram follow
+ * Beautiful popup modal that appears ONCE to promote Instagram follow
+ * Shows only once per user, then won't appear again for 15+ sessions
  * Matches Spindare's warm, minimal, soft design aesthetic
  */
 
@@ -15,6 +16,7 @@ import {
   Linking,
   Animated,
   Platform,
+  AsyncStorage,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -22,10 +24,14 @@ import * as Haptics from 'expo-haptics';
 
 interface InstagramPromoModalProps {
   onClose?: () => void;
-  showProbability?: number;
+  userId?: string;
 }
 
 const { width, height } = Dimensions.get('window');
+
+const STORAGE_KEY = 'spindare_instagram_promo_shown';
+const SESSION_COUNT_KEY = 'spindare_session_count';
+const SESSIONS_BEFORE_RESHOW = 15;
 
 const styles = StyleSheet.create({
   overlay: {
@@ -155,39 +161,93 @@ const InstagramIconSVG = () => (
 
 /**
  * InstagramPromoModal Component
- * Warm, minimal popup matching Spindare's aesthetic
- * Shows randomly to encourage Instagram follows
+ * ONE-TIME popup that appears only once per user lifetime
+ * Once shown, won't appear again for 15+ sessions
+ * 
+ * Features:
+ * - Persists shown state to device storage
+ * - Tracks session count
+ * - Very low chance to reappear after 15 sessions
+ * - Warm, minimal design matching Spindare aesthetic
  */
 export const InstagramPromoModal: React.FC<InstagramPromoModalProps> = ({
   onClose,
-  showProbability = 0.25,
+  userId = 'default',
 }) => {
   const [visible, setVisible] = useState(false);
   const modalScaleAnim = React.useRef(new Animated.Value(0.85)).current;
   const modalOpacityAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const shouldShow = Math.random() < showProbability;
-    if (shouldShow) {
-      setVisible(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    checkAndShowModal();
+  }, [userId]);
+
+  const checkAndShowModal = async () => {
+    try {
+      // Check if modal has been shown before
+      const hasShown = await AsyncStorage.getItem(`${STORAGE_KEY}_${userId}`);
       
-      // Smooth scale + fade in animation
-      Animated.parallel([
-        Animated.spring(modalScaleAnim, {
-          toValue: 1,
-          friction: 8,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.timing(modalOpacityAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      if (hasShown === 'true') {
+        // Modal was shown, check if enough sessions have passed
+        const lastShownSessionCount = await AsyncStorage.getItem(
+          `${SESSION_COUNT_KEY}_${userId}`
+        );
+        const currentSessionCount = await incrementSessionCount(userId);
+        
+        const sessionsPassed =
+          currentSessionCount - parseInt(lastShownSessionCount || '0', 10);
+        
+        // Only 2% chance to show if 15+ sessions have passed
+        if (sessionsPassed >= SESSIONS_BEFORE_RESHOW && Math.random() < 0.02) {
+          displayModal();
+        }
+      } else {
+        // First time - show the modal immediately
+        await AsyncStorage.setItem(`${STORAGE_KEY}_${userId}`, 'true');
+        await AsyncStorage.setItem(
+          `${SESSION_COUNT_KEY}_${userId}`,
+          '1'
+        );
+        displayModal();
+      }
+    } catch (error) {
+      console.error('Error checking Instagram promo modal:', error);
     }
-  }, [showProbability, modalScaleAnim, modalOpacityAnim]);
+  };
+
+  const incrementSessionCount = async (userId: string): Promise<number> => {
+    try {
+      const currentCount = await AsyncStorage.getItem(
+        `${SESSION_COUNT_KEY}_${userId}`
+      );
+      const newCount = (parseInt(currentCount || '0', 10) + 1).toString();
+      await AsyncStorage.setItem(`${SESSION_COUNT_KEY}_${userId}`, newCount);
+      return parseInt(newCount, 10);
+    } catch (error) {
+      console.error('Error incrementing session count:', error);
+      return 0;
+    }
+  };
+
+  const displayModal = () => {
+    setVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Smooth scale + fade in animation
+    Animated.parallel([
+      Animated.spring(modalScaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(modalOpacityAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   const handleOpenInstagram = async () => {
     try {
