@@ -1,6 +1,6 @@
 #### ⚠️ **COPYRIGHT NOTICE**
 
-Spindare and all associated code, designs, and intellectual property are the exclusive property of Biba, Daniel, and Kristian. Unauthorized use, reproduction, modification, or distribution of this code without explicit written permission from the owners may result in legal action, including civil and criminal penalties.
+Spindare and all associated code, designs, and intellectual property are the exclusive property of Biba, Daniel, and Kristian. Unauthorized use, reproduction, modification, or distribution of this [...]
 
 ---
 
@@ -8,6 +8,8 @@ Spindare and all associated code, designs, and intellectual property are the exc
 ### **The Anti-Scroll Social App That Gets You Off Your Phone**
 
 Spindare transforms social connection from endless scrolling into real-world action. Spin a wheel, take a challenge, share your moment, and connect with people who actually matter.
+
+Follow us on Instagram: **@spindare.app**
 
 ---
 
@@ -21,7 +23,7 @@ Spindare is a social experiment app that reimagines how Gen Z connects. Instead 
 
 Think of it as a mashup of:
 * 🎡 **Spin the Bottle** — randomness & fun
-* 📸 **Instagram Stories** — visual sharing
+* ��� **Instagram Stories** — visual sharing
 * 💬 **Snapchat** — ephemeral, authentic moments
 * 🎯 **Duolingo Challenges** — gamified action
 
@@ -280,47 +282,12 @@ We're testing whether people actually want to connect authentically, offline, wi
 
 ---
 
-## 📖 For Developers
-If you're a developer interested in the technical side:
-* **Developer README** — Full tech stack, architecture, setup
-* **CONTRIBUTING** — How to contribute
-* **SECURITY** — Security policies
-
----
-
-## ⚖️ Legal & Copyright
-© 2025 Spindare. All rights reserved.
-
-Spindare and all associated code, designs, user interface elements, branding, documentation, and intellectual property are the exclusive property of Biba, Daniel, and Kristian.
-
-### **Unauthorized Use Prohibited**
-Without explicit written permission from the owners, you may **NOT**:
-1. Copy, modify, or distribute the source code
-2. Create derivative works or forks
-3. Use Spindare's design, branding, or assets
-4. Reverse-engineer or decompile the application
-5. Run unlicensed instances of the service
-
-### **Legal Consequences**
-Unauthorized use, reproduction, or distribution of Spindare's code and intellectual property may result in:
-* Civil lawsuits seeking damages
-* Cease and desist orders
-* Criminal prosecution under applicable laws
-* Seizure of infringing materials
-* Injunctive relief
-
-### **Fair Use**
-Personal use for learning purposes only is acceptable. Any commercial use or public distribution requires written permission.
-
-### **Questions?**
-Contact the owners directly before using or distributing any Spindare materials.
-
----
-
 ## 📱 Download Spindare
 * **Android** — Google Play Store (coming soon)
 * **iOS** — App Store (coming soon)
 * **Web** — spindare.app (limited features)
+
+Follow us on Instagram: **@spindare.app**
 
 _Spin a challenge. Take action. Share your moment. Connect authentically._
 
