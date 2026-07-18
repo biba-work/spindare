@@ -1,4 +1,4 @@
-import { supabase } from './supabaseConfig';
+import { api } from './ApiService';
 import { Platform } from 'react-native';
 
 // expo-notifications remote push is NOT supported in Expo Go SDK 53+.
@@ -11,7 +11,6 @@ try {
     _notif = require('expo-notifications');
     _device = require('expo-device');
 
-    // Only configure the foreground handler when the module loaded successfully
     _notif?.setNotificationHandler({
         handleNotification: async () => ({
             shouldShowAlert: true,
@@ -38,6 +37,20 @@ export interface Notification {
     read: boolean;
     timestamp: string;
 }
+
+const mapNotification = (n: any): Notification => ({
+    id: n.id,
+    type: n.type,
+    fromUserId: n.fromUserId,
+    fromUsername: n.fromUser?.username || 'User',
+    fromAvatar: n.fromUser?.photoURL || null,
+    content: n.content,
+    targetId: n.targetId,
+    read: n.read,
+    timestamp: n.createdAt,
+});
+
+const POLL_INTERVAL_MS = 15000;
 
 export const NotificationService = {
 
@@ -71,11 +84,7 @@ export const NotificationService = {
             }
 
             const token = (await _notif.getExpoPushTokenAsync()).data;
-
-            await supabase
-                .from('profiles')
-                .update({ pushToken: token })
-                .eq('id', userId);
+            await api.patch('/profiles/push-token', { pushToken: token });
 
             console.log('Push token registered:', token);
         } catch (error) {
@@ -83,135 +92,45 @@ export const NotificationService = {
         }
     },
 
-    // Send a notification to a specific user
-    async sendNotification(
-        toUserId: string,
-        type: NotificationType,
-        content: string,
-        fromUserId: string,
-        fromUsername: string,
-        fromAvatar: string | null,
-        targetId?: string
-    ) {
-        if (fromUserId === toUserId) return;
-
-        try {
-            // 1. Write to Supabase notifications table (in-app bell — always works)
-            await supabase
-                .from('notifications')
-                .insert({
-                    user_id: toUserId,
-                    type,
-                    from_user_id: fromUserId,
-                    content,
-                    target_id: targetId || null,
-                    read: false
-                });
-
-            // 2. Send real push notification if they have a token (dev/prod builds only)
-            if (_notif) {
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('pushToken')
-                    .eq('id', toUserId)
-                    .single();
-
-                if (profile?.pushToken) {
-                    await fetch('https://exp.host/--/api/v2/push/send', {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            to: profile.pushToken,
-                            sound: 'default',
-                            title: `@${fromUsername}`,
-                            body: content,
-                            data: { type, targetId: targetId || null },
-                        }),
-                    });
-                }
-            }
-        } catch (error) {
-            console.error("Error sending notification:", error);
-        }
+    // Notification creation (in-app row + push send) now happens server-side
+    // — see server/src/notifications/notifications.service.ts, called
+    // automatically by PostsService (reactions/comments) and SocialService
+    // (follow/connection events). This stub only exists so any stray import
+    // elsewhere doesn't crash; it's a no-op by design.
+    async sendNotification(..._args: unknown[]) {
+        console.warn('NotificationService.sendNotification is now handled server-side; this call is a no-op.');
     },
 
-    // Subscribe to current user's notifications
+    // Poll the current user's notifications (was Supabase Realtime).
     subscribeToNotifications(userId: string, callback: (notifs: Notification[]) => void) {
         if (typeof userId !== 'string' || userId.length === 0 || typeof callback !== 'function') return () => { };
 
+        let cancelled = false;
         const fetchNotifs = async () => {
-            const { data } = await supabase
-                .from('notifications')
-                .select(`
-                    id,
-                    type,
-                    from_user_id,
-                    content,
-                    target_id,
-                    read,
-                    created_at,
-                    profiles:from_user_id (username, "photoURL")
-                `)
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false })
-                .limit(50);
-
-            if (data) {
-                const formatted = data.map((n: any) => ({
-                    id: n.id,
-                    type: n.type,
-                    fromUserId: n.from_user_id,
-                    fromUsername: n.profiles?.username || 'User',
-                    fromAvatar: n.profiles?.photoURL || null,
-                    content: n.content,
-                    targetId: n.target_id,
-                    read: n.read,
-                    timestamp: n.created_at
-                } as Notification));
-                callback(formatted);
+            try {
+                const data = await api.get<any[]>('/notifications');
+                if (!cancelled) callback(data.map(mapNotification));
+            } catch (e) {
+                console.warn('Notifications poll failed:', e);
             }
         };
 
         fetchNotifs();
-
-        const channel = supabase
-            .channel(`notifs:${userId}`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-                () => fetchNotifs()
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        const interval = setInterval(fetchNotifs, POLL_INTERVAL_MS);
+        return () => { cancelled = true; clearInterval(interval); };
     },
 
-    // Mark a notification as read
     async markAsRead(userId: string, notifId: string) {
         try {
-            await supabase
-                .from('notifications')
-                .update({ read: true })
-                .eq('id', notifId)
-                .eq('user_id', userId);
+            await api.patch(`/notifications/${notifId}/read`);
         } catch (error) {
             console.error("Error marking notification as read:", error);
         }
     },
 
-    // Mark ALL notifications as read
     async markAllAsRead(userId: string) {
         try {
-            await supabase
-                .from('notifications')
-                .update({ read: true })
-                .eq('user_id', userId)
-                .eq('read', false);
+            await api.patch('/notifications/read-all');
         } catch (error) {
             console.error("Error marking all as read:", error);
         }

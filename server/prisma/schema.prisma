@@ -1,0 +1,171 @@
+// Spindare backend schema — Prisma port of the Supabase migration that was
+// lost when the old Supabase project was deleted (see
+// supabase/migrations/20260319201503_new-migration.sql in the mobile app repo
+// for the original source of truth this was copied from).
+//
+// Design notes carried over from the original:
+//   • User id columns are String (Clerk ids like "user_3BB4L...", not UUID).
+//   • camelCase columns use @map so the underlying Postgres column keeps the
+//     exact casing the rest of the stack (old RLS policies, any leftover
+//     PostgREST-era tooling) expects.
+//   • No FK to an auth table — Clerk owns identity, this DB only owns app data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id                 String   @id
+  username           String?  @unique
+  email              String?
+  photoURL           String?  @map("photoURL")
+  hobbies            Json     @default("[]")
+  studyFields        Json     @default("[]") @map("studyFields")
+  xp                 Int      @default(0)
+  level              Int      @default(1)
+  spinsLeft          Int      @default(2) @map("spinsLeft")
+  lastSpinTimestamp  BigInt   @default(0) @map("lastSpinTimestamp")
+  connectionPrivacy  String   @default("open") @map("connectionPrivacy")
+  // Added later than the original migration (used by PostService.updateStreak
+  // and AuthService.createProfile but never captured in a tracked migration
+  // file) — included here so the daily-streak feature keeps working.
+  streak             Int      @default(0)
+  lastChallengeDate  String   @default("") @map("lastChallengeDate")
+  pushToken          String?  @map("pushToken")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  sentConnectionRequests ConnectionRequest[]
+  sentNotifications      Notification[]
+
+  @@map("profiles")
+}
+
+model Post {
+  id         String   @id @default(uuid())
+  userId     String   @map("userId")
+  author     String
+  avatar     String?
+  challenge  String
+  content    String?
+  media      String?
+  spinCount  Int      @default(0) @map("spinCount")
+  reactions  Json     @default("{\"felt\": 0, \"thought\": 0, \"intrigued\": 0}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  reactionRows Reaction[]
+  comments     Comment[]
+
+  @@map("posts")
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  userId    String   @map("userId")
+  postId    String   @map("postId")
+  type      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("reactions")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String   @map("postId")
+  userId    String   @map("userId")
+  author    String
+  avatar    String?
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("follower_id")
+  followingId String   @map("following_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model ConnectionRequest {
+  id          String   @id @default(uuid())
+  requesterId String   @map("requester_id")
+  receiverId  String   @map("receiver_id")
+  status      String   @default("pending") // pending | accepted | declined
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  requester Profile @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, receiverId])
+  @@map("connection_requests")
+}
+
+model GhostedUser {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  ghostedId String   @map("ghosted_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, ghostedId])
+  @@map("ghosted_users")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  type       String
+  fromUserId String   @map("from_user_id")
+  content    String
+  targetId   String?  @map("target_id")
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  fromUser Profile @relation(fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model KeptChallenge {
+  id        String    @id @default(uuid())
+  userId    String    @map("userId")
+  // Optional because two different call sites in the mobile app use this
+  // table differently: PostService keys off (userId, postId) when "keeping"
+  // a specific post's challenge, SocialService keys off (userId, challenge)
+  // with a 2-day expiresAt when saving a challenge from the spin wheel
+  // before a post exists yet. Uniqueness is enforced in the service layer
+  // per-operation rather than one DB constraint, since neither key is always
+  // present.
+  postId    String?   @map("postId")
+  challenge String
+  expiresAt DateTime? @map("expiresAt")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("kept_challenges")
+}
+
+model SpindChallenge {
+  id        String   @id @default(uuid())
+  userId    String   @map("userId")
+  postId    String   @map("postId")
+  challenge String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, postId])
+  @@map("spind_challenges")
+}
+
+// Back-relations Prisma needs declared on Profile for the FKs above.
+// (Added here instead of cluttering the main Profile block.)

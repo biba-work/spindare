@@ -1,8 +1,7 @@
 import { StreamChat } from 'stream-chat';
-import { supabase } from './supabaseConfig';
+import { api } from './ApiService';
 
 const STREAM_KEY = process.env.EXPO_PUBLIC_STREAM_KEY || "";
-const TOKEN_SERVER_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/get-stream-token`;
 
 // Stream Chat client singleton
 const client = StreamChat.getInstance(STREAM_KEY);
@@ -32,24 +31,14 @@ export const ChatService = {
 
     /**
      * Connects the current user to the Stream Chat client.
-     * Fetches a server-side generated token from a Supabase Edge Function.
+     * Fetches a server-side generated token from the Nest API (was a
+     * Supabase Edge Function — that died with the Supabase project).
      */
     async connectUser(userId: string, username: string, avatar?: string): Promise<void> {
         if (client.userID) return; // Already connected
 
         try {
-            // Fetch token from our new Edge Function
-            const res = await fetch(TOKEN_SERVER_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
-                },
-                body: JSON.stringify({ userId }),
-            });
-
-            if (!res.ok) throw new Error(`Token server error: ${res.status}`);
-            const { token } = await res.json();
+            const { token } = await api.post<{ token: string }>('/chat/token');
 
             await client.connectUser(
                 {

@@ -34,7 +34,6 @@ import { NotificationService } from '../services/NotificationService';
 import { useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 
-import { supabase } from '../services/supabaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');

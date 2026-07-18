@@ -1,3 +1,9 @@
+// Supabase's client needs a real URL implementation — Hermes ships an incomplete
+// one, which surfaces as "TypeError: Network request failed" on every Supabase
+// call on-device (works fine on web where the browser provides a real URL API).
+// Must be the very first import in the app.
+import 'react-native-url-polyfill/auto';
+
 // Gesture Handler must load before components that use native gestures (e.g. SpinWheel).
 // Do not import react-native-reanimated here unless you use it in-app — on Expo Go it
 // can boot the worklet runtime and trigger Hermes "Property 'require' doesn't exist".
@@ -19,7 +25,7 @@ import Constants from 'expo-constants';
 import * as Sentry from '@sentry/react-native';
 import { ClerkProvider, ClerkLoaded, ClerkLoading, SignedIn, SignedOut, useAuth } from '@clerk/clerk-expo';
 import { useFonts, Inter_400Regular, Inter_700Bold } from '@expo-google-fonts/inter';
-import { setSupabaseToken } from './src/services/supabaseConfig';
+import { setApiToken } from './src/services/ApiService';
 import { ChallengeScreen } from "./src/screens/ChallengeScreen";
 import { MainFeedScreen } from "./src/screens/MainFeedScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -35,32 +41,29 @@ Sentry.init({
 import { ThemeProvider } from "./src/contexts/ThemeContext";
 import { ToastProvider } from "./src/contexts/ToastContext";
 
-// Keeps the Supabase client's Authorization header in sync with the active
-// Clerk session. This allows RLS owner-policies to work once you configure
-// a Clerk JWT template named "supabase" in your Clerk dashboard pointing at
-// your Supabase JWT secret (Settings → API → JWT Secret).
-// If the template isn't set up yet, getToken() returns null and the client
-// falls back to the anon key — the app keeps working either way.
-const SupabaseAuthSync = ({ children }: { children: React.ReactNode }) => {
+// Keeps the Nest API client's Authorization header in sync with the active
+// Clerk session. Unlike the old Supabase bridge this replaced, no Clerk JWT
+// "template" is needed — the backend verifies Clerk's own standard session
+// token directly via @clerk/backend (see server/src/auth/clerk-auth.guard.ts).
+const ApiAuthSync = ({ children }: { children: React.ReactNode }) => {
   const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
-    if (!isSignedIn) { setSupabaseToken(null); return; }
+    if (!isSignedIn) { setApiToken(null); return; }
 
     const sync = async () => {
       try {
-        const token = await getToken({ template: 'supabase' });
-        setSupabaseToken(token);
+        const token = await getToken();
+        setApiToken(token);
       } catch {
-        // Template not configured yet — silently fall back to anon key
-        setSupabaseToken(null);
+        setApiToken(null);
       }
     };
 
     sync();
     // Clerk JWTs expire after 60 min — refresh every 55 min
     const interval = setInterval(sync, 55 * 60 * 1000);
-    return () => { clearInterval(interval); setSupabaseToken(null); };
+    return () => { clearInterval(interval); setApiToken(null); };
   }, [isSignedIn, getToken]);
 
   return <>{children}</>;
@@ -160,13 +163,13 @@ function App() {
                 <StatusBar style="light" />
                 <ClerkLoaded>
                   <SignedIn>
-                    <SupabaseAuthSync>
+                    <ApiAuthSync>
                     {AppConfig.useRestructuredLayout ? (
                       <MainFeedScreen />
                     ) : (
                       <ChallengeScreen />
                     )}
-                    </SupabaseAuthSync>
+                    </ApiAuthSync>
                   </SignedIn>
                   <SignedOut>
                     <OnboardingScreen onComplete={async () => {
