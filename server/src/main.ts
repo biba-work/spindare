@@ -7,10 +7,19 @@ import 'dotenv/config';
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Express defaults JSON bodies to 100 KB. `POST /storage/upload` takes a
+  // base64 image, and base64 inflates bytes by a third — so every real photo
+  // exceeded the cap and came back 413, which the mobile client swallowed.
+  // Clients now presign and PUT straight to R2 instead, but this endpoint is
+  // still reachable and shouldn't fail on size alone.
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
 
   // The mobile app is a separate origin (Expo dev server / native app), so
   // this needs to be wide open rather than same-origin-only.
