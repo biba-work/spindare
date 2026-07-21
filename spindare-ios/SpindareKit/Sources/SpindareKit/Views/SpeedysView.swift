@@ -1085,3 +1085,46 @@ private struct SpeedyActionMenu: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - Speedys Glassmorphism Context Menu Sheet
+
+public struct SpeedysContextMenu: View {
+    let postID: String
+    var onNotInterested: () -> Void
+    var onReport: () -> Void
+
+    public init(postID: String, onNotInterested: @escaping () -> Void, onReport: @escaping () -> Void) {
+        self.postID = postID
+        self.onNotInterested = onNotInterested
+        self.onReport = onReport
+    }
+
+    public var body: some View {
+        VStack(spacing: 16) {
+            Capsule()
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 8)
+
+            Button(action: onNotInterested) {
+                Label("Not Interested", systemImage: "eye.slash")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.08)))
+            }
+
+            Button(action: onReport) {
+                Label("Report Post", systemImage: "flag")
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.red.opacity(0.12)))
+            }
+        }
+        .padding(.horizontal, 20)
+        .background(Color(red: 0.1, green: 0.1, blue: 0.12).ignoresSafeArea())
+    }
+}

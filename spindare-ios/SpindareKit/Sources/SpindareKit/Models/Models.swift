@@ -752,3 +752,22 @@ public struct SearchUser: Codable, Sendable, Identifiable, Hashable {
         try c.encodeIfPresent(photoURL, forKey: .photoURL)
     }
 }
+
+// MARK: - Saved Zone Item Expiration Model
+
+public struct SavedZoneItem: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public var mediaURL: String
+    public var createdAt: Date
+
+    public var isExpired: Bool {
+        // Automatically expire items older than 24 hours
+        return Date().timeIntervalSince(createdAt) > (24 * 3600)
+    }
+
+    public init(id: String, mediaURL: String, createdAt: Date = Date()) {
+        self.id = id
+        self.mediaURL = mediaURL
+        self.createdAt = createdAt
+    }
+}

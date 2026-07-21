@@ -197,4 +197,51 @@ public class SpindareMultiCamViewController: UIViewController, AVCapturePhotoCap
         }
     }
 }
+
+// MARK: - DualCameraManager (Photo & Video MultiCam Recording)
+
+public final class DualCameraManager: NSObject, ObservableObject, AVCaptureFileOutputRecordingDelegate {
+    @Published public var isRecording = false
+    private let session = AVCaptureMultiCamSession()
+    private let movieOutput = AVCaptureMovieFileOutput()
+
+    public override init() {
+        super.init()
+    }
+
+    public func setupAndStartSession() {
+        guard AVCaptureMultiCamSession.isMultiCamSupported else { return }
+        session.beginConfiguration()
+
+        if let backDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+           let backInput = try? AVCaptureDeviceInput(device: backDevice) {
+            if session.canAddInput(backInput) { session.addInput(backInput) }
+        }
+
+        if let frontDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
+           let frontInput = try? AVCaptureDeviceInput(device: frontDevice) {
+            if session.canAddInput(frontInput) { session.addInput(frontInput) }
+        }
+
+        if session.canAddOutput(movieOutput) {
+            session.addOutput(movieOutput)
+        }
+        session.commitConfiguration()
+        session.startRunning()
+    }
+
+    public func toggleVideoRecording(outputURL: URL) {
+        if isRecording {
+            movieOutput.stopRecording()
+            isRecording = false
+        } else {
+            movieOutput.startRecording(to: outputURL, recordingDelegate: self)
+            isRecording = true
+        }
+    }
+
+    public nonisolated func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        // Video captured natively — ready for Cloudflare R2 upload
+    }
+}
 #endif

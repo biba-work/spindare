@@ -532,3 +532,64 @@ extension ComposerView {
         #endif
     }
 }
+
+// MARK: - Composer Video Picker (Off-MainActor Thumbnail Processing)
+
+#if canImport(UIKit)
+import AVFoundation
+
+struct ComposerVideoPickerView: View {
+    @State private var exportProgress: Double = 0.0
+    @State private var isProcessing: Bool = false
+    @State private var thumbnail: UIImage? = nil
+
+    let videoURL: URL?
+
+    var body: some View {
+        ZStack {
+            if let thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 80, height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else if isProcessing {
+                ProgressView(value: exportProgress) {
+                    Text("Processing...")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                }
+                .progressViewStyle(.circular)
+                .frame(width: 80, height: 120)
+                .background(Color.black.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                Color.black.opacity(0.2)
+                    .frame(width: 80, height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+        .task(id: videoURL) {
+            guard let videoURL else { return }
+            processSelectedVideo(url: videoURL)
+        }
+    }
+
+    func processSelectedVideo(url: URL) {
+        isProcessing = true
+        Task.detached(priority: .userInitiated) {
+            let asset = AVAsset(url: url)
+            let imageGenerator = AVAssetImageGenerator(asset: asset)
+            imageGenerator.appliesPreferredTrackTransform = true
+
+            if let cgImage = try? await imageGenerator.image(at: .zero).image {
+                let uiImage = UIImage(cgImage: cgImage)
+                await MainActor.run {
+                    self.thumbnail = uiImage
+                    self.isProcessing = false
+                }
+            }
+        }
+    }
+}
+#endif

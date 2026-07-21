@@ -439,3 +439,38 @@ public struct ImageViewer: View {
         #endif
     }
 }
+
+// MARK: - Feed Image Cell with Matched Geometry & Solid Black Placeholder
+
+public struct FeedImageCell: View {
+    let imageURL: URL
+    @Binding var activeFullscreenID: String?
+    var animationNamespace: Namespace.ID
+
+    public init(imageURL: URL, activeFullscreenID: Binding<String?>, animationNamespace: Namespace.ID) {
+        self.imageURL = imageURL
+        self._activeFullscreenID = activeFullscreenID
+        self.animationNamespace = animationNamespace
+    }
+
+    public var body: some View {
+        ZStack {
+            if activeFullscreenID == imageURL.absoluteString {
+                // Keep feed placeholder black while image is popped into fullscreen
+                Color.black
+                    .frame(height: 380)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            } else {
+                AsyncImage(url: imageURL) { image in
+                    image.resizable()
+                        .scaledToFill()
+                        .frame(height: 380)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .matchedGeometryEffect(id: imageURL.absoluteString, in: animationNamespace)
+                } placeholder: {
+                    Color.gray.opacity(0.2)
+                }
+            }
+        }
+    }
+}
