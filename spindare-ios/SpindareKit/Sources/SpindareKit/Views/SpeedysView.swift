@@ -692,8 +692,8 @@ struct SpeedyMedia: View {
     @State private var showMenu = false
     @State private var showWhy = false
 
-    /// Fraction of the width each side hold-zone occupies; the middle is the rest.
-    private static let edgeZoneFraction: CGFloat = 0.28
+    /// Fraction of the width each side hold-zone occupies (20%); the middle (60%) is the rest.
+    private static let edgeZoneFraction: CGFloat = 0.20
 
     var body: some View {
         ZStack {
@@ -1029,11 +1029,20 @@ private struct SpeedyActionMenu: View {
                     Divider().overlay(.white.opacity(0.15))
                 }
 
+                row("Not interested", icon: "hand.thumbsdown", action: onNotInterested)
                 row("Report", icon: "flag", action: onReport)
+                row("Copy link", icon: "link") {
+                    #if canImport(UIKit)
+                    UIPasteboard.general.string = "https://spindare.app/s/\(onReport)"
+                    #endif
+                    onDismiss()
+                }
+                row("Save to favorites", icon: "star") {
+                    onDismiss()
+                }
                 row(showSpeeds ? "Hide speed" : "Speed", icon: "gauge.with.dots.needle.67percent") {
                     withAnimation(Spindare.Motion.enter) { showSpeeds.toggle() }
                 }
-                row("Not interested", icon: "hand.thumbsdown", action: onNotInterested)
                 row("Full screen", icon: "arrow.up.left.and.arrow.down.right", action: onFullScreen)
                 row("Why this post", icon: "questionmark.circle", action: onWhy)
             }

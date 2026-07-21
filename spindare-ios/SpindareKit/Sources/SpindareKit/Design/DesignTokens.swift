@@ -282,16 +282,86 @@ public extension Spindare {
         /// does was the specific complaint this exists to fix.
         public static let precise = Animation.spring(response: 0.3, dampingFraction: 1.0)
 
+        /// Apple / Instagram exact timing curve for sheet & card transitions.
+        public static let appleTimingCurve = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.32)
+
         /// Full-screen layers arriving and leaving — composer, messages, chat,
         /// saved, another user's profile.
-        ///
-        /// Deliberately *not* `enter`, which has a damping ratio near 0.57 and
-        /// visibly overshoots. On a small element that bounce reads as
-        /// liveliness; on a whole screen it reads as the UI wobbling, and the
-        /// low stiffness makes it slow on top of that. A screen you asked for
-        /// should arrive quickly and stop — the motion's only job is telling
-        /// you where it came from.
         public static let layer = Animation.spring(response: 0.3, dampingFraction: 0.95)
+    }
+}
+
+// MARK: - Morphing Semi-Arrow Grabber Shape
+
+public struct SemiArrowShape: Shape {
+    public var translationY: CGFloat
+
+    public var animatableData: CGFloat {
+        get { translationY }
+        set { translationY = newValue }
+    }
+
+    public init(translationY: CGFloat = 0) {
+        self.translationY = translationY
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let midX = rect.midX
+        let startY = rect.midY
+        let peakY = startY - min(12, max(0, translationY * 0.3))
+
+        path.move(to: CGPoint(x: rect.minX, y: startY))
+        path.addLine(to: CGPoint(x: midX, y: peakY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: startY))
+
+        return path
+    }
+}
+
+// MARK: - Interactive Dismiss Modifier (r = min(1.0, offsetY / 350))
+
+public struct InteractiveDismissModifier: ViewModifier {
+    let offsetY: CGFloat
+
+    public init(offsetY: CGFloat) {
+        self.offsetY = offsetY
+    }
+
+    public func body(content: Content) -> some View {
+        let r = min(1.0, max(0, offsetY / 350.0))
+        let backdropOpacity = 1.0 - r
+        let elementsOpacity = max(0.0, 1.0 - (r * 2.5))
+
+        return content
+            .background(Color.black.opacity(backdropOpacity))
+            .environment(\.interactiveDismissProgress, r)
+            .environment(\.interactiveElementsOpacity, elementsOpacity)
+    }
+}
+
+private struct InteractiveDismissProgressKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+private struct InteractiveElementsOpacityKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
+public extension EnvironmentValues {
+    var interactiveDismissProgress: CGFloat {
+        get { self[InteractiveDismissProgressKey.self] }
+        set { self[InteractiveDismissProgressKey.self] = newValue }
+    }
+    var interactiveElementsOpacity: CGFloat {
+        get { self[InteractiveElementsOpacityKey.self] }
+        set { self[InteractiveElementsOpacityKey.self] = newValue }
+    }
+}
+
+public extension View {
+    func interactiveDismiss(offsetY: CGFloat) -> some View {
+        self.modifier(InteractiveDismissModifier(offsetY: offsetY))
     }
 }
 

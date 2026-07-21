@@ -50,12 +50,9 @@ public struct SavedDrawerView: View {
 
     private var grabber: some View {
         VStack(spacing: 4) {
-            Image(systemName: "chevron.compact.up")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color.spindareSecondary(scheme))
-            Capsule()
-                .fill(Spindare.Hairline.color(scheme, emphasis: 2.5))
-                .frame(width: 36, height: 4)
+            SemiArrowShape(translationY: 0)
+                .stroke(Color.spindareSecondary(scheme), style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+                .frame(width: 38, height: 8)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, Spindare.Spacing.sm)
