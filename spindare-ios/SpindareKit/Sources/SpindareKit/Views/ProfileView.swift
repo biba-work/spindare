@@ -31,6 +31,9 @@ public struct ProfileView: View {
     /// and already worked; it just had no caller anywhere in the app.
     @State private var pfpPickerItem: PhotosPickerItem?
     @State private var isUploadingPhoto = false
+    /// Surfaced under the avatar when an upload fails, so a photo that didn't
+    /// save says so instead of just quietly not changing.
+    @State private var photoError: String?
     private let profileScrollSpace = "profile"
 
     /// How the post archive is laid out. An enum rather than a Bool so the
@@ -149,17 +152,24 @@ public struct ProfileView: View {
         // Resolve to a URL the backend (and every other device) can load:
         // upload the compressed bytes to R2 when live, or fall back to a local
         // file in mock/offline mode so the picker still visibly works.
+        // Failures here are *reported*, not swallowed. A silent `return` is why
+        // every profile photo appeared to save and never did: the upload was
+        // failing on the server's body limit and nothing said so.
         let photoURL: String
-        if let uploader = AppEnvironment.mediaUploader {
-            guard let uploaded = try? await uploader.uploadData(
-                compressed, contentType: "image/jpeg", folder: "profile"
-            ) else { return }
-            photoURL = uploaded
-        } else {
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("pfp-\(UUID().uuidString).jpg")
-            guard (try? compressed.write(to: url)) != nil else { return }
-            photoURL = url.absoluteString
+        do {
+            if let uploader = AppEnvironment.mediaUploader {
+                photoURL = try await uploader.uploadData(
+                    compressed, contentType: "image/jpeg", folder: "profile"
+                )
+            } else {
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("pfp-\(UUID().uuidString).jpg")
+                try compressed.write(to: url)
+                photoURL = url.absoluteString
+            }
+        } catch {
+            photoError = "Couldn't upload that photo. Check your connection and try again."
+            return
         }
 
         do {
@@ -172,9 +182,9 @@ public struct ProfileView: View {
             // Propagate to the session identity so the new photo shows in the
             // header and on new posts, not only on this screen.
             router.updateAvatar(photoURL)
+            photoError = nil
         } catch {
-            // Non-fatal — same treatment `saveChallenge` and other
-            // best-effort writes elsewhere in this app already get.
+            photoError = "Photo uploaded but didn't save to your profile."
         }
     }
 
@@ -263,6 +273,14 @@ public struct ProfileView: View {
             .buttonStyle(.plain)
             .disabled(uploading)
             .padding(.top, Spindare.Spacing.lg)
+
+            if let photoError {
+                Text(photoError)
+                    .font(Spindare.Typography.timestamp)
+                    .foregroundStyle(Spindare.Palette.danger)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Spindare.Spacing.lg)
+            }
 
             Text("@\(profile?.username ?? router.username ?? "you")")
                 .font(.system(size: 22, weight: .bold))
