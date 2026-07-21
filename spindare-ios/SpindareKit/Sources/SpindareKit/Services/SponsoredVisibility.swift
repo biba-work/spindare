@@ -30,16 +30,24 @@ public enum SponsoredVisibility {
         // Unsponsored posts are ordinary content and aren't gated at all —
         // they carry no venue, so there's no location to protect.
         guard speedy.isSponsored else { return true }
+        return isVisible(authorId: speedy.userId, createdAt: speedy.createdAt, viewerId: viewerId, now: now)
+    }
 
+    /// The core gate, independent of what kind of item is being shown — a
+    /// sponsored Speedy or a completed-challenge venue pin. Both a Speedy and a
+    /// `VenuePost` reduce to "whose is it, and how old is it," so the rule lives
+    /// here once. Venue posts are always sponsored (tied to a place), so they
+    /// call this directly rather than through the Speedy overload's guard.
+    public static func isVisible(authorId: String, createdAt: Date?, viewerId: String?, now: Date) -> Bool {
         // You always see your own immediately. You already know where you are;
         // withholding it would just look broken to the one person the delay
         // cannot protect.
-        if let viewerId, !viewerId.isEmpty, speedy.userId == viewerId { return true }
+        if let viewerId, !viewerId.isEmpty, authorId == viewerId { return true }
 
-        // Someone else's sponsored post: it has to be old enough. A missing
+        // Someone else's sponsored item: it has to be old enough. A missing
         // timestamp means we cannot prove five minutes have passed, so it
         // stays hidden rather than being waved through on a guess.
-        guard let createdAt = speedy.createdAt else { return false }
+        guard let createdAt else { return false }
 
         // `>=` so the boundary itself counts as elapsed, and a clock that
         // reports a *future* creation date yields a negative interval — which

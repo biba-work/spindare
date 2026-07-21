@@ -439,6 +439,46 @@ public enum MockSeed {
         ]
     }
 
+    /// Completed sponsored challenges, one or more per venue, chosen to exercise
+    /// every rule the Zone pins follow: your own shows instantly; a stranger's
+    /// old post shows to all; a stranger's fresh post stays withheld (the pin
+    /// falls back to the venue glyph); and where a venue has several, the
+    /// most-reacted one wins the pin.
+    public static var venuePosts: [VenuePost] {
+        [
+            // Yours — visible to you the moment you post, gate or no gate.
+            VenuePost(
+                id: "vp-1", venueId: "venue-1", userId: MockBackend.currentUserSentinel,
+                author: "you",
+                media: "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=600&q=80",
+                reactions: Reactions(felt: 4, thought: 2, intrigued: 1), createdAt: hoursAgo(0.03)
+            ),
+            // A stranger's, well past the five minutes and heavily reacted — everyone sees it.
+            VenuePost(
+                id: "vp-2", venueId: "venue-2", userId: users[1].id, author: users[1].username, avatar: users[1].avatar,
+                media: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600&q=80",
+                reactions: Reactions(felt: 40, thought: 22, intrigued: 9), createdAt: hoursAgo(3)
+            ),
+            // A stranger's, posted a minute ago — withheld; the pin shows the venue glyph.
+            VenuePost(
+                id: "vp-3", venueId: "venue-3", userId: users[4].id, author: users[4].username, avatar: users[4].avatar,
+                media: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&q=80",
+                reactions: Reactions(felt: 2, thought: 1, intrigued: 0), createdAt: hoursAgo(0.017)
+            ),
+            // Two at one venue, both old — the most-reacted wins the pin.
+            VenuePost(
+                id: "vp-4", venueId: "venue-5", userId: users[5].id, author: users[5].username, avatar: users[5].avatar,
+                media: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=600&q=80",
+                reactions: Reactions(felt: 12, thought: 30, intrigued: 6), createdAt: hoursAgo(5)
+            ),
+            VenuePost(
+                id: "vp-5", venueId: "venue-5", userId: users[8].id, author: users[8].username, avatar: users[8].avatar,
+                media: "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=600&q=80",
+                reactions: Reactions(felt: 3, thought: 2, intrigued: 1), createdAt: hoursAgo(4)
+            ),
+        ]
+    }
+
     static var sponsors: [String: Sponsor] {
         Dictionary(uniqueKeysWithValues: venues.map { venue in
             (venue.id, Sponsor(id: "sponsor-\(venue.id)", name: venue.name, venueId: venue.id))

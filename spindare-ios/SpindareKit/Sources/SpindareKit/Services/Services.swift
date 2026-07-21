@@ -68,6 +68,9 @@ public protocol SpeedyServing: Sendable {
 
 public protocol ZoneServing: Sendable {
     func venues() async throws -> [Venue]
+    /// Completed sponsored challenges pinned to venues. The visibility gate is
+    /// the caller's job (via `SponsoredVisibility`), same as the Speedys feed.
+    func venuePosts() async throws -> [VenuePost]
 }
 
 public protocol SearchServing: Sendable {
@@ -359,6 +362,9 @@ public actor MockBackend {
     /// Same lazy-seed treatment as `conversations`.
     private var speedys: [Speedy] = []
     private var favouriteSpeedys: Set<String> = []
+    /// Completed sponsored challenges shown on Zone pins. Lazy-seeded like
+    /// speedys/conversations, not persisted (fixed demo reference data).
+    private var venuePosts: [VenuePost] = []
 
     /// Seed posts authored by this sentinel are relabelled to the signed-in
     /// Clerk id once known, so "your" posts appear correctly in both the feed
@@ -640,6 +646,11 @@ public actor MockBackend {
     /// that the seed doesn't already say.
     func allVenues() -> [Venue] { MockSeed.venues }
 
+    func allVenuePosts() -> [VenuePost] {
+        if venuePosts.isEmpty { venuePosts = MockSeed.venuePosts }
+        return venuePosts
+    }
+
     func currentProfile() -> Profile? { profile }
     func setProfile(_ value: Profile) {
         profile = value
@@ -811,6 +822,7 @@ public struct MockZoneService: ZoneServing {
     public init(backend: MockBackend = .shared) { self.backend = backend }
 
     public func venues() async throws -> [Venue] { await backend.allVenues() }
+    public func venuePosts() async throws -> [VenuePost] { await backend.allVenuePosts() }
 }
 
 public struct MockSearchService: SearchServing {

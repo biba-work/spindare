@@ -48,6 +48,11 @@ public struct FeedView: View {
                             .accessibilityLabel("Loading feed")
                     } else if let error = vm.error, vm.posts.isEmpty {
                         errorState(error)
+                    } else if vm.posts.isEmpty {
+                        // Loaded fine, just nothing to show — a brand-new or
+                        // empty backend. Distinct from the network-error state
+                        // above so an empty feed doesn't read as broken.
+                        emptyState
                     } else {
                         ForEach(vm.posts) { post in
                             PostCardView(
@@ -136,6 +141,26 @@ public struct FeedView: View {
             }
         }
         .padding(.horizontal, Spindare.Spacing.md)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: Spindare.Spacing.md) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 44))
+                .foregroundStyle(Spindare.Palette.textSecondary)
+
+            Text("Nothing here yet")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Spindare.Palette.ink)
+
+            Text("Spin a challenge and be the first to post.")
+                .font(.system(size: 15))
+                .foregroundStyle(Spindare.Palette.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
+        .padding(.horizontal, Spindare.Spacing.xl)
     }
 
     private func errorState(_ message: String) -> some View {

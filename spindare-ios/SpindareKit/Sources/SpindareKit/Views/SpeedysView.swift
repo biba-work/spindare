@@ -51,8 +51,13 @@ public struct SpeedysView: View {
     /// Sponsored posts by other people are withheld for five minutes — see
     /// `SponsoredVisibility` for why. Applied here rather than in the service
     /// so the pending-count note below can still see what's being held.
+    /// Cards the viewer marked "not interested" this session — dropped locally,
+    /// no backend signal. A `Set` so the filter below stays O(1) per card.
+    @State private var notInterested: Set<String> = []
+
     private var visible: [Speedy] {
         SponsoredVisibility.visible(speedys, viewerId: router.userId, now: now)
+            .filter { !notInterested.contains($0.id) }
     }
 
     private var pendingCount: Int {
@@ -87,7 +92,9 @@ public struct SpeedysView: View {
                                         router.push(.userProfile(
                                             .init(id: speedy.userId, username: speedy.author, avatarURL: speedy.avatar)
                                         ))
-                                    }
+                                    },
+                                    onReport: { report(speedy) },
+                                    onNotInterested: { hideCard(speedy) }
                                 )
                                 .containerRelativeFrame(.vertical)
                                 .reportsFrame(id: speedy.id, in: scrollSpace)
@@ -209,6 +216,18 @@ public struct SpeedysView: View {
         router.shareChallenge(speedy.challenge)
     }
 
+    private func report(_ speedy: Speedy) {
+        // No moderation backend yet — acknowledge the flag so it doesn't feel
+        // like a dead control, and drop the card from view like "not interested".
+        toast = Toast("Reported — thanks for flagging", icon: "flag")
+        hideCard(speedy)
+    }
+
+    private func hideCard(_ speedy: Speedy) {
+        withAnimation(Spindare.Motion.enter) { _ = notInterested.insert(speedy.id) }
+        Haptics.impact(.light)
+    }
+
     private func load() async {
         isLoading = true
         defer { isLoading = false }
@@ -241,6 +260,15 @@ struct SpeedyCard: View {
     /// fullscreen post isn't a real destination, so that call site just
     /// doesn't supply one rather than wiring a no-op closure.
     var onProfileTap: (() -> Void)? = nil
+    /// Menu actions the media view bubbles up: report (feed shows a toast) and
+    /// "not interested" (feed drops the card). Default to no-ops for the own-post
+    /// viewer, which has no menu.
+    var onReport: () -> Void = {}
+    var onNotInterested: () -> Void = {}
+
+    /// Fullscreen mode from the action menu — hides this card's chrome (gradient,
+    /// details, rail) so the media fills the screen unobstructed. Tap to restore.
+    @State private var chromeHidden = false
 
     /// Which reaction the viewer picked. Local so the card can show the choice
     /// back immediately — there are no visible counts to update, so this is
@@ -274,7 +302,13 @@ struct SpeedyCard: View {
         // rail pushed off the other.
         GeometryReader { proxy in
             ZStack(alignment: .bottom) {
-                SpeedyMedia(speedy: speedy, isCurrent: isCurrent)
+                SpeedyMedia(
+                    speedy: speedy,
+                    isCurrent: isCurrent,
+                    chromeHidden: $chromeHidden,
+                    onReport: onReport,
+                    onNotInterested: onNotInterested
+                )
 
                 // Without this the white text sits directly on whatever the
                 // video happens to be showing, which is unreadable on a
@@ -285,6 +319,7 @@ struct SpeedyCard: View {
                     endPoint: .bottom
                 )
                 .allowsHitTesting(false)
+                .opacity(chromeHidden ? 0 : 1)
 
                 HStack(alignment: .bottom, spacing: Spindare.Spacing.md) {
                     details
@@ -303,9 +338,13 @@ struct SpeedyCard: View {
                 // it happened to clear some devices' safe areas and not
                 // others.
                 .padding(.bottom, Self.bottomClearance)
+                // Fullscreen hides the chrome so the media fills the frame.
+                .opacity(chromeHidden ? 0 : 1)
+                .allowsHitTesting(!chromeHidden)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
+            .animation(Spindare.Motion.precise, value: chromeHidden)
         }
     }
 
@@ -619,6 +658,14 @@ private struct BlinkingRing: View {
 struct SpeedyMedia: View {
     let speedy: Speedy
     let isCurrent: Bool
+    /// Fullscreen mode hides the card's chrome (gradient, rail, details) for a
+    /// clean view. Owned by `SpeedyCard` so it can dim its own overlays; toggled
+    /// from the long-press menu here.
+    @Binding var chromeHidden: Bool
+    /// Bubble up the two menu actions this view can't resolve itself: a report
+    /// (the feed shows the toast) and "not interested" (the feed drops the card).
+    var onReport: () -> Void = {}
+    var onNotInterested: () -> Void = {}
 
     @State private var player: AVPlayer?
     /// Set if the item fails — a bad URL, no connectivity, an unsupported
@@ -637,6 +684,17 @@ struct SpeedyMedia: View {
     @State private var isPlaying = true
     @State private var isMuted = true
     @State private var rate: Float = 1.0
+
+    // Gesture-driven UI: hold the sides to fast-forward, hold the middle for the
+    // action menu. All local, no backend except the two bubbled-up callbacks.
+    @State private var isHolding = false
+    @State private var rateBeforeHold: Float = 1
+    @State private var wasPlayingBeforeHold = true
+    @State private var showMenu = false
+    @State private var showWhy = false
+
+    /// Fraction of the width each side hold-zone occupies; the middle is the rest.
+    private static let edgeZoneFraction: CGFloat = 0.28
 
     var body: some View {
         ZStack {
@@ -660,7 +718,7 @@ struct SpeedyMedia: View {
                     .allowsHitTesting(false)
             }
 
-            if player != nil, !failed, !isPlaying {
+            if player != nil, !failed, !isPlaying, !isHolding {
                 Image(systemName: "play.fill")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundStyle(.white)
@@ -672,47 +730,135 @@ struct SpeedyMedia: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .contentShape(Rectangle())
-        .onTapGesture { togglePlayback() }
-        .overlay(alignment: .topTrailing) {
-            if player != nil, !failed {
-                controls
-            }
-        }
+        // Zoned gestures sit above the video: tap or hold either side to
+        // fast-forward, tap the middle to pause, hold the middle for the menu.
+        .overlay { gestureZones }
+        // Mute lives just below the centre now, not in a top-right cluster.
+        .overlay(alignment: .center) { centreControls }
+        .overlay(alignment: .top) { fastForwardHUD }
+        .overlay { menuOverlay }
         .onChange(of: isCurrent, initial: true) { _, current in
             current ? start() : stop()
         }
         .onDisappear(perform: stop)
+        .sheet(isPresented: $showWhy) { whySheet }
     }
 
-    private var controls: some View {
-        HStack(spacing: 8) {
-            controlButton(isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
-                toggleMute()
-            }
-            controlButton(rate == 2 ? "2x" : "1x", isSymbol: false) {
-                toggleSpeed()
+    // MARK: Gesture zones
+
+    private var gestureZones: some View {
+        GeometryReader { geo in
+            let edge = geo.size.width * Self.edgeZoneFraction
+            HStack(spacing: 0) {
+                holdZone.frame(width: edge)
+                centreZone.frame(maxWidth: .infinity)
+                holdZone.frame(width: edge)
             }
         }
-        .padding(Spindare.Spacing.md)
+    }
+
+    /// Left/right: tap toggles play like the middle, hold engages 2x until release.
+    private var holdZone: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture { togglePlayback() }
+            .gesture(fastForwardGesture)
+    }
+
+    /// Middle: tap toggles play, long-press opens the action menu.
+    private var centreZone: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture { togglePlayback() }
+            .onLongPressGesture(minimumDuration: 0.35) { openMenu() }
+    }
+
+    /// A long-press that, once it passes the threshold, tracks the finger until
+    /// release — the standard "hold to fast-forward" shape. A quick tap never
+    /// completes the long-press, so it falls through to `onTapGesture` above.
+    private var fastForwardGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.2)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                if case .second(true, _) = value { beginHold() }
+            }
+            .onEnded { _ in endHold() }
+    }
+
+    // MARK: Overlays
+
+    @ViewBuilder
+    private var centreControls: some View {
+        if player != nil, !failed {
+            Button { toggleMute() } label: {
+                Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(.black.opacity(0.4)))
+            }
+            .buttonStyle(.plain)
+            // Sits below where the centre play/pause glyph appears.
+            .offset(y: 56)
+        }
     }
 
     @ViewBuilder
-    private func controlButton(_ content: String, isSymbol: Bool = true, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Group {
-                if isSymbol {
-                    Image(systemName: content).font(.system(size: 13, weight: .semibold))
-                } else {
-                    Text(content).font(.system(size: 12, weight: .bold))
-                }
+    private var fastForwardHUD: some View {
+        if isHolding {
+            HStack(spacing: 4) {
+                Image(systemName: "forward.fill").font(.system(size: 11, weight: .bold))
+                Text("2x").font(.system(size: 12, weight: .bold))
             }
             .foregroundStyle(.white)
-            .frame(width: 32, height: 32)
-            .background(Circle().fill(.black.opacity(0.45)))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(.black.opacity(0.55)))
+            .padding(.top, 60)
+            .transition(.opacity)
+            .allowsHitTesting(false)
         }
-        .buttonStyle(.plain)
     }
+
+    @ViewBuilder
+    private var menuOverlay: some View {
+        if showMenu {
+            SpeedyActionMenu(
+                rate: rate,
+                onSpeed: { setRate($0) },
+                onReport: { closeMenu(); onReport() },
+                onNotInterested: { closeMenu(); onNotInterested() },
+                onFullScreen: { closeMenu(); withAnimation(Spindare.Motion.precise) { chromeHidden.toggle() } },
+                onWhy: { closeMenu(); showWhy = true },
+                onDismiss: { closeMenu() }
+            )
+            .transition(.opacity)
+            .zIndex(10)
+        }
+    }
+
+    private var whySheet: some View {
+        VStack(spacing: Spindare.Spacing.md) {
+            Image(systemName: "sparkles").font(.system(size: 34))
+                .foregroundStyle(Spindare.Palette.accent)
+            Text("Why you're seeing this")
+                .font(.system(size: 18, weight: .bold))
+            Text("Challenge proofs show up here from people near you and challenges others are taking on right now — not an endless algorithm, just real things people did.")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Got it") { showWhy = false }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: Spindare.Radius.control).fill(Spindare.Palette.ink))
+        }
+        .padding(Spindare.Spacing.lg)
+        .presentationDetents([.medium])
+    }
+
+    // MARK: Playback control
 
     private func togglePlayback() {
         guard let player else { return }
@@ -730,15 +876,41 @@ struct SpeedyMedia: View {
         Haptics.impact(.light)
     }
 
-    private func toggleSpeed() {
-        guard let player else { return }
-        rate = rate == 2 ? 1 : 2
-        // Setting `.rate` on a paused player would itself start playback —
-        // AVFoundation has no separate "preferred rate while paused"
-        // concept, `rate` *is* the play command. Only push it live if
-        // actually playing; otherwise it's just remembered for next `play()`.
-        if isPlaying { player.rate = rate }
+    /// Sets a specific playback rate from the menu's Speed options. Setting
+    /// `.rate` on a paused player would itself start playback (AVFoundation has
+    /// no "preferred rate while paused"), so only push it live while playing.
+    private func setRate(_ value: Float) {
+        rate = value
+        if isPlaying { player?.rate = value }
         Haptics.impact(.light)
+    }
+
+    private func beginHold() {
+        guard !isHolding, player != nil else { return }
+        rateBeforeHold = rate
+        wasPlayingBeforeHold = isPlaying
+        withAnimation(Spindare.Motion.precise) { isHolding = true }
+        rate = 2
+        isPlaying = true
+        player?.rate = 2
+        Haptics.impact(.light)
+    }
+
+    private func endHold() {
+        guard isHolding else { return }
+        withAnimation(Spindare.Motion.precise) { isHolding = false }
+        rate = rateBeforeHold
+        isPlaying = wasPlayingBeforeHold
+        player?.rate = wasPlayingBeforeHold ? rateBeforeHold : 0
+    }
+
+    private func openMenu() {
+        withAnimation(Spindare.Motion.enter) { showMenu = true }
+        Haptics.impact(.medium)
+    }
+
+    private func closeMenu() {
+        withAnimation(Spindare.Motion.enter) { showMenu = false }
     }
 
     private func start() {
@@ -752,6 +924,7 @@ struct SpeedyMedia: View {
         failed = false
         isPlaying = true
         rate = 1.0
+        isHolding = false
 
         // Defensive: this app also records voice notes elsewhere
         // (`VoiceRecorder`), which sets the audio session to `.playAndRecord`
@@ -804,5 +977,98 @@ struct SpeedyMedia: View {
         statusObservation?.invalidate()
         statusObservation = nil
         player = nil
+        isHolding = false
+    }
+}
+
+// MARK: - Speedy action menu
+
+/// The grouped popup a middle-hold opens — one panel that slides up as a unit
+/// (not row-by-row), over a tap-to-dismiss scrim. Speed expands inline to a row
+/// of rate options; everything else is a single tap.
+private struct SpeedyActionMenu: View {
+    let rate: Float
+    let onSpeed: (Float) -> Void
+    let onReport: () -> Void
+    let onNotInterested: () -> Void
+    let onFullScreen: () -> Void
+    let onWhy: () -> Void
+    let onDismiss: () -> Void
+
+    @State private var showSpeeds = false
+
+    private static let speeds: [Float] = [0.5, 1, 1.5, 2]
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { onDismiss() }
+
+            VStack(spacing: 0) {
+                if showSpeeds {
+                    HStack(spacing: 8) {
+                        ForEach(Self.speeds, id: \.self) { value in
+                            Button {
+                                onSpeed(value)
+                            } label: {
+                                Text(speedLabel(value))
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(rate == value ? .black : .white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 40)
+                                    .background(
+                                        Capsule().fill(rate == value ? .white : .white.opacity(0.16))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Spindare.Spacing.md)
+                    .padding(.vertical, Spindare.Spacing.sm)
+                    Divider().overlay(.white.opacity(0.15))
+                }
+
+                row("Report", icon: "flag", action: onReport)
+                row(showSpeeds ? "Hide speed" : "Speed", icon: "gauge.with.dots.needle.67percent") {
+                    withAnimation(Spindare.Motion.enter) { showSpeeds.toggle() }
+                }
+                row("Not interested", icon: "hand.thumbsdown", action: onNotInterested)
+                row("Full screen", icon: "arrow.up.left.and.arrow.down.right", action: onFullScreen)
+                row("Why this post", icon: "questionmark.circle", action: onWhy)
+            }
+            .padding(.vertical, Spindare.Spacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
+                    .fill(.black.opacity(0.9))
+            )
+            .padding(.horizontal, Spindare.Spacing.md)
+            .padding(.bottom, 110)
+            // The whole panel arrives as one unit rather than element-by-element.
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func speedLabel(_ value: Float) -> String {
+        value == value.rounded() ? "\(Int(value))x" : "\(value)x"
+    }
+
+    private func row(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Spindare.Spacing.md) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 24)
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, Spindare.Spacing.md)
+            .frame(height: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -572,6 +572,45 @@ public struct Venue: Codable, Sendable, Identifiable, Hashable {
     }
 }
 
+/// A completed sponsored-challenge post pinned to a venue on the Zone map.
+///
+/// Same visibility rule as a sponsored Speedy (see `SponsoredVisibility`): the
+/// author sees their own the instant they post; everyone else waits five minutes
+/// so the pin can't broadcast "this person is standing here right now." Once the
+/// gate opens, a venue with several completions shows the most-reacted one's
+/// image on its pin instead of the category glyph.
+public struct VenuePost: Codable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public let venueId: String
+    public let userId: String
+    public var author: String
+    public var avatar: String?
+    /// The proof image shown inside the venue pin once visible.
+    public var media: String?
+    public var reactions: Reactions
+    public var createdAt: Date?
+
+    public init(
+        id: String,
+        venueId: String,
+        userId: String,
+        author: String,
+        avatar: String? = nil,
+        media: String? = nil,
+        reactions: Reactions = Reactions(),
+        createdAt: Date? = nil
+    ) {
+        self.id = id
+        self.venueId = venueId
+        self.userId = userId
+        self.author = author
+        self.avatar = avatar
+        self.media = media
+        self.reactions = reactions
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - Speedys
 
 /// One full-screen short-form card.

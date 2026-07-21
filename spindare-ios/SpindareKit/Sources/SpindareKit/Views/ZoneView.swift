@@ -15,8 +15,12 @@ public struct ZoneView: View {
     @Environment(AppRouter.self) private var router
 
     @State private var venues: [Venue] = []
+    @State private var venuePosts: [VenuePost] = []
     @State private var selected: Venue?
     @State private var isLoading = true
+    /// Ticks so a withheld completion appears once its five minutes elapse,
+    /// without needing the map to be re-entered — same cadence Speedys uses.
+    @State private var now = Date()
     @State private var location = LocationProvider()
     @State private var camera: MapCameraPosition = .region(Self.mockRegion)
     /// The map's own current span, kept in sync via `.onMapCameraChange` so
@@ -89,7 +93,11 @@ public struct ZoneView: View {
                 ForEach(venues) { venue in
                     if let display = venueDisplay[venue.id] {
                         Annotation(venue.name, coordinate: display.coordinate) {
-                            VenuePin(venue: venue, isSelected: selected?.id == venue.id) {
+                            VenuePin(
+                                venue: venue,
+                                postMedia: topVisiblePost(for: venue)?.media,
+                                isSelected: selected?.id == venue.id
+                            ) {
                                 select(venue)
                             }
                             // Converges to a point at the cluster centroid
@@ -134,6 +142,10 @@ public struct ZoneView: View {
                 }
                 .padding(.horizontal, Spindare.Spacing.gutter)
                 .padding(.bottom, 96)
+                // Flatten to one layer so the whole sheet slides up as a unit
+                // rather than each line animating in separately (the "text
+                // sometimes delayed" report) — also cheaper to composite.
+                .compositingGroup()
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -143,6 +155,12 @@ public struct ZoneView: View {
         }
         .task { await load() }
         .task { location.start() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                now = Date()
+            }
+        }
         .onChange(of: location.coordinate) { _, coordinate in
             guard !hasCenteredOnUser, let coordinate else { return }
             hasCenteredOnUser = true
@@ -186,7 +204,22 @@ public struct ZoneView: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
-        venues = (try? await zoneService.venues()) ?? []
+        async let fetchedVenues = zoneService.venues()
+        async let fetchedPosts = zoneService.venuePosts()
+        venues = (try? await fetchedVenues) ?? []
+        venuePosts = (try? await fetchedPosts) ?? []
+        now = Date()
+    }
+
+    /// The completed post to show inside a venue's pin, or nil to fall back to
+    /// the category glyph. Applies the same visibility gate as the Speedys feed
+    /// (your own shows instantly, a stranger's waits five minutes) and, when a
+    /// venue has several visible completions, shows the most-reacted one.
+    private func topVisiblePost(for venue: Venue) -> VenuePost? {
+        venuePosts
+            .filter { $0.venueId == venue.id }
+            .filter { SponsoredVisibility.isVisible(authorId: $0.userId, createdAt: $0.createdAt, viewerId: router.userId, now: now) }
+            .max { $0.reactions.total < $1.reactions.total }
     }
 }
 
@@ -203,6 +236,9 @@ extension Venue {
 private struct VenuePin: View {
     @Environment(\.colorScheme) private var scheme
     let venue: Venue
+    /// The proof image of a visible completion here, if any — shown in place of
+    /// the category glyph so a place where someone did the challenge stands out.
+    var postMedia: String? = nil
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -215,17 +251,32 @@ private struct VenuePin: View {
                           : AnyShapeStyle(Spindare.Palette.accentDeep))
                     .frame(width: 44, height: 44)
 
-                // Fixed size — animating a raw SF Symbol point size is what
-                // was actually causing the "weird bounce": a glyph isn't a
-                // smoothly-scalable vector under animation the way a Shape
-                // is, so interpolating its font size re-rasterizes at
-                // discrete steps, which reads as a jump rather than a zoom.
-                // `.scaleEffect` below is a true geometric transform and
-                // interpolates continuously, which is the actual "light
-                // popup" being asked for.
-                Image(systemName: venue.category.icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                if let postMedia, let url = URL(string: postMedia) {
+                    // A completed proof fills the pin; the glyph steps aside.
+                    AsyncImage(url: url) { phase in
+                        if case .success(let image) = phase {
+                            image.resizable().scaledToFill()
+                        } else {
+                            Image(systemName: venue.category.icon)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(Circle())
+                } else {
+                    // Fixed size — animating a raw SF Symbol point size is what
+                    // was actually causing the "weird bounce": a glyph isn't a
+                    // smoothly-scalable vector under animation the way a Shape
+                    // is, so interpolating its font size re-rasterizes at
+                    // discrete steps, which reads as a jump rather than a zoom.
+                    // `.scaleEffect` below is a true geometric transform and
+                    // interpolates continuously, which is the actual "light
+                    // popup" being asked for.
+                    Image(systemName: venue.category.icon)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
             .overlay {
                 Circle().strokeBorder(.white, lineWidth: 2.5)

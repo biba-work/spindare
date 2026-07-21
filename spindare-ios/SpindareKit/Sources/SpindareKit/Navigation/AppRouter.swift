@@ -136,7 +136,11 @@ public final class AppRouter {
         /// it can be dragged back out toward.
         public var entryEdge: Edge {
             switch self {
-            case .savedDrawer: .trailing
+            // Enters from the bottom and drags *down* to dismiss, matching the
+            // top grabber's affordance (a horizontal handle reads as "pull
+            // down", not "swipe right"). LayerContainer already supports a
+            // bottom entry edge — the composer uses it.
+            case .savedDrawer: .bottom
             case .composer: .bottom
             default: .trailing
             }

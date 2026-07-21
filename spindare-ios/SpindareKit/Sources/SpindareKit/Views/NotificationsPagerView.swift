@@ -24,6 +24,21 @@ public struct NotificationsPagerView: View {
     @State private var requests: [ConnectionRequest] = []
     @State private var spind: [SpindChallenge] = []
     @State private var isLoading = true
+    /// Ticks so an expiring challenge drops out on its own while you're looking
+    /// at it, rather than lingering interactive until the next reload.
+    @State private var now = Date()
+
+    /// Challenges that haven't expired. An expired dare used to stay in the list
+    /// forever with live Accept/Decline/Capture buttons — a challenge with a
+    /// clock that's run out shouldn't still be actionable. Backend `spind/inbox`
+    /// already filters these out server-side; this covers the mock feed and the
+    /// case where one lapses mid-view.
+    private var activeSpind: [SpindChallenge] {
+        spind.filter { challenge in
+            guard let expiresAt = challenge.expiresAt else { return true }
+            return expiresAt > now
+        }
+    }
 
     private let socialService: any SocialServing
     private let notificationService: any NotificationServing
@@ -66,6 +81,14 @@ public struct NotificationsPagerView: View {
         }
         .background(Color.spindareBackground(scheme).ignoresSafeArea())
         .task { await load() }
+        .task {
+            // Re-evaluate expiry roughly every 15s so a lapsing challenge drops
+            // out on its own — same cadence Speedys uses for its sponsored gate.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                now = Date()
+            }
+        }
     }
 
     private func scrollingList<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -182,7 +205,7 @@ public struct NotificationsPagerView: View {
     private func badge(for candidate: AppRouter.ActivityTab) -> Int? {
         switch candidate {
         case .notifications: notifications.filter { !$0.read }.count + requests.count
-        case .spind: spind.filter { !$0.accepted }.count
+        case .spind: activeSpind.filter { !$0.accepted }.count
         case .messages: nil
         }
     }
@@ -193,11 +216,11 @@ public struct NotificationsPagerView: View {
     /// and only then does it offer the capture flow.
     @ViewBuilder
     private var spindList: some View {
-        if spind.isEmpty {
+        if activeSpind.isEmpty {
             emptyState(icon: "paperplane", title: "No challenges waiting",
                        detail: "When a friend sends you one, it lands here.")
         } else {
-            ForEach(spind) { item in
+            ForEach(activeSpind) { item in
                 VStack(alignment: .leading, spacing: Spindare.Spacing.md) {
                     HStack(spacing: Spindare.Spacing.sm) {
                         Avatar(url: item.fromAvatar, size: 28)
