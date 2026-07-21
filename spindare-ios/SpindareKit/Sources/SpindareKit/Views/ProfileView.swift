@@ -64,7 +64,9 @@ public struct ProfileView: View {
     public var body: some View {
         GeometryReader { viewport in
             ZStack {
-                Color.spindareBackground(scheme).ignoresSafeArea()
+                Color.spindareBackground(scheme)
+                    .spindareBlurredArtworkBackground(variant: 2, opacity: 0.22, blurRadius: 75)
+                    .ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 0) {

@@ -48,15 +48,8 @@ public struct OnboardingView: View {
             startPoint: .top,
             endPoint: .bottom
         )
+        .spindareBlurredArtworkBackground(variant: 1, opacity: 0.26, blurRadius: 85)
         .ignoresSafeArea()
-        .overlay {
-            // Subtle warm accent glow at top
-            Circle()
-                .fill(Spindare.Palette.accent.opacity(0.06))
-                .frame(width: 400, height: 400)
-                .blur(radius: 80)
-                .offset(y: -200)
-        }
     }
 
     // MARK: - Welcome

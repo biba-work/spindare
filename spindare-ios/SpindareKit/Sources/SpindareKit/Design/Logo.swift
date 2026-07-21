@@ -79,3 +79,48 @@ public struct LogoImage: View {
         #endif
     }
 }
+
+// MARK: - Blurred Artwork Background (Spindare v0.68 Aesthetic)
+
+public struct ArtworkBackgroundView: View {
+    @Environment(\.colorScheme) private var scheme
+    let variant: Int
+    let opacity: Double
+    let blurRadius: CGFloat
+
+    public init(variant: Int = 1, opacity: Double = 0.22, blurRadius: CGFloat = 70) {
+        self.variant = variant
+        self.opacity = opacity
+        self.blurRadius = blurRadius
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            let name = variant == 1 ? "ArtworkBg1" : "ArtworkBg2"
+            if let url = Bundle.module.url(forResource: name, withExtension: "png") {
+                #if canImport(UIKit)
+                if let uiImage = UIImage(contentsOfFile: url.path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width * 1.4, height: proxy.size.height * 1.4)
+                        .blur(radius: blurRadius)
+                        .opacity(scheme == .dark ? opacity * 0.75 : opacity)
+                        .ignoresSafeArea()
+                }
+                #endif
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+public extension View {
+    /// Applies a heavily blurred artistic artwork background for key screens (Onboarding, Profile, SpinWheel, Settings).
+    func spindareBlurredArtworkBackground(variant: Int = 1, opacity: Double = 0.22, blurRadius: CGFloat = 70) -> some View {
+        self.background {
+            ArtworkBackgroundView(variant: variant, opacity: opacity, blurRadius: blurRadius)
+        }
+    }
+}
+
