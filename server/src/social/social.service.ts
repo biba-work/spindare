@@ -100,7 +100,8 @@ export class SocialService {
   async getFriends(currentUserId: string) {
     const rows = await this.prisma.follow.findMany({
       where: { followerId: currentUserId },
-      include: { } as any, // Follow has no direct relation to Profile in schema — resolved below.
+      // Follow has no relation to Profile in the schema — profiles are
+      // resolved in the separate query below.
     });
     const followingIds = rows.map((r) => r.followingId);
     const profiles = await this.prisma.profile.findMany({ where: { id: { in: followingIds } } });

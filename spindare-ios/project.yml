@@ -1,0 +1,61 @@
+name: Spindare
+options:
+  bundleIdPrefix: com.spindare
+  deploymentTarget:
+    # 17.0, matching SpindareKit's floor. The package uses iOS 17 SwiftUI
+    # throughout (@Observable, paging scroll, sensoryFeedback, PhaseAnimator,
+    # MapContentBuilder); the single iOS 18 API it touches is
+    # `#available`-guarded.
+    iOS: 17.0
+targets:
+  Spindare:
+    type: application
+    platform: iOS
+    sources: [SpindareApp]
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      # iOS terminates the app immediately — no dialog, no error, just an
+      # instant kick to the home screen — the moment code touches a
+      # privacy-sensitive API with no usage-description string backing it.
+      # Camera capture (composer + in-chat), the photo library picker, and
+      # voice-note recording were all added without these, so each was a live
+      # crash waiting to be tapped.
+      INFOPLIST_KEY_NSCameraUsageDescription: "Spindare uses your camera to capture proof of a challenge and to share photos in chat."
+      INFOPLIST_KEY_NSMicrophoneUsageDescription: "Spindare uses your microphone to record voice messages in chat."
+      INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Spindare accesses your photos so you can attach one as proof or send it in chat."
+      # "When in use" only, for Zone's map — recenters on your real position,
+      # nothing runs in the background so "Always" would ask for more than the
+      # feature does anything with.
+      INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Spindare uses your location to show sponsored places near you in Zone."
+      # Everything below was set by hand in Xcode's own UI (Signing &
+      # Capabilities, the Info tab) rather than through this file. Reproduced
+      # here so `xcodegen generate` is safe to run again without silently
+      # discarding it.
+      PRODUCT_BUNDLE_IDENTIFIER: al.SPIND.Spindare
+      DEVELOPMENT_TEAM: CSDBVCPTM2
+      # Explicit `Automatic` — this was never actually set anywhere, so Xcode
+      # was relying on whatever it happened to have cached, with an
+      # `iOS Developer` identity string left over from old-style *manual*
+      # signing pinned alongside it. Mixing an explicit legacy identity with
+      # automatic signing is exactly the kind of thing that lets a build
+      # *succeed* while producing a signature that doesn't cleanly validate on
+      # a real device — the Simulator never even checks any of this, which is
+      # why it never surfaced until now. `Apple Development` is the identity
+      # automatic signing actually expects.
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "Apple Development"
+      INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.social-networking"
+      # Portrait-only, deliberately — a feed/short-video app with no
+      # horizontal video mode yet has no reason to support landscape, and
+      # none at all to support upside-down.
+      INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+      INFOPLIST_KEY_UIStatusBarHidden: NO
+      INFOPLIST_KEY_UIStatusBarStyle: ""
+      INFOPLIST_KEY_UILaunchStoryboardName: ""
+    dependencies:
+      - package: SpindareKit
+packages:
+  SpindareKit:
+    path: SpindareKit
