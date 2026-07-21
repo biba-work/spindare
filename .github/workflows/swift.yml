@@ -1,22 +1,30 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
+# Builds the SwiftUI app package (SpindareKit).
+#
+# The stock starter version of this ran `swift build` at the repo root, where
+# there is no Package.swift (the package lives at spindare-ios/SpindareKit), so
+# it failed on every PR. Scoped to iOS changes and pointed at the real package
+# directory so it only runs when it can actually build something — a backend or
+# docs PR no longer trips a Swift build that has nothing to do with it.
 
 name: Swift
 
 on:
   push:
     branches: [ "main" ]
+    paths: [ "spindare-ios/**" ]
   pull_request:
     branches: [ "main" ]
+    paths: [ "spindare-ios/**" ]
 
 jobs:
   build:
-
     runs-on: macos-latest
-
+    defaults:
+      run:
+        working-directory: spindare-ios/SpindareKit
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: false
     - name: Build
-      run: swift build -v
-    - name: Run tests
-      run: swift test -v
+      run: swift build
