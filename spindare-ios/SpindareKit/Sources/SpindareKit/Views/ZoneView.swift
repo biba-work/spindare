@@ -13,6 +13,7 @@ import MapKit
 public struct ZoneView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(AppRouter.self) private var router
+    @AppStorage(AppSettingsKey.zoneHideIntenseVenues) private var hideIntenseVenues = false
 
     @State private var venues: [Venue] = []
     @State private var venuePosts: [VenuePost] = []
@@ -48,8 +49,12 @@ public struct ZoneView: View {
     /// would yank it back out from under your finger.
     @State private var hasCenteredOnUser = false
 
+    private var displayedVenues: [Venue] {
+        hideIntenseVenues ? venues.filter { !$0.category.isIntense } : venues
+    }
+
     private var clusters: [VenueCluster] {
-        VenueClustering.cluster(venues, latitudeSpan: currentSpan.latitudeDelta)
+        VenueClustering.cluster(displayedVenues, latitudeSpan: currentSpan.latitudeDelta)
     }
 
     /// Where each *venue* — not each cluster — should currently render, and
@@ -90,7 +95,7 @@ public struct ZoneView: View {
             Map(position: $camera) {
                 UserAnnotation()
 
-                ForEach(venues) { venue in
+                ForEach(displayedVenues) { venue in
                     if let display = venueDisplay[venue.id] {
                         Annotation(venue.name, coordinate: display.coordinate) {
                             VenuePin(

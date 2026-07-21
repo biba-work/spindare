@@ -40,6 +40,20 @@ public final class LocationProvider: NSObject {
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
     }
 
+    /// Human-readable summary of the current location authorization for the
+    /// Settings → Zone card. Static so Settings can display it without
+    /// holding a LocationProvider instance.
+    public static var authorizationSummary: String {
+        switch CLLocationManager().authorizationStatus {
+        case .notDetermined: return "Not determined"
+        case .restricted: return "Restricted"
+        case .denied: return "Denied — tap to open Settings"
+        case .authorizedWhenInUse: return "While using the app"
+        case .authorizedAlways: return "Always"
+        @unknown default: return "Unknown"
+        }
+    }
+
     /// Requests permission if undetermined, or starts updating if already
     /// granted. Safe to call every time Zone appears — a granted/denied status
     /// makes this a no-op/single-fetch respectively rather than a repeat
@@ -89,6 +103,7 @@ extension LocationProvider: CLLocationManagerDelegate {
 @Observable
 public final class LocationProvider: NSObject {
     public private(set) var coordinate: Coordinate?
+    public static var authorizationSummary: String { "Not available" }
     public func start() {}
 }
 #endif

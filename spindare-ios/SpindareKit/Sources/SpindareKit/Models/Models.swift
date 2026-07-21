@@ -523,6 +523,14 @@ public enum VenueCategory: String, Codable, Sendable, CaseIterable, Hashable {
         case .shop: "bag.fill"
         }
     }
+
+    /// Categories that an age-safety filter hides from the Zone map.
+    public var isIntense: Bool {
+        switch self {
+        case .gym, .park: true
+        case .cafe, .studio, .shop: false
+        }
+    }
 }
 
 /// A paying partner. Attached to a challenge, it makes that challenge

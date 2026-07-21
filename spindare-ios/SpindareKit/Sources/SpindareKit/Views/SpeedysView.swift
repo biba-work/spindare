@@ -286,7 +286,10 @@ struct SpeedyCard: View {
     @State private var favouriteSpin: Double = 0
 
     /// How long you have to change your reaction after picking one.
-    private static let reactionSwitchWindow: Duration = .seconds(2)
+    /// Reads the user's Settings preference (default 2s).
+    @AppStorage(AppSettingsKey.speedyReactionWindow) private var reactionWindowSetting = 2.0
+    @AppStorage(AppSettingsKey.hideReactionCounts) private var hideReactionCounts = false
+    private var reactionSwitchWindow: Duration { .seconds(reactionWindowSetting) }
 
     var body: some View {
         // Explicit geometry rather than trusting `.frame(maxWidth: .infinity)`
@@ -420,9 +423,11 @@ struct SpeedyCard: View {
                     Text(type.rawValue)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.9))
-                    Text("\(count(for: type))")
-                        .font(.system(size: 12, weight: .bold).monospacedDigit())
-                        .foregroundStyle(.white)
+                    if !hideReactionCounts {
+                        Text("\(count(for: type))")
+                            .font(.system(size: 12, weight: .bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                    }
                 }
             }
         }
@@ -540,7 +545,7 @@ struct SpeedyCard: View {
         guard previous == nil else { return }
         reactionLockTask?.cancel()
         reactionLockTask = Task {
-            try? await Task.sleep(for: Self.reactionSwitchWindow)
+            try? await Task.sleep(for: self.reactionSwitchWindow)
             guard !Task.isCancelled else { return }
             withAnimation(Spindare.Motion.settle) { reactionsLocked = true }
         }

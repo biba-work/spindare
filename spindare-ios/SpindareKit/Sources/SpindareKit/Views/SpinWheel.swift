@@ -104,6 +104,7 @@ public enum WheelPhysics {
 
 public struct SpinWheel: View {
     @Environment(\.colorScheme) private var scheme
+    @AppStorage(AppSettingsKey.showDialLines) private var showDialLines = true
 
     /// Outcomes. The wheel shows none of them — it only resolves one.
     let options: [String]
@@ -138,7 +139,7 @@ public struct SpinWheel: View {
             let radius = size / 2
 
             ZStack {
-                dial(radius: radius, currentRotation: rotation + idleRotation)
+                dial(radius: radius, currentRotation: rotation + idleRotation, showLines: showDialLines)
                     .rotationEffect(.degrees(rotation + idleRotation))
                     .gesture(spinGesture(center: CGPoint(x: proxy.size.width / 2,
                                                          y: proxy.size.height / 2)))
@@ -160,7 +161,7 @@ public struct SpinWheel: View {
 
     // MARK: Dial
 
-    private func dial(radius: CGFloat, currentRotation: Double) -> some View {
+    private func dial(radius: CGFloat, currentRotation: Double, showLines: Bool = true) -> some View {
         Canvas { context, size in
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
             let r = min(size.width, size.height) / 2
@@ -172,6 +173,12 @@ public struct SpinWheel: View {
             )
 
             for i in 0..<WheelGeometry.tickCount {
+                let isAccent = i % WheelGeometry.accentEvery == 0
+                // When dial lines are hidden, only the four accent (cardinal)
+                // ticks draw — the wheel stays navigable without revealing
+                // category boundaries.
+                guard showLines || isAccent else { continue }
+
                 let angle = Angle.degrees(Double(i) * WheelGeometry.tickAngle - 90).radians
                 let outer = r - 2
                 let inner = r - 20
@@ -179,7 +186,6 @@ public struct SpinWheel: View {
                 tick.move(to: CGPoint(x: c.x + cos(angle) * outer, y: c.y + sin(angle) * outer))
                 tick.addLine(to: CGPoint(x: c.x + cos(angle) * inner, y: c.y + sin(angle) * inner))
 
-                let isAccent = i % WheelGeometry.accentEvery == 0
                 context.stroke(
                     tick,
                     with: .color(isAccent

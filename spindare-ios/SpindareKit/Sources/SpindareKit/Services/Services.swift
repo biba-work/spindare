@@ -28,6 +28,10 @@ public protocol ProfileServing: Sendable {
     func updatePhoto(url: String) async throws
     /// Permanently deletes the signed-in user's account (server rows + Clerk user).
     func deleteAccount() async throws
+    /// Profile visibility for connections/reactions — "open" or "private".
+    func updatePrivacy(_ privacy: String) async throws
+    /// Who may send you a SPIND challenge — "everyone" or "friends".
+    func updateChallengePrivacy(_ privacy: String) async throws
 }
 
 public protocol NotificationServing: Sendable {
@@ -50,6 +54,12 @@ public protocol SocialServing: Sendable {
     func declineSpind(id: String) async throws
     /// Send a challenge to a friend — it lands in their SPIND inbox.
     func sendSpind(toUserId: String, challenge: String) async throws
+
+    /// People you've blocked (ghosted) — they can't reach you and drop off your
+    /// surfaces. Backed by the existing ghost system.
+    func blockedUsers() async throws -> [Friend]
+    func block(userId: String) async throws
+    func unblock(userId: String) async throws
 }
 
 public protocol SpeedyServing: Sendable {
@@ -192,6 +202,16 @@ public struct LiveProfileService: ProfileServing {
     public func deleteAccount() async throws {
         try await api.delete("/profiles")
     }
+
+    public func updatePrivacy(_ privacy: String) async throws {
+        struct Body: Encodable { let privacy: String }
+        try await api.patch("/profiles/privacy", body: Body(privacy: privacy))
+    }
+
+    public func updateChallengePrivacy(_ privacy: String) async throws {
+        struct Body: Encodable { let challengePrivacy: String }
+        try await api.patch("/profiles/challenge-privacy", body: Body(challengePrivacy: privacy))
+    }
 }
 
 public struct LiveNotificationService: NotificationServing {
@@ -257,6 +277,18 @@ public struct LiveSocialService: SocialServing {
     public func sendSpind(toUserId: String, challenge: String) async throws {
         struct Body: Encodable { let toUserId: String; let challenge: String }
         try await api.post("/challenges/spind/send", body: Body(toUserId: toUserId, challenge: challenge))
+    }
+
+    public func blockedUsers() async throws -> [Friend] {
+        try await api.get("/social/ghosted")
+    }
+
+    public func block(userId: String) async throws {
+        try await api.post("/social/ghost/\(userId)")
+    }
+
+    public func unblock(userId: String) async throws {
+        try await api.delete("/social/ghost/\(userId)")
     }
 }
 
@@ -365,6 +397,9 @@ public actor MockBackend {
     /// Completed sponsored challenges shown on Zone pins. Lazy-seeded like
     /// speedys/conversations, not persisted (fixed demo reference data).
     private var venuePosts: [VenuePost] = []
+    /// Ids the user has blocked. Seeded with one so the Settings block list has
+    /// something to show in mock mode; mutated by block/unblock.
+    private var blocked: Set<String> = [MockSeed.users[6].id]
 
     /// Seed posts authored by this sentinel are relabelled to the signed-in
     /// Clerk id once known, so "your" posts appear correctly in both the feed
@@ -651,6 +686,14 @@ public actor MockBackend {
         return venuePosts
     }
 
+    func blockedFriends() -> [Friend] {
+        MockSeed.users
+            .filter { blocked.contains($0.id) }
+            .map { Friend(id: $0.id, name: $0.username, username: $0.username, photoURL: $0.avatar) }
+    }
+    func block(_ id: String) { blocked.insert(id) }
+    func unblock(_ id: String) { blocked.remove(id) }
+
     func currentProfile() -> Profile? { profile }
     func setProfile(_ value: Profile) {
         profile = value
@@ -766,6 +809,10 @@ public struct MockProfileService: ProfileServing {
     // No-op in mock: sign-out already resets the session, and there's no real
     // account to remove on-device.
     public func deleteAccount() async throws {}
+    // Preferences persist via @AppStorage in Settings; the profile write is a
+    // best-effort no-op on-device.
+    public func updatePrivacy(_ privacy: String) async throws {}
+    public func updateChallengePrivacy(_ privacy: String) async throws {}
 }
 
 public struct MockNotificationService: NotificationServing {
@@ -794,6 +841,9 @@ public struct MockSocialService: SocialServing {
     // covers accept/decline testing. The send simply succeeds so the picker's
     // "Sent" confirmation shows.
     public func sendSpind(toUserId: String, challenge: String) async throws {}
+    public func blockedUsers() async throws -> [Friend] { await backend.blockedFriends() }
+    public func block(userId: String) async throws { await backend.block(userId) }
+    public func unblock(userId: String) async throws { await backend.unblock(userId) }
 }
 
 public struct MockSpeedyService: SpeedyServing {

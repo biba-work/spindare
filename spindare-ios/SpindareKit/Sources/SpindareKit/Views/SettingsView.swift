@@ -45,6 +45,22 @@ public struct SettingsView: View {
     @AppStorage("pushNotifications") private var pushEnabled = true
     @AppStorage("useTestData") private var useTestData = false
 
+    // Account & Security
+    @AppStorage(AppSettingsKey.privacyPrivate) private var privacyPrivate = false
+    @AppStorage(AppSettingsKey.dataTrackingOptOut) private var dataTrackingOptOut = false
+    // Dial & Challenges
+    @AppStorage(AppSettingsKey.showDialLines) private var showDialLines = true
+    @AppStorage(AppSettingsKey.challengeSourceFriendsOnly) private var challengeFriendsOnly = false
+    // Speedys & Well-being
+    @AppStorage(AppSettingsKey.speedyReactionWindow) private var reactionWindow = 2.0
+    @AppStorage(AppSettingsKey.lookAwayNudges) private var lookAwayNudges = false
+    @AppStorage(AppSettingsKey.hideReactionCounts) private var hideReactionCounts = false
+    @AppStorage(AppSettingsKey.dailyRecordReminder) private var dailyRecordReminder = false
+    // Zone
+    @AppStorage(AppSettingsKey.zoneHideIntenseVenues) private var zoneHideIntense = false
+    // Communication
+    @AppStorage(AppSettingsKey.dmSourceFriendsOnly) private var dmFriendsOnly = false
+
     @State private var username = ""
     @State private var isEditingUsername = false
     @State private var confirmingLogOut = false
@@ -53,11 +69,24 @@ public struct SettingsView: View {
     @State private var saveError: String?
     @State private var pfpPickerItem: PhotosPickerItem?
     @State private var isUploadingPhoto = false
+    // Sub-screen presentation
+    @State private var showTwoFactor = false
+    @State private var showSessions = false
+    @State private var showBlocked = false
+    @State private var showMuted = false
 
     private let profileService: any ProfileServing
+    private let socialService: any SocialServing
+    private let chatService: any ChatServing
 
-    public init(profileService: any ProfileServing = AppEnvironment.profileService) {
+    public init(
+        profileService: any ProfileServing = AppEnvironment.profileService,
+        socialService: any SocialServing = AppEnvironment.socialService,
+        chatService: any ChatServing = MockChatService()
+    ) {
         self.profileService = profileService
+        self.socialService = socialService
+        self.chatService = chatService
     }
 
     public var body: some View {
@@ -67,6 +96,11 @@ public struct SettingsView: View {
             ScrollView {
                 VStack(spacing: Spindare.Spacing.lg) {
                     identityCard
+                    accountSecurityCard
+                    dialChallengesCard
+                    wellbeingCard
+                    zoneCard
+                    communicationCard
                     appearanceCard
                     notificationsCard
                     supportCard
@@ -93,6 +127,16 @@ public struct SettingsView: View {
             guard let item else { return }
             Task { await uploadPhoto(item) }
         }
+        .onChange(of: privacyPrivate) { _, isPrivate in
+            Task { try? await profileService.updatePrivacy(isPrivate ? "private" : "open") }
+        }
+        .onChange(of: challengeFriendsOnly) { _, friendsOnly in
+            Task { try? await profileService.updateChallengePrivacy(friendsOnly ? "friends" : "everyone") }
+        }
+        .sheet(isPresented: $showTwoFactor) { TwoFactorView() }
+        .sheet(isPresented: $showSessions) { ActiveSessionsView() }
+        .sheet(isPresented: $showBlocked) { BlockedUsersView(socialService: socialService) }
+        .sheet(isPresented: $showMuted) { MutedThreadsView(chatService: chatService) }
         .confirmationDialog(
             "Log out of Spindare?",
             isPresented: $confirmingLogOut,
@@ -347,6 +391,172 @@ public struct SettingsView: View {
                 .tint(Spindare.Palette.accent)
             }
         }
+    }
+
+    // MARK: - Account & Security
+
+    private var accountSecurityCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
+                sectionTitle("ACCOUNT & SECURITY")
+
+                toggleRow("Private profile",
+                          detail: "Approve who can connect and see your reactions.",
+                          isOn: $privacyPrivate)
+                divider
+                navRow("Two-factor authentication",
+                       detail: "Add an authenticator app.") { showTwoFactor = true }
+                divider
+                navRow("Active sessions",
+                       detail: "See and sign out other devices.") { showSessions = true }
+                divider
+                toggleRow("Opt out of usage tracking",
+                          detail: "Stop internal analytics from recording your activity.",
+                          isOn: $dataTrackingOptOut)
+            }
+        }
+    }
+
+    // MARK: - Dial & Challenges
+
+    private var dialChallengesCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
+                sectionTitle("DIAL & CHALLENGES")
+
+                toggleRow("Show dial lines",
+                          detail: "Reveal the category lines before you spin.",
+                          isOn: $showDialLines)
+                divider
+                toggleRow("Challenges from friends only",
+                          detail: "Only people you're connected to can send you a challenge.",
+                          isOn: $challengeFriendsOnly)
+            }
+        }
+    }
+
+    // MARK: - SPeedys & Well-being
+
+    private var wellbeingCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.md) {
+                sectionTitle("SPEEDYS & WELL-BEING")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Reaction window")
+                            .font(Spindare.Typography.body)
+                            .foregroundStyle(Color.spindarePrimary(scheme))
+                        Spacer()
+                        Text("\(Int(reactionWindow))s")
+                            .font(Spindare.Typography.body.monospacedDigit())
+                            .foregroundStyle(Color.spindareSecondary(scheme))
+                    }
+                    Slider(value: $reactionWindow, in: 1...5, step: 1)
+                        .tint(Spindare.Palette.accent)
+                    Text("How long you can change a reaction before it locks.")
+                        .font(Spindare.Typography.timestamp)
+                        .foregroundStyle(Color.spindareSecondary(scheme))
+                }
+                divider
+                toggleRow("Look-away nudges",
+                          detail: "A gentle reminder to look up while watching.",
+                          isOn: $lookAwayNudges)
+                divider
+                toggleRow("Hide reaction counts",
+                          detail: "Don't show tallies on your own posts.",
+                          isOn: $hideReactionCounts)
+                divider
+                toggleRow("Daily record reminder",
+                          detail: "A nudge to post your own Speedy.",
+                          isOn: $dailyRecordReminder)
+            }
+        }
+    }
+
+    // MARK: - Zone Map & Sponsors
+
+    private var zoneCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
+                sectionTitle("ZONE MAP & SPONSORS")
+
+                navRow("Location access",
+                       detail: LocationProvider.authorizationSummary) { openSystemSettings() }
+                divider
+                toggleRow("Hide intense venues",
+                          detail: "Keep gyms and parks off the map (safer for minors).",
+                          isOn: $zoneHideIntense)
+            }
+        }
+    }
+
+    // MARK: - Communication
+
+    private var communicationCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
+                sectionTitle("COMMUNICATION")
+
+                toggleRow("Messages & calls from friends only",
+                          detail: "Only connections can DM or call you.",
+                          isOn: $dmFriendsOnly)
+                divider
+                navRow("Blocked users", detail: nil) { showBlocked = true }
+                divider
+                navRow("Muted threads", detail: nil) { showMuted = true }
+            }
+        }
+    }
+
+    // MARK: - Row helpers
+
+    private func toggleRow(_ title: String, detail: String?, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Spindare.Typography.body)
+                    .foregroundStyle(Color.spindarePrimary(scheme))
+                if let detail {
+                    Text(detail)
+                        .font(Spindare.Typography.timestamp)
+                        .foregroundStyle(Color.spindareSecondary(scheme))
+                }
+            }
+        }
+        .tint(Spindare.Palette.accent)
+    }
+
+    private func navRow(_ title: String, detail: String?, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Spindare.Typography.body)
+                        .foregroundStyle(Color.spindarePrimary(scheme))
+                    if let detail {
+                        Text(detail)
+                            .font(Spindare.Typography.timestamp)
+                            .foregroundStyle(Color.spindareSecondary(scheme))
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.spindareSecondary(scheme))
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openSystemSettings() {
+        #if canImport(UIKit)
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+        #endif
     }
 
     // MARK: - Support
