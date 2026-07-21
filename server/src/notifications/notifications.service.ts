@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { ApnsService } from './apns.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private realtime: RealtimeGateway,
+    private apns: ApnsService,
   ) {}
 
   // Mirrors NotificationService.sendNotification's signature from the mobile
@@ -37,29 +39,34 @@ export class NotificationsService {
 
     this.realtime.notificationCreated(toUserId, notification);
 
-    // Best-effort push via Expo's push service — same endpoint the mobile
-    // client's expo-notifications setup already expects, just triggered
-    // server-side now instead of from NotificationService.ts directly.
-    this.sendExpoPush(toUserId, fromUsername, content, type, targetId).catch(() => undefined);
+    // Best-effort push — the Swift client registers an APNs device token in
+    // the `pushToken` column. The old Expo path is removed; this now speaks
+    // APNs natively via HTTP/2 + JWT.
+    this.sendApnsPush(toUserId, fromUsername, content, type, targetId).catch(
+      () => undefined,
+    );
 
     return notification;
   }
 
-  private async sendExpoPush(toUserId: string, fromUsername: string, content: string, type: string, targetId?: string) {
-    const profile = await this.prisma.profile.findUnique({ where: { id: toUserId } });
+  private async sendApnsPush(
+    toUserId: string,
+    fromUsername: string,
+    content: string,
+    type: string,
+    targetId?: string,
+  ) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: toUserId },
+    });
     if (!profile?.pushToken) return;
 
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: profile.pushToken,
-        sound: 'default',
-        title: `@${fromUsername}`,
-        body: content,
-        data: { type, targetId: targetId ?? null },
-      }),
-    });
+    await this.apns.send(
+      profile.pushToken,
+      `@${fromUsername}`,
+      content,
+      { type, targetId: targetId ?? null },
+    );
   }
 
   async listForUser(userId: string) {
@@ -71,14 +78,22 @@ export class NotificationsService {
   }
 
   async markRead(id: string) {
-    return this.prisma.notification.update({ where: { id }, data: { read: true } });
+    return this.prisma.notification.update({
+      where: { id },
+      data: { read: true },
+    });
   }
 
   async markAllRead(userId: string) {
-    return this.prisma.notification.updateMany({ where: { userId }, data: { read: true } });
+    return this.prisma.notification.updateMany({
+      where: { userId },
+      data: { read: true },
+    });
   }
 
   async unreadCount(userId: string) {
-    return this.prisma.notification.count({ where: { userId, read: false } });
+    return this.prisma.notification.count({
+      where: { userId, read: false },
+    });
   }
 }

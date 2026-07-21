@@ -4,11 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createClerkClient } from '@clerk/backend';
-
-// One Clerk client for the whole process — verifyToken() internally caches
-// the JWKS fetch, so this is cheap to reuse per-request.
-const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+import { verifyToken } from '@clerk/backend';
 
 export interface AuthedRequest extends Request {
   userId: string;
@@ -30,8 +26,10 @@ export class ClerkAuthGuard implements CanActivate {
       // verifyToken checks signature against Clerk's JWKS, expiry, and issuer.
       // No Clerk JWT "template" needed — this is Clerk's own session token,
       // the same one you already get from useAuth().getToken() with no
-      // template argument.
-      const { sub } = await clerk.verifyToken(token);
+      // template argument. The secretKey lets it fetch (and cache) the JWKS.
+      const { sub } = await verifyToken(token, {
+        secretKey: process.env.CLERK_SECRET_KEY,
+      });
       req.userId = sub;
       return true;
     } catch (err) {
