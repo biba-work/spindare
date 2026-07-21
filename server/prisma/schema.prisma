@@ -31,6 +31,10 @@ model Profile {
   spinsLeft          Int      @default(2) @map("spinsLeft")
   lastSpinTimestamp  BigInt   @default(0) @map("lastSpinTimestamp")
   connectionPrivacy  String   @default("open") @map("connectionPrivacy")
+  // Who may send this user a SPIND challenge: "everyone" (default) or "friends".
+  // Enforced server-side in ChallengesService.sendSpindChallenge, so the setting
+  // holds even against a client that ignores it.
+  challengePrivacy   String   @default("everyone") @map("challengePrivacy")
   // Added later than the original migration (used by PostService.updateStreak
   // and AuthService.createProfile but never captured in a tracked migration
   // file) — included here so the daily-streak feature keeps working.

@@ -87,6 +87,14 @@ export class ProfilesService {
     return this.serialize(profile);
   }
 
+  async updateChallengePrivacy(id: string, challengePrivacy: 'everyone' | 'friends') {
+    const profile = await this.prisma.profile.update({
+      where: { id },
+      data: { challengePrivacy },
+    });
+    return this.serialize(profile);
+  }
+
   async updateConnectionPrivacy(id: string, privacy: 'open' | 'private') {
     const profile = await this.prisma.profile.update({
       where: { id },

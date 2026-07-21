@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -89,6 +89,21 @@ export class ChallengesService {
   }
 
   async sendSpindChallenge(fromUserId: string, toUserId: string, challenge: string) {
+    // Honour the recipient's "challenges from friends only" setting. Checked
+    // here rather than in the client so the preference actually holds — a
+    // client-side-only gate is a suggestion, not a setting. "Friend" means a
+    // mutual follow, matching how the friends list is built.
+    const recipient = await this.prisma.profile.findUnique({ where: { id: toUserId } });
+    if (recipient?.challengePrivacy === 'friends') {
+      const [theyFollowMe, iFollowThem] = await Promise.all([
+        this.prisma.follow.findFirst({ where: { followerId: toUserId, followingId: fromUserId } }),
+        this.prisma.follow.findFirst({ where: { followerId: fromUserId, followingId: toUserId } }),
+      ]);
+      if (!theyFollowMe || !iFollowThem) {
+        throw new ForbiddenException('This user only accepts challenges from friends.');
+      }
+    }
+
     const expiresAt = new Date(Date.now() + ChallengesService.SENT_TTL_MS);
     const row = await this.prisma.sentChallenge.create({
       data: { fromUserId, toUserId, challenge, expiresAt },

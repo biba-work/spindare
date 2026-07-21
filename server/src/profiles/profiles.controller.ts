@@ -73,6 +73,14 @@ export class ProfilesController {
     return this.profiles.registerPushToken(userId, body.pushToken);
   }
 
+  @Patch('challenge-privacy')
+  updateChallengePrivacy(
+    @CurrentUser() userId: string,
+    @Body() body: { challengePrivacy: 'everyone' | 'friends' },
+  ) {
+    return this.profiles.updateChallengePrivacy(userId, body.challengePrivacy);
+  }
+
   @Patch('privacy')
   updatePrivacy(@CurrentUser() userId: string, @Body() body: { privacy: 'open' | 'private' }) {
     return this.profiles.updateConnectionPrivacy(userId, body.privacy);
