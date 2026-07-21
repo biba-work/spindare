@@ -41,6 +41,7 @@ model Profile {
 
   sentConnectionRequests ConnectionRequest[]
   sentNotifications      Notification[]
+  sentChallenges         SentChallenge[]     @relation("SentChallengeFrom")
 
   @@map("profiles")
 }
@@ -167,5 +168,27 @@ model SpindChallenge {
   @@map("spind_challenges")
 }
 
-// Back-relations Prisma needs declared on Profile for the FKs above.
-// (Added here instead of cluttering the main Profile block.)
+// Friend-to-friend "dares": one user sends a challenge to another, who sees it
+// in their SPIND inbox and accepts or declines it. Distinct from SpindChallenge
+// above (which records challenges *you* kept from your own spins) — this one has
+// a sender, a recipient, an accept state and a 48h expiry, matching the mobile
+// client's SpindChallenge inbox model.
+//
+// Only fromUser gets an FK relation (needed to render the sender's name/avatar
+// in the inbox and to cascade on the sender's account deletion). toUserId is a
+// plain Clerk id with no FK, consistent with the app's FK-light design; the
+// recipient's account deletion cleans these rows in the delete service instead.
+model SentChallenge {
+  id         String    @id @default(uuid())
+  fromUserId String    @map("from_user_id")
+  toUserId   String    @map("to_user_id")
+  challenge  String
+  accepted   Boolean   @default(false)
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  fromUser Profile @relation("SentChallengeFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId])
+  @@map("sent_challenges")
+}

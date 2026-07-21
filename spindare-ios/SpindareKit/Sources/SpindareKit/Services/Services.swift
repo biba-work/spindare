@@ -26,6 +26,8 @@ public protocol ProfileServing: Sendable {
     func createProfile(username: String, email: String?, hobbies: [String], studyFields: [String]) async throws -> Profile
     func updateUsername(_ username: String) async throws
     func updatePhoto(url: String) async throws
+    /// Permanently deletes the signed-in user's account (server rows + Clerk user).
+    func deleteAccount() async throws
 }
 
 public protocol NotificationServing: Sendable {
@@ -46,6 +48,8 @@ public protocol SocialServing: Sendable {
     func spindInbox() async throws -> [SpindChallenge]
     func acceptSpind(id: String) async throws
     func declineSpind(id: String) async throws
+    /// Send a challenge to a friend — it lands in their SPIND inbox.
+    func sendSpind(toUserId: String, challenge: String) async throws
 }
 
 public protocol SpeedyServing: Sendable {
@@ -181,6 +185,10 @@ public struct LiveProfileService: ProfileServing {
         struct Body: Encodable { let photoURL: String }
         try await api.patch("/profiles/picture", body: Body(photoURL: url))
     }
+
+    public func deleteAccount() async throws {
+        try await api.delete("/profiles")
+    }
 }
 
 public struct LiveNotificationService: NotificationServing {
@@ -241,6 +249,11 @@ public struct LiveSocialService: SocialServing {
 
     public func declineSpind(id: String) async throws {
         try await api.post("/challenges/spind/\(id)/decline")
+    }
+
+    public func sendSpind(toUserId: String, challenge: String) async throws {
+        struct Body: Encodable { let toUserId: String; let challenge: String }
+        try await api.post("/challenges/spind/send", body: Body(toUserId: toUserId, challenge: challenge))
     }
 }
 
@@ -738,6 +751,10 @@ public struct MockProfileService: ProfileServing {
         profile.photoURL = url
         await backend.setProfile(profile)
     }
+
+    // No-op in mock: sign-out already resets the session, and there's no real
+    // account to remove on-device.
+    public func deleteAccount() async throws {}
 }
 
 public struct MockNotificationService: NotificationServing {
@@ -762,6 +779,10 @@ public struct MockSocialService: SocialServing {
     public func spindInbox() async throws -> [SpindChallenge] { await backend.allSpind() }
     public func acceptSpind(id: String) async throws { await backend.acceptSpind(id) }
     public func declineSpind(id: String) async throws { await backend.removeSpind(id) }
+    // No-op in mock: there's only one local user, and the seeded inbox already
+    // covers accept/decline testing. The send simply succeeds so the picker's
+    // "Sent" confirmation shows.
+    public func sendSpind(toUserId: String, challenge: String) async throws {}
 }
 
 public struct MockSpeedyService: SpeedyServing {

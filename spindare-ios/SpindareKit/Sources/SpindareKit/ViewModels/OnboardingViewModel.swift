@@ -42,8 +42,17 @@ public final class OnboardingViewModel {
     public var error: String?
 
     // Completion callback — the app's composition root sets this to route
-    // into the main tab bar after successful auth.
-    public var onAuthenticated: ((String, String, String?) -> Void)?
+    // into the main tab bar after successful auth. Carries (userId, username,
+    // email, avatarURL) so the signed-in identity — including the profile
+    // photo — is set app-wide from the moment auth completes, not just on the
+    // profile screen.
+    public var onAuthenticated: ((String, String, String?, String?) -> Void)?
+
+    /// True while an OAuth sign-in that turned out to be a *new* user is
+    /// finishing through the traits step. Distinguishes "Finish Setup" creating
+    /// a profile for an already-authenticated Clerk session (OAuth) from the
+    /// email path, which still has a Clerk sign-up to complete first.
+    public var isOAuthCompletion = false
 
     public static let hobbies = [
         "Reading", "Gaming", "Fitness", "Cooking",
@@ -137,6 +146,14 @@ public final class OnboardingViewModel {
     }
 
     public func handleFinalSignup() {
+        // The traits step's "Finish Setup" serves both paths. For a new OAuth
+        // user the Clerk session already exists — there is no sign-up to run,
+        // only a profile to create with the interests just picked.
+        if isOAuthCompletion {
+            completeOAuthProfile()
+            return
+        }
+
         guard !isSubmitting, !selectedHobbies.isEmpty else {
             if selectedHobbies.isEmpty {
                 error = "Select at least one hobby."
@@ -166,6 +183,27 @@ public final class OnboardingViewModel {
             } catch {
                 self.error = message(for: error)
             }
+        }
+    }
+
+    /// Finishes a *new* OAuth sign-up: the session is already active, so this
+    /// just needs a username and at least one interest, then creates the profile.
+    private func completeOAuthProfile() {
+        let trimmedUsername = username.trimmingCharacters(in: .whitespaces)
+        guard !trimmedUsername.isEmpty else {
+            error = "Pick a username."
+            return
+        }
+        guard !selectedHobbies.isEmpty else {
+            error = "Select at least one hobby."
+            return
+        }
+
+        isSubmitting = true
+        error = nil
+        Task { @MainActor in
+            defer { isSubmitting = false }
+            await completeAuthentication(fallbackUsername: trimmedUsername, fallbackEmail: email)
         }
     }
 
@@ -206,7 +244,7 @@ public final class OnboardingViewModel {
             defer { isSubmitting = false }
             do {
                 _ = try await Clerk.shared.auth.signInWithOAuth(provider: .google)
-                await completeAuthentication(fallbackUsername: "user", fallbackEmail: nil)
+                await routeAfterOAuth()
             } catch {
                 self.error = message(for: error)
             }
@@ -226,14 +264,56 @@ public final class OnboardingViewModel {
                 // on the App ID in the Apple Developer portal first; this way
                 // needs neither, just Apple toggled on in Clerk's dashboard.
                 _ = try await Clerk.shared.auth.signInWithOAuth(provider: .apple)
-                await completeAuthentication(fallbackUsername: "user", fallbackEmail: nil)
+                await routeAfterOAuth()
             } catch {
                 self.error = message(for: error)
             }
         }
     }
 
+    /// After a Clerk OAuth session is active, decide whether this is a returning
+    /// user (a backend profile already exists → straight in) or a new one (no
+    /// profile yet → collect a username and interests first, so an OAuth sign-up
+    /// gets the same onboarding as an email one rather than a bare "user" with
+    /// no interests and an undetermined engagement badge).
+    ///
+    /// `GET /profiles` returns `null` for a user with no row yet, which is the
+    /// clean new-vs-returning signal — and because `createProfile` is a
+    /// server-side upsert, a returning user's row is never clobbered.
+    private func routeAfterOAuth() async {
+        if let profile = (try? await profileService.currentProfile()) ?? nil {
+            finish(
+                userId: profile.id,
+                username: profile.username,
+                email: profile.email,
+                avatarURL: profile.photoURL
+            )
+            return
+        }
+
+        // New OAuth user: prefill whatever Clerk already knows, then send them
+        // through the traits step to pick a username (if missing) and interests.
+        isOAuthCompletion = true
+        username = Clerk.shared.user?.username ?? ""
+        email = Clerk.shared.user?.primaryEmailAddress?.emailAddress ?? ""
+        navigate(to: .traits)
+    }
+
     // MARK: - Traits
+
+    /// Backs out of the traits step. For an OAuth completion this also signs the
+    /// half-finished Clerk session out, so returning to welcome doesn't leave an
+    /// authenticated-but-profile-less session that would make a later email
+    /// sign-up fail with "already signed in."
+    public func cancelTraits() {
+        if isOAuthCompletion {
+            isOAuthCompletion = false
+            Task { try? await Clerk.shared.auth.signOut() }
+            navigate(to: .welcome)
+        } else {
+            navigate(to: .signup)
+        }
+    }
 
     public func toggleHobby(_ hobby: String) {
         if selectedHobbies.contains(hobby) {
@@ -253,30 +333,55 @@ public final class OnboardingViewModel {
 
     // MARK: - Auth helpers
 
+    /// The active Clerk user's id, however the session was established.
+    private var currentUserId: String {
+        Clerk.shared.user?.id ?? Clerk.shared.session?.user?.id ?? ""
+    }
+
     /// Reads identity off the now-active Clerk session, ensures a backend
     /// profile row exists, then notifies the app.
     ///
     /// Clerk activates the session on a completed sign-in/sign-up, so
     /// `Clerk.shared.user` is populated by the time this runs; the fallbacks
     /// cover the OAuth/email-login cases where the form didn't capture a
-    /// username locally. The `createProfile` call is a server-side idempotent
-    /// upsert keyed on the Clerk user id — it inserts the row (with the traits
-    /// picked during onboarding) for a new user and is a no-op for a returning
-    /// one, which is why it's safe to run on the login path too.
+    /// username locally. `createProfile` is a server-side idempotent upsert
+    /// keyed on the Clerk user id — it inserts the row (with the traits picked
+    /// during onboarding) for a new user and returns the existing row unchanged
+    /// for a returning one, which is why it's safe to run on the login path too
+    /// and why the returned profile carries a returning user's real avatar.
+    ///
+    /// Failure is surfaced rather than swallowed: a signed-in Clerk session with
+    /// no backend profile is exactly the "everything's empty" state, so if the
+    /// row can't be created the user stays on this screen with an error instead
+    /// of being dropped into a broken app.
     private func completeAuthentication(fallbackUsername: String, fallbackEmail: String?) async {
         let user = Clerk.shared.user
-        let userId = user?.id ?? Clerk.shared.session?.user?.id ?? ""
+        let userId = currentUserId
         let resolvedUsername = user?.username ?? fallbackUsername
         let resolvedEmail = user?.primaryEmailAddress?.emailAddress ?? fallbackEmail
 
-        _ = try? await profileService.createProfile(
-            username: resolvedUsername,
-            email: resolvedEmail,
-            hobbies: Array(selectedHobbies),
-            studyFields: Array(selectedFields)
-        )
+        do {
+            let profile = try await profileService.createProfile(
+                username: resolvedUsername,
+                email: resolvedEmail,
+                hobbies: Array(selectedHobbies),
+                studyFields: Array(selectedFields)
+            )
+            finish(
+                userId: userId,
+                username: profile.username,
+                email: profile.email ?? resolvedEmail,
+                avatarURL: profile.photoURL
+            )
+        } catch {
+            self.error = "Couldn't finish setting up your account. \(message(for: error))"
+        }
+    }
 
-        onAuthenticated?(userId, resolvedUsername, resolvedEmail)
+    /// Hands the resolved identity — including the profile photo — to the app.
+    private func finish(userId: String, username: String, email: String?, avatarURL: String?) {
+        isOAuthCompletion = false
+        onAuthenticated?(userId, username, email, avatarURL)
     }
 
     /// Clerk's errors conform to `LocalizedError` with a user-facing message,

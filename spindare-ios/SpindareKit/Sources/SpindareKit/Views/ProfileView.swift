@@ -167,6 +167,9 @@ public struct ProfileView: View {
             // little longer is better than flashing to a new one that then
             // has to revert if the call actually failed.
             profile?.photoURL = photoURL
+            // Propagate to the session identity so the new photo shows in the
+            // header and on new posts, not only on this screen.
+            router.updateAvatar(photoURL)
         } catch {
             // Non-fatal — same treatment `saveChallenge` and other
             // best-effort writes elsewhere in this app already get.

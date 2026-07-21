@@ -15,7 +15,7 @@ struct SpindareApp: App {
     // the deployed URL to switch every feed/profile/social/search/upload call
     // onto the live backend. A LAN IP like "http://192.168.1.20:3000" also works
     // for same-Wi-Fi device testing against a locally-run server.
-    private static let apiBaseURL = ""
+    private static let apiBaseURL = "https://spindare-production.up.railway.app"
 
     init() {
         AppEnvironment.bootstrap(

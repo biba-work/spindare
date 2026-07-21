@@ -53,9 +53,20 @@ public enum AppEnvironment {
     /// usable before the backend is deployed. Kept here, rather than in the app
     /// target, so `ClerkKit` stays an implementation detail of this package and
     /// the app target needn't depend on it directly.
+    /// UserDefaults key for the QA "use on-device mock data" switch. Shared with
+    /// the `@AppStorage` toggle in Settings.
+    public static let testDataDefaultsKey = "useTestData"
+
     @MainActor
     public static func bootstrap(clerkPublishableKey: String, apiBaseURL: String) {
         Clerk.configure(publishableKey: clerkPublishableKey)
+
+        // QA override: stay entirely on-device mock data even with a backend
+        // configured. Read once at launch (services are single-writer-at-startup
+        // by design), so flipping it in Settings applies on the next launch —
+        // the toggle says as much. Lets the team keep testing on demo data
+        // through the pre-launch window without touching prod.
+        if UserDefaults.standard.bool(forKey: testDataDefaultsKey) { return }
 
         let trimmed = apiBaseURL.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
@@ -67,5 +78,40 @@ public enum AppEnvironment {
                 try? await Clerk.shared.auth.getToken()
             }
         }
+    }
+
+    /// Ends the Clerk session. Kept here so `AppRouter`/`SettingsView` can log
+    /// out without importing ClerkKit — the session survived a plain
+    /// `didSignOut()` before, which is why "log out" didn't actually log you out.
+    @MainActor
+    public static func signOut() async {
+        try? await Clerk.shared.auth.signOut()
+    }
+
+    /// The identity restored from a persisted Clerk session at launch, if any.
+    public struct RestoredIdentity: Sendable {
+        public let userId: String
+        public let username: String
+        public let email: String?
+        public let avatarURL: String?
+    }
+
+    /// Loads any persisted Clerk session at launch and, if one exists, resolves
+    /// the signed-in identity (pulling the real username/avatar from the backend
+    /// profile). Returns nil when there's no session — the app then shows
+    /// onboarding as before. Without this, a returning user was forced back
+    /// through sign-in on every launch even though Clerk still held their session.
+    @MainActor
+    public static func restoreSession() async -> RestoredIdentity? {
+        try? await Clerk.shared.load()
+        guard let user = Clerk.shared.user else { return nil }
+
+        let profile = (try? await profileService.currentProfile()) ?? nil
+        return RestoredIdentity(
+            userId: user.id,
+            username: profile?.username ?? user.username ?? "you",
+            email: profile?.email ?? user.primaryEmailAddress?.emailAddress,
+            avatarURL: profile?.photoURL
+        )
     }
 }

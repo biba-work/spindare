@@ -99,7 +99,7 @@ public struct FriendPickerView: View {
             Spacer(minLength: 0)
 
             Button {
-                withAnimation(Spindare.Motion.enter) { _ = sentTo.insert(friend.id) }
+                send(to: friend)
             } label: {
                 Text(sentTo.contains(friend.id) ? "Sent" : "Send")
                     .font(.system(size: 13, weight: .semibold))
@@ -119,6 +119,21 @@ public struct FriendPickerView: View {
             .disabled(sentTo.contains(friend.id))
         }
         .padding(.vertical, Spindare.Spacing.sm)
+    }
+
+    /// Actually sends the current challenge to a friend's SPIND inbox.
+    /// Optimistic — the row flips to "Sent" immediately and only reverts if the
+    /// request fails, so a tap feels instant on a good connection.
+    private func send(to friend: Friend) {
+        guard let challenge = router.challenge, !sentTo.contains(friend.id) else { return }
+        withAnimation(Spindare.Motion.enter) { _ = sentTo.insert(friend.id) }
+        Task {
+            do {
+                try await socialService.sendSpind(toUserId: friend.id, challenge: challenge)
+            } catch {
+                withAnimation(Spindare.Motion.enter) { _ = sentTo.remove(friend.id) }
+            }
+        }
     }
 }
 

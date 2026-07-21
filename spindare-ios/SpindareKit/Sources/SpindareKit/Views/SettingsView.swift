@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // Settings, built around what actually works.
 //
@@ -42,6 +43,7 @@ public struct SettingsView: View {
 
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("pushNotifications") private var pushEnabled = true
+    @AppStorage("useTestData") private var useTestData = false
 
     @State private var username = ""
     @State private var isEditingUsername = false
@@ -49,6 +51,8 @@ public struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var deleteConfirmationText = ""
     @State private var saveError: String?
+    @State private var pfpPickerItem: PhotosPickerItem?
+    @State private var isUploadingPhoto = false
 
     private let profileService: any ProfileServing
 
@@ -66,6 +70,7 @@ public struct SettingsView: View {
                     appearanceCard
                     notificationsCard
                     supportCard
+                    testingCard
                     dangerCard
                 }
                 .padding(.horizontal, Spindare.Spacing.md)
@@ -84,6 +89,10 @@ public struct SettingsView: View {
         // makes it live.
         .preferredColorScheme(appearance.colorScheme)
         .task { username = router.username ?? "" }
+        .onChange(of: pfpPickerItem) { _, item in
+            guard let item else { return }
+            Task { await uploadPhoto(item) }
+        }
         .confirmationDialog(
             "Log out of Spindare?",
             isPresented: $confirmingLogOut,
@@ -91,6 +100,9 @@ public struct SettingsView: View {
         ) {
             Button("Log out", role: .destructive) {
                 dismiss()
+                // Clear the Clerk session too — a plain didSignOut() left it
+                // alive, so "log out" didn't actually log you out.
+                Task { await AppEnvironment.signOut() }
                 router.didSignOut()
             }
             Button("Stay signed in", role: .cancel) {}
@@ -133,14 +145,23 @@ public struct SettingsView: View {
     // MARK: - Identity
 
     private var identityCard: some View {
-        card {
+        // Resolved to plain values before the picker's `@Sendable` label closure
+        // — `@Environment`/`@State` can't cross into it directly (same shape as
+        // the ProfileView / ComposerView PhotosPicker fixes).
+        let avatarURL = router.avatarURL
+        let uploading = isUploadingPhoto
+
+        return card {
             VStack(spacing: Spindare.Spacing.md) {
-                Button {
-                    // Photo picking lands with the composer's media work; the
-                    // upload endpoint it needs is the same one.
-                } label: {
+                PhotosPicker(selection: $pfpPickerItem, matching: .images) {
                     ZStack(alignment: .bottomTrailing) {
-                        Avatar(url: router.avatarURL, size: 72)
+                        Avatar(url: avatarURL, size: 72)
+                            .overlay {
+                                if uploading {
+                                    Circle().fill(.black.opacity(0.35))
+                                    ProgressView().tint(.white)
+                                }
+                            }
                         Circle()
                             .fill(Spindare.Palette.accent)
                             .frame(width: 24, height: 24)
@@ -151,7 +172,8 @@ public struct SettingsView: View {
                             }
                     }
                 }
-                .buttonStyle(PressableStyle())
+                .buttonStyle(.plain)
+                .disabled(uploading)
 
                 if isEditingUsername {
                     HStack(spacing: Spindare.Spacing.sm) {
@@ -206,6 +228,45 @@ public struct SettingsView: View {
         }
     }
 
+    /// Same pipeline as ProfileView's avatar edit — load, compress, upload to R2
+    /// (or a local file in mock/offline mode), persist, then propagate to the
+    /// session identity so the change shows everywhere, not just here.
+    private func uploadPhoto(_ item: PhotosPickerItem) async {
+        guard let raw = try? await item.loadTransferable(type: Data.self) else { return }
+
+        isUploadingPhoto = true
+        defer {
+            isUploadingPhoto = false
+            pfpPickerItem = nil
+        }
+
+        #if canImport(UIKit)
+        let compressed = ImageCompression.compress(raw) ?? raw
+        #else
+        let compressed = raw
+        #endif
+
+        let photoURL: String
+        if let uploader = AppEnvironment.mediaUploader {
+            guard let uploaded = try? await uploader.uploadData(
+                compressed, contentType: "image/jpeg", folder: "profile"
+            ) else { return }
+            photoURL = uploaded
+        } else {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("pfp-\(UUID().uuidString).jpg")
+            guard (try? compressed.write(to: url)) != nil else { return }
+            photoURL = url.absoluteString
+        }
+
+        do {
+            try await profileService.updatePhoto(url: photoURL)
+            router.updateAvatar(photoURL)
+        } catch {
+            saveError = "Couldn't update your photo."
+        }
+    }
+
     private func saveUsername() {
         let trimmed = username.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
@@ -213,6 +274,9 @@ public struct SettingsView: View {
         Task {
             do {
                 try await profileService.updateUsername(trimmed)
+                // Reflect it in the session identity so the header and new posts
+                // show the new name immediately, not just this screen.
+                router.updateUsername(trimmed)
                 saveError = nil
                 withAnimation(Spindare.Motion.enter) { isEditingUsername = false }
             } catch {
@@ -251,6 +315,31 @@ public struct SettingsView: View {
                             .font(Spindare.Typography.body)
                             .foregroundStyle(Color.spindarePrimary(scheme))
                         Text("Challenges sent to you, reactions, and replies.")
+                            .font(Spindare.Typography.timestamp)
+                            .foregroundStyle(Color.spindareSecondary(scheme))
+                    }
+                }
+                .tint(Spindare.Palette.accent)
+            }
+        }
+    }
+
+    // MARK: - Testing
+
+    /// Pre-launch QA switch: run the whole app on on-device demo data instead of
+    /// the live backend, so the team can test without touching production. Reads
+    /// at launch, so it applies on the next one.
+    private var testingCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
+                sectionTitle("TESTING")
+
+                Toggle(isOn: $useTestData) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Use test data")
+                            .font(Spindare.Typography.body)
+                            .foregroundStyle(Color.spindarePrimary(scheme))
+                        Text("Runs on demo data instead of the live backend. Applies after you relaunch the app.")
                             .font(Spindare.Typography.timestamp)
                             .foregroundStyle(Color.spindareSecondary(scheme))
                     }
@@ -366,9 +455,15 @@ public struct SettingsView: View {
                 }
 
             Button {
-                confirmingDelete = false
-                dismiss()
-                router.didSignOut()
+                // Delete server-side *first* while the Clerk token is still
+                // valid (sign-out clears it), then end the session.
+                Task {
+                    try? await profileService.deleteAccount()
+                    await AppEnvironment.signOut()
+                    confirmingDelete = false
+                    dismiss()
+                    router.didSignOut()
+                }
             } label: {
                 Text("Delete my account")
                     .font(.system(size: 15, weight: .semibold))

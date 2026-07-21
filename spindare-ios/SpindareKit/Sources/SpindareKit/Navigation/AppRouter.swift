@@ -285,6 +285,17 @@ public final class AppRouter {
         }
     }
 
+    /// Reflects a just-changed avatar/username across every surface that reads
+    /// the session identity — the header, feed authorship on new posts, the
+    /// friend picker — rather than only the screen that made the change.
+    public func updateAvatar(_ url: String?) {
+        avatarURL = url
+    }
+
+    public func updateUsername(_ name: String) {
+        username = name
+    }
+
     // MARK: - Stack
     //
     // Every mutation here goes through `withAnimation` internally, not at each

@@ -8,9 +8,9 @@ import SwiftUI
 
 public struct OnboardingView: View {
     @State private var vm = OnboardingViewModel()
-    var onAuthenticated: ((String, String, String?) -> Void)?
+    var onAuthenticated: ((String, String, String?, String?) -> Void)?
 
-    public init(onAuthenticated: ((String, String, String?) -> Void)? = nil) {
+    public init(onAuthenticated: ((String, String, String?, String?) -> Void)? = nil) {
         self.onAuthenticated = onAuthenticated
     }
 
@@ -204,11 +204,21 @@ public struct OnboardingView: View {
 
     private var traitsView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            backButton { vm.navigate(to: .signup) }
+            // An OAuth sign-up has no signup step behind it — back returns to
+            // the welcome screen (and drops the half-finished Clerk session).
+            backButton { vm.cancelTraits() }
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     headerSection(title: "Personalize", subtitle: "Select what interests you.")
+
+                    // OAuth users arrive here without having chosen a username
+                    // (the signup form is where the email path collects it).
+                    if vm.isOAuthCompletion {
+                        sectionLabel("USERNAME")
+                        inputField("Username", text: $vm.username)
+                            .padding(.bottom, Spindare.Spacing.lg)
+                    }
 
                     sectionLabel("HOBBIES")
                     chipGrid(
