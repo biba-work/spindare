@@ -103,7 +103,10 @@ public enum AppEnvironment {
     /// through sign-in on every launch even though Clerk still held their session.
     @MainActor
     public static func restoreSession() async -> RestoredIdentity? {
-        try? await Clerk.shared.load()
+        // ClerkKit 1.3 restores the persisted session by fetching the client
+        // (which carries the current session and user) — the older one-shot
+        // `Clerk.load()` was split into refreshClient()/refreshEnvironment().
+        try? await Clerk.shared.refreshClient()
         guard let user = Clerk.shared.user else { return nil }
 
         let profile = (try? await profileService.currentProfile()) ?? nil
