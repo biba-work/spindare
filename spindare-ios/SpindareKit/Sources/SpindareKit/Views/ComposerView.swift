@@ -87,7 +87,7 @@ public struct ComposerView: View {
                     mediaVideoURL = movie.url
                     mediaData = nil
                 } else if let raw = try? await item.loadTransferable(type: Data.self) {
-                    mediaData = Self.processed(raw)
+                    mediaData = await Self.processedOffMain(raw)
                     mediaVideoURL = nil
                 }
             }
@@ -97,7 +97,8 @@ public struct ComposerView: View {
             CameraCapture { image, video in
                 showCamera = false
                 if let image {
-                    mediaData = Self.processed(image)
+                    // Off the main actor for the same reason as the picker path.
+                    Task { mediaData = await Self.processedOffMain(image) }
                     mediaVideoURL = nil
                 } else if let video {
                     mediaVideoURL = video
@@ -109,10 +110,23 @@ public struct ComposerView: View {
         #endif
     }
 
+    /// Compresses off the main actor and hands the result back.
+    ///
+    /// `ComposerView` is a View, so it's `@MainActor`-isolated, and a bare
+    /// `Task { }` inside it inherits that actor — which meant every picked
+    /// image was JPEG-compressed *on the main thread*. That's what made the
+    /// composer freeze and drop keystrokes while you typed. `Task.detached`
+    /// leaves the main actor entirely; `Data` is Sendable, so the hop is free.
+    private nonisolated static func processedOffMain(_ raw: Data) async -> Data {
+        await Task.detached(priority: .userInitiated) { processed(raw) }.value
+    }
+
     /// Everything entering `mediaData` goes through here, whichever source it
     /// came from — compressing at the picker but not at the camera is exactly
     /// the kind of split that quietly stops holding.
-    private static func processed(_ raw: Data) -> Data {
+    ///
+    /// `nonisolated` so it can run off the main actor (see `processedOffMain`).
+    private nonisolated static func processed(_ raw: Data) -> Data {
         #if canImport(UIKit)
         return ImageCompression.compress(raw) ?? raw
         #else
@@ -537,59 +551,4 @@ extension ComposerView {
 
 #if canImport(UIKit)
 import AVFoundation
-
-struct ComposerVideoPickerView: View {
-    @State private var exportProgress: Double = 0.0
-    @State private var isProcessing: Bool = false
-    @State private var thumbnail: UIImage? = nil
-
-    let videoURL: URL?
-
-    var body: some View {
-        ZStack {
-            if let thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 80, height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else if isProcessing {
-                ProgressView(value: exportProgress) {
-                    Text("Processing...")
-                        .font(.caption2)
-                        .foregroundColor(.white)
-                }
-                .progressViewStyle(.circular)
-                .frame(width: 80, height: 120)
-                .background(Color.black.opacity(0.6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                Color.black.opacity(0.2)
-                    .frame(width: 80, height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-        }
-        .task(id: videoURL) {
-            guard let videoURL else { return }
-            processSelectedVideo(url: videoURL)
-        }
-    }
-
-    func processSelectedVideo(url: URL) {
-        isProcessing = true
-        Task.detached(priority: .userInitiated) {
-            let asset = AVAsset(url: url)
-            let imageGenerator = AVAssetImageGenerator(asset: asset)
-            imageGenerator.appliesPreferredTrackTransform = true
-
-            if let cgImage = try? await imageGenerator.image(at: .zero).image {
-                let uiImage = UIImage(cgImage: cgImage)
-                await MainActor.run {
-                    self.thumbnail = uiImage
-                    self.isProcessing = false
-                }
-            }
-        }
-    }
-}
 #endif

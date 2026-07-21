@@ -265,7 +265,10 @@ public final class AppRouter {
 
     // MARK: - Auth
 
-    public func didSignIn(userId: String, username: String, email: String?, avatarURL: String?) {
+    /// `username` is optional because a restored session may not know it yet
+    /// (backend profile unreachable, OAuth account with no handle). Callers must
+    /// pass nil rather than a display placeholder — see `AppEnvironment.restoreSession`.
+    public func didSignIn(userId: String, username: String?, email: String?, avatarURL: String?) {
         self.userId = userId
         self.username = username
         self.email = email

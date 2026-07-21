@@ -15,6 +15,20 @@ public struct SavedDrawerView: View {
 
     @State private var saved: [SavedChallenge] = []
     @State private var isLoading = true
+    /// Ticks so an item drops out the moment its clock runs out, instead of
+    /// sitting there with a dead countdown until the drawer is reopened.
+    @State private var now = Date()
+
+    /// Saved challenges that haven't expired yet. Saving is a commitment with a
+    /// deadline, so an expired one should leave — the live backend already
+    /// filters these server-side, but the mock store returns everything and
+    /// neither covers an item lapsing while you're looking at it.
+    private var activeSaved: [SavedChallenge] {
+        saved.filter { item in
+            guard let expiresAt = item.expiresAt else { return true }
+            return expiresAt > now
+        }
+    }
 
     private let socialService: any SocialServing
 
@@ -46,6 +60,12 @@ public struct SavedDrawerView: View {
             }
         }
         .task { await load() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                now = Date()
+            }
+        }
     }
 
     private var grabber: some View {
@@ -83,11 +103,11 @@ public struct SavedDrawerView: View {
 
     @ViewBuilder
     private var savedList: some View {
-        if saved.isEmpty {
+        if activeSaved.isEmpty {
             emptyState(icon: "bookmark", title: "Nothing saved",
                        detail: "Challenges you save show up here for 48 hours.")
         } else {
-            ForEach(saved) { item in
+            ForEach(activeSaved) { item in
                 VStack(alignment: .leading, spacing: Spindare.Spacing.md) {
                     Text(item.challenge)
                         .font(.system(size: 15))

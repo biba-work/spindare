@@ -735,7 +735,7 @@ struct SpeedyMedia: View {
         // Mute lives just below the centre now, not in a top-right cluster.
         .overlay(alignment: .center) { centreControls }
         .overlay(alignment: .top) { fastForwardHUD }
-        .overlay { menuOverlay }
+        .sheet(isPresented: $showMenu) { contextMenuSheet }
         .onChange(of: isCurrent, initial: true) { _, current in
             current ? start() : stop()
         }
@@ -819,21 +819,24 @@ struct SpeedyMedia: View {
         }
     }
 
-    @ViewBuilder
-    private var menuOverlay: some View {
-        if showMenu {
-            SpeedyActionMenu(
-                rate: rate,
-                onSpeed: { setRate($0) },
-                onReport: { closeMenu(); onReport() },
-                onNotInterested: { closeMenu(); onNotInterested() },
-                onFullScreen: { closeMenu(); withAnimation(Spindare.Motion.precise) { chromeHidden.toggle() } },
-                onWhy: { closeMenu(); showWhy = true },
-                onDismiss: { closeMenu() }
-            )
-            .transition(.opacity)
-            .zIndex(100)
-        }
+    /// The long-press menu, presented as a system sheet rather than an in-card
+    /// overlay. The overlay version rendered as a black box: it lived inside the
+    /// card's clipped, paged ZStack, so the scrim covered the screen while the
+    /// panel itself got clipped/mispositioned out of view. A sheet is presented
+    /// outside that hierarchy entirely, so it can't be clipped or z-fought.
+    private var contextMenuSheet: some View {
+        SpeedysContextMenu(
+            rate: rate,
+            isFullScreen: chromeHidden,
+            onSpeed: { setRate($0) },
+            onReport: { closeMenu(); onReport() },
+            onNotInterested: { closeMenu(); onNotInterested() },
+            onFullScreen: { closeMenu(); withAnimation(Spindare.Motion.precise) { chromeHidden.toggle() } },
+            onWhy: { closeMenu(); showWhy = true }
+        )
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.clear)
     }
 
     private var whySheet: some View {
@@ -980,151 +983,116 @@ struct SpeedyMedia: View {
     }
 }
 
-// MARK: - Speedy action menu
+// MARK: - Speedy context menu
 
-/// The grouped popup a middle-hold opens — one panel that slides up as a unit
-/// (not row-by-row), over a tap-to-dismiss scrim. Speed expands inline to a row
-/// of rate options; everything else is a single tap.
-private struct SpeedyActionMenu: View {
+/// The action sheet a middle-hold opens.
+///
+/// Presented as a *system sheet* (see `SpeedyMedia.contextMenuSheet`), not an
+/// in-card overlay. The overlay version is what rendered as a pitch-black box
+/// with no options: it lived inside the card's clipped, paged ZStack, so its
+/// full-screen scrim painted over everything while the panel itself was clipped
+/// out of view. A sheet is presented outside that hierarchy, so it cannot be
+/// clipped, mispositioned, or z-fought by the feed.
+public struct SpeedysContextMenu: View {
     let rate: Float
-    let onSpeed: (Float) -> Void
-    let onReport: () -> Void
-    let onNotInterested: () -> Void
-    let onFullScreen: () -> Void
-    let onWhy: () -> Void
-    let onDismiss: () -> Void
+    let isFullScreen: Bool
+    var onSpeed: (Float) -> Void
+    var onReport: () -> Void
+    var onNotInterested: () -> Void
+    var onFullScreen: () -> Void
+    var onWhy: () -> Void
 
     @State private var showSpeeds = false
 
     private static let speeds: [Float] = [0.5, 1, 1.5, 2]
 
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.opacity(0.35)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture { onDismiss() }
-
-            VStack(spacing: 0) {
-                if showSpeeds {
-                    HStack(spacing: 8) {
-                        ForEach(Self.speeds, id: \.self) { value in
-                            Button {
-                                onSpeed(value)
-                            } label: {
-                                Text(speedLabel(value))
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(rate == value ? .black : .white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 40)
-                                    .background(
-                                        Capsule().fill(rate == value ? .white : .white.opacity(0.16))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, Spindare.Spacing.md)
-                    .padding(.vertical, Spindare.Spacing.sm)
-                    Divider().overlay(.white.opacity(0.15))
-                }
-
-                row("Not interested", icon: "hand.thumbsdown", action: onNotInterested)
-                row("Report", icon: "flag", action: onReport)
-                row("Copy link", icon: "link") {
-                    #if canImport(UIKit)
-                    UIPasteboard.general.string = "https://spindare.app/s/\(onReport)"
-                    #endif
-                    onDismiss()
-                }
-                row("Save to favorites", icon: "star") {
-                    onDismiss()
-                }
-                row(showSpeeds ? "Hide speed" : "Speed", icon: "gauge.with.dots.needle.67percent") {
-                    withAnimation(Spindare.Motion.enter) { showSpeeds.toggle() }
-                }
-                row("Full screen", icon: "arrow.up.left.and.arrow.down.right", action: onFullScreen)
-                row("Why this post", icon: "questionmark.circle", action: onWhy)
-            }
-            .padding(.vertical, Spindare.Spacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
-                    .fill(Color(hex: 0x1A1A1E).opacity(0.92))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                    }
-                    .spindareElevation(.floating)
-            )
-            .padding(.horizontal, Spindare.Spacing.lg)
-            .padding(.bottom, 100)
-            // The whole panel arrives as one unit rather than element-by-element.
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    private func speedLabel(_ value: Float) -> String {
-        value == value.rounded() ? "\(Int(value))x" : "\(value)x"
-    }
-
-    private func row(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: Spindare.Spacing.md) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 24)
-                Text(title)
-                    .font(.system(size: 15, weight: .medium))
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, Spindare.Spacing.md)
-            .frame(height: 48)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Speedys Glassmorphism Context Menu Sheet
-
-public struct SpeedysContextMenu: View {
-    let postID: String
-    var onNotInterested: () -> Void
-    var onReport: () -> Void
-
-    public init(postID: String, onNotInterested: @escaping () -> Void, onReport: @escaping () -> Void) {
-        self.postID = postID
-        self.onNotInterested = onNotInterested
+    public init(
+        rate: Float = 1,
+        isFullScreen: Bool = false,
+        onSpeed: @escaping (Float) -> Void,
+        onReport: @escaping () -> Void,
+        onNotInterested: @escaping () -> Void,
+        onFullScreen: @escaping () -> Void,
+        onWhy: @escaping () -> Void
+    ) {
+        self.rate = rate
+        self.isFullScreen = isFullScreen
+        self.onSpeed = onSpeed
         self.onReport = onReport
+        self.onNotInterested = onNotInterested
+        self.onFullScreen = onFullScreen
+        self.onWhy = onWhy
     }
 
     public var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             Capsule()
-                .fill(Color.white.opacity(0.3))
+                .fill(.white.opacity(0.3))
                 .frame(width: 36, height: 5)
-                .padding(.top, 8)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
 
-            Button(action: onNotInterested) {
-                Label("Not Interested", systemImage: "eye.slash")
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.08)))
-            }
+            if showSpeeds { speedOptions }
 
-            Button(action: onReport) {
-                Label("Report Post", systemImage: "flag")
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color.red.opacity(0.12)))
+            row(showSpeeds ? "Hide speed" : "Speed",
+                icon: "gauge.with.dots.needle.67percent") {
+                withAnimation(.easeOut(duration: 0.2)) { showSpeeds.toggle() }
             }
+            row("Not interested", icon: "eye.slash", action: onNotInterested)
+            row(isFullScreen ? "Exit full screen" : "Full screen",
+                icon: "arrow.up.left.and.arrow.down.right",
+                action: onFullScreen)
+            row("Why this post", icon: "questionmark.circle", action: onWhy)
+            row("Report post", icon: "flag", tint: .red, action: onReport)
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
-        .background(Color(red: 0.1, green: 0.1, blue: 0.12).ignoresSafeArea())
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(red: 0.09, green: 0.09, blue: 0.11))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var speedOptions: some View {
+        HStack(spacing: 8) {
+            ForEach(Self.speeds, id: \.self) { value in
+                Button { onSpeed(value) } label: {
+                    Text(label(for: value))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(rate == value ? .black : .white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .background(Capsule().fill(rate == value ? .white : .white.opacity(0.14)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.bottom, 2)
+    }
+
+    private func label(for value: Float) -> String {
+        value == value.rounded() ? "\(Int(value))x" : "\(value)x"
+    }
+
+    private func row(
+        _ title: String,
+        icon: String,
+        tint: Color = .white,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .frame(height: 54)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(tint == .red ? Color.red.opacity(0.12) : Color.white.opacity(0.08))
+                )
+        }
+        .buttonStyle(.plain)
     }
 }

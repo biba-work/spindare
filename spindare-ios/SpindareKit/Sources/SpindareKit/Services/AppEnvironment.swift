@@ -91,7 +91,10 @@ public enum AppEnvironment {
     /// The identity restored from a persisted Clerk session at launch, if any.
     public struct RestoredIdentity: Sendable {
         public let userId: String
-        public let username: String
+        /// Optional on purpose: nil means "we don't know it yet", which the UI
+        /// renders as a placeholder. It must never be a placeholder *value*, or
+        /// it can be persisted as the user's real handle.
+        public let username: String?
         public let email: String?
         public let avatarURL: String?
     }
@@ -110,11 +113,19 @@ public enum AppEnvironment {
         guard let user = Clerk.shared.user else { return nil }
 
         let profile = (try? await profileService.currentProfile()) ?? nil
+
+        // Never substitute a placeholder here. This value becomes
+        // `router.username`, which Settings seeds its text field from and then
+        // *saves* — so a display fallback like "you" leaking in was how a real
+        // account ended up renamed to "you", with the email and avatar blanked
+        // alongside it. If the backend profile can't be read, fall back to what
+        // Clerk itself knows and otherwise leave it nil, so the UI shows a
+        // placeholder without any of it being mistaken for real data.
         return RestoredIdentity(
             userId: user.id,
-            username: profile?.username ?? user.username ?? "you",
+            username: profile?.username ?? user.username,
             email: profile?.email ?? user.primaryEmailAddress?.emailAddress,
-            avatarURL: profile?.photoURL
+            avatarURL: profile?.photoURL ?? (user.hasImage ? user.imageUrl : nil)
         )
     }
 }

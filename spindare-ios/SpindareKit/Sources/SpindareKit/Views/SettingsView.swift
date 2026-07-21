@@ -316,6 +316,14 @@ public struct SettingsView: View {
     private func saveUsername() {
         let trimmed = username.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        // "you" is the UI's placeholder for an unknown handle, never a real one.
+        // Saving it renamed real accounts to "you" when the field had been seeded
+        // from a degraded session; refuse it outright as a second line of defence
+        // behind the `restoreSession` fix.
+        guard trimmed.lowercased() != "you" else {
+            saveError = "Pick a username that isn't “you”."
+            return
+        }
 
         Task {
             do {
