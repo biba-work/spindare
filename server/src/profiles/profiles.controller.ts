@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -34,6 +35,14 @@ export class ProfilesController {
     @Body() body: { username?: string; email?: string; photoURL?: string; hobbies?: unknown; studyFields?: unknown },
   ) {
     return this.profiles.createProfile(userId, body);
+  }
+
+  // Delete the signed-in user's account — every row they own, then the Clerk
+  // user. `userId` comes from the verified token, so a user can only ever
+  // delete themselves.
+  @Delete()
+  deleteOwn(@CurrentUser() userId: string) {
+    return this.profiles.deleteAccount(userId);
   }
 
   @Patch('progress')
