@@ -49,27 +49,31 @@ public struct SavedDrawerView: View {
     }
 
     private var grabber: some View {
-        Capsule()
-            .fill(Spindare.Hairline.color(scheme, emphasis: 2.5))
-            .frame(width: 36, height: 4)
-            .padding(.top, Spindare.Spacing.sm)
+        VStack(spacing: 4) {
+            Image(systemName: "chevron.compact.up")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Color.spindareSecondary(scheme))
+            Capsule()
+                .fill(Spindare.Hairline.color(scheme, emphasis: 2.5))
+                .frame(width: 36, height: 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, Spindare.Spacing.sm)
     }
 
     private var header: some View {
-        HStack {
-            Button { router.pop() } label: {
-                Text("Close")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.spindareSecondary(scheme))
+        ZStack {
+            HStack {
+                Button { router.pop() } label: {
+                    Text("Close")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.spindareSecondary(scheme))
+                }
+                Spacer()
             }
-            Spacer()
-            Text("Saved")
-                .spindareLabel(size: 11, weight: .semibold, tracking: 3)
+            Text("SAVED")
+                .spindareLabel(size: 12, weight: .semibold, tracking: 4)
                 .foregroundStyle(Color.spindarePrimary(scheme))
-            Spacer()
-            // Height matters: a width-only clear spacer expands to fill the
-            // available height and inflates the whole bar.
-            Color.clear.frame(width: 44, height: 20)
         }
         .padding(.horizontal, Spindare.Spacing.gutter)
         .padding(.vertical, Spindare.Spacing.md)

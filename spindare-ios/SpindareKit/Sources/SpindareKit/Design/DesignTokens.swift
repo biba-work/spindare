@@ -234,10 +234,10 @@ public extension View {
 public extension Spindare {
     @MainActor
     enum Motion {
-        /// Slides, entrances, sheets. Calm, near-critically damped.
-        public static let enter = Animation.interpolatingSpring(stiffness: 50, damping: 8)
-        /// Taps and reactions. Fast, visibly bouncy.
-        public static let pop = Animation.interpolatingSpring(stiffness: 180, damping: 3)
+        /// Slides, entrances, sheets. Smooth, fast, critically-damped.
+        public static let enter = Animation.spring(response: 0.32, dampingFraction: 0.95)
+        /// Taps and reactions. Tactile and crisp, no excessive wobble.
+        public static let pop = Animation.spring(response: 0.22, dampingFraction: 0.80)
 
         /// Material standard easing — every reaction icon animates on this.
         public static func standard(_ duration: Double) -> Animation {

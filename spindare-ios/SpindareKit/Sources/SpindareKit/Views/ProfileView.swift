@@ -479,20 +479,22 @@ public struct ProfileView: View {
                     }
 
                     // Per-post is exactly where the exact breakdown belongs.
-                    HStack(spacing: Spindare.Spacing.sm) {
+                    HStack(spacing: 4) {
                         ForEach(ReactionType.allCases, id: \.self) { type in
-                            HStack(spacing: 5) {
+                            HStack(spacing: 3) {
                                 ReactionGlyph(type: type, isActive: true)
-                                    .frame(width: 14, height: 14)
+                                    .frame(width: 12, height: 12)
                                 Text("\(count(of: type, in: post))")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
                                     .foregroundStyle(Color.spindarePrimary(scheme))
                                 Text(type.rawValue)
-                                    .spindareLabel(size: 8, weight: .medium, tracking: 1)
+                                    .spindareLabel(size: 8, weight: .medium, tracking: 0.5)
                                     .foregroundStyle(Color.spindareSecondary(scheme))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
                             .background { Capsule().fill(Spindare.Hairline.color(scheme, emphasis: 0.8)) }
                         }
                         Spacer(minLength: 0)

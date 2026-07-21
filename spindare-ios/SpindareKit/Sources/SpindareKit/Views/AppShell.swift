@@ -326,10 +326,19 @@ private struct LayerContainer<Content: View>: View {
                 guard layer.isDragDismissable else { return }
 
                 let residual = travel(value.predictedEndTranslation) - travel(value.translation)
-                if dragged > dismissThreshold || (dragged > 20 && residual > 180) {
-                    onDismiss()
+                if dragged > dismissThreshold || (dragged > 30 && residual > 160) {
+                    withAnimation(Spindare.Motion.settle) {
+                        dragged = layer.entryEdge == .bottom ? 800 : 500
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        onDismiss()
+                        dragged = 0
+                    }
+                } else {
+                    withAnimation(Spindare.Motion.settle) {
+                        dragged = 0
+                    }
                 }
-                withAnimation(Spindare.Motion.enter) { dragged = 0 }
             }
     }
 

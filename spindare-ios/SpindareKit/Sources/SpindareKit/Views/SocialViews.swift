@@ -908,15 +908,14 @@ public struct ChatView: View {
 
     @ViewBuilder
     private func bubble(for message: Message) -> some View {
-        let isMine = message.senderId == router.userId
+        let isMine = message.senderId == router.userId || message.senderId == MockBackend.currentUserSentinel
+        let canUnsend = isMine && Date().timeIntervalSince(message.sentAt) < 60
 
         HStack(alignment: .bottom, spacing: 6) {
             if isMine { Spacer(minLength: 40) }
 
             HStack(spacing: 6) {
                 if isMine && message.delivery == .failed {
-                    // Tap the warning to resend rather than retyping — the
-                    // text is still sitting right there in the bubble.
                     Button {
                         Task { await vm.retry(message) }
                     } label: {
@@ -928,10 +927,50 @@ public struct ChatView: View {
                 }
 
                 payloadContent(for: message, isMine: isMine)
-                    // Sending reads as provisional until confirmed — the
-                    // dimming is the only signal, since a spinner per-bubble
-                    // would be noisy on a fast connection.
                     .opacity(message.delivery == .sending ? 0.6 : 1)
+                    .contextMenu {
+                        if !message.text.isEmpty {
+                            Button {
+                                #if canImport(UIKit)
+                                UIPasteboard.general.string = message.text
+                                #endif
+                            } label: {
+                                Label("Copy Text", systemImage: "doc.on.doc")
+                            }
+                        }
+
+                        if canUnsend {
+                            Button(role: .destructive) {
+                                Task { await vm.unsend(message) }
+                            } label: {
+                                Label("Unsend Message", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+
+                        if !isMine {
+                            Button {
+                                router.push(.userProfile(AppRouter.UserRef(
+                                    id: conversation.id,
+                                    username: conversation.otherUsername,
+                                    avatarURL: conversation.otherAvatarURL
+                                )))
+                            } label: {
+                                Label("View Profile", systemImage: "person.circle")
+                            }
+
+                            Button(role: .destructive) {
+                                toast = Toast("Message reported to moderators", icon: "flag.fill")
+                            } label: {
+                                Label("Report Message", systemImage: "flag")
+                            }
+
+                            Button(role: .destructive) {
+                                toast = Toast("Account reported to moderators", icon: "exclamationmark.triangle.fill")
+                            } label: {
+                                Label("Report Account", systemImage: "exclamationmark.shield")
+                            }
+                        }
+                    }
             }
 
             if !isMine { Spacer(minLength: 40) }
@@ -1270,19 +1309,28 @@ struct Waveform: View {
     /// 0...1 through the note, for playback progress. Bars past this dim.
     var progress: CGFloat = 1
 
+    private var displaySamples: [CGFloat] {
+        let maxBars = 22
+        guard samples.count > maxBars else { return samples.isEmpty ? [0.2, 0.5, 0.3, 0.7, 0.4] : samples }
+        let step = Double(samples.count) / Double(maxBars)
+        return (0..<maxBars).map { i in
+            let idx = min(Int(Double(i) * step), samples.count - 1)
+            return samples[idx]
+        }
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            let count = max(samples.count, 1)
-            let barWidth = max(1.5, (proxy.size.width - CGFloat(count - 1) * 2) / CGFloat(count))
+            let bars = displaySamples
+            let count = max(bars.count, 1)
+            let barWidth = max(2.0, (proxy.size.width - CGFloat(count - 1) * 2) / CGFloat(count))
 
             HStack(alignment: .center, spacing: 2) {
-                ForEach(Array(samples.enumerated()), id: \.offset) { index, sample in
+                ForEach(Array(bars.enumerated()), id: \.offset) { index, sample in
                     Capsule()
                         .fill(tint)
                         .opacity(CGFloat(index) / CGFloat(count) <= progress ? 1 : 0.3)
-                        // Floored so silence still draws a visible line rather
-                        // than a gap — an empty stretch reads as missing data.
-                        .frame(width: barWidth, height: max(3, sample * proxy.size.height))
+                        .frame(width: barWidth, height: max(4, sample * proxy.size.height))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

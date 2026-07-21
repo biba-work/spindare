@@ -59,13 +59,17 @@ public struct PostCardView: View {
                 .fill(Color.spindareSurface(scheme))
         }
         .spindareElevation(.card)
-        .confirmationDialog(post.challenge, isPresented: $showActions, titleVisibility: .visible) {
-            // The original made you pass through a dots sheet to reach a second
-            // challenge sheet — two sheets for four actions. One here.
-            Button("Take this challenge") { router.startProof(for: post.challenge) }
-            Button("Send to a friend") { router.shareChallenge(post.challenge) }
-            Button(isSaved ? "Remove from saved" : "Save for later") { onSave?(post.challenge) }
-            Button("Cancel", role: .cancel) {}
+        .sheet(isPresented: $showActions) {
+            PostActionsSheet(
+                challenge: post.challenge,
+                isSaved: isSaved,
+                onTake: { showActions = false; router.startProof(for: post.challenge) },
+                onShare: { showActions = false; router.shareChallenge(post.challenge) },
+                onSaveToggle: { showActions = false; onSave?(post.challenge) },
+                onDismiss: { showActions = false }
+            )
+            .presentationDetents([.height(280)])
+            .presentationBackground(.clear)
         }
     }
 
@@ -326,6 +330,80 @@ public struct PostCardView: View {
         .padding(.bottom, Spindare.Spacing.md)
     }
 }
+
+// MARK: - Spindare Post Actions Sheet
+
+private struct PostActionsSheet: View {
+    @Environment(\.colorScheme) private var scheme
+
+    let challenge: String
+    let isSaved: Bool
+    let onTake: () -> Void
+    let onShare: () -> Void
+    let onSaveToggle: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: Spindare.Spacing.sm) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("CHALLENGE ACTIONS")
+                    .spindareLabel(size: 10, weight: .bold, tracking: 2)
+                    .foregroundStyle(Color.spindareSecondary(scheme))
+
+                Text(challenge)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.spindarePrimary(scheme))
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spindare.Spacing.md)
+            .padding(.top, Spindare.Spacing.md)
+
+            Divider()
+
+            VStack(spacing: 2) {
+                row("Take this challenge", icon: "camera.fill", action: onTake)
+                row("Send to a friend", icon: "paperplane.fill", action: onShare)
+                row(isSaved ? "Remove from saved" : "Save for later", icon: isSaved ? "bookmark.fill" : "bookmark", action: onSaveToggle)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(Spindare.Spacing.md)
+        .background {
+            RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
+                .fill(Color.spindareSurface(scheme))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
+                        .strokeBorder(Spindare.Hairline.color(scheme, emphasis: 1.5), lineWidth: 1)
+                }
+                .spindareElevation(.floating)
+        }
+        .padding(.horizontal, Spindare.Spacing.md)
+    }
+
+    private func row(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Spindare.Spacing.md) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Spindare.Palette.accentDeep)
+                    .frame(width: 24)
+
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color.spindarePrimary(scheme))
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Spindare.Spacing.md)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 
 
 extension Date {

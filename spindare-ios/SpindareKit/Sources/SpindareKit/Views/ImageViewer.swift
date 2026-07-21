@@ -177,6 +177,12 @@ public struct ImageViewer: View {
         isDismissing ? 0 : Double(1 - dismissProgress)
     }
 
+    /// Fades out quickly during the initial 25% of a drag-to-dismiss gesture.
+    private var chromeOpacity: Double {
+        let fade = Double(max(0, 1 - dismissProgress * 4))
+        return isDismissing ? 0 : fade
+    }
+
     /// Shrinks as it's pulled away — the photo recedes rather than sliding flat
     /// off the bottom, which is what makes it read as going *back* to the feed.
     /// Bottoms out at 0.86 so it never becomes a thumbnail mid-drag.
@@ -396,6 +402,7 @@ public struct ImageViewer: View {
                 withAnimation(Spindare.Motion.enter) { captionExpanded.toggle() }
             }
             .transition(.opacity)
+            .opacity(chromeOpacity)
         }
     }
 
@@ -412,8 +419,8 @@ public struct ImageViewer: View {
                 .padding(Spindare.Spacing.md)
         }
         .buttonStyle(.plain)
-        .opacity(isZoomed ? 0 : 1)
-        .allowsHitTesting(!isZoomed)
+        .opacity(isZoomed ? 0 : chromeOpacity)
+        .allowsHitTesting(!isZoomed && chromeOpacity > 0.5)
     }
 
     // MARK: - Aspect ratio

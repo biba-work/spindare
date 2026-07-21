@@ -139,7 +139,7 @@ public struct SpinWheel: View {
             let radius = size / 2
 
             ZStack {
-                dial(radius: radius, currentRotation: rotation + idleRotation, showLines: showDialLines)
+                dial(radius: radius, currentRotation: rotation + idleRotation, showLines: true)
                     .rotationEffect(.degrees(rotation + idleRotation))
                     .gesture(spinGesture(center: CGPoint(x: proxy.size.width / 2,
                                                          y: proxy.size.height / 2)))

@@ -49,17 +49,16 @@ public struct SettingsView: View {
     @AppStorage(AppSettingsKey.privacyPrivate) private var privacyPrivate = false
     @AppStorage(AppSettingsKey.dataTrackingOptOut) private var dataTrackingOptOut = false
     // Dial & Challenges
-    @AppStorage(AppSettingsKey.showDialLines) private var showDialLines = true
-    @AppStorage(AppSettingsKey.challengeSourceFriendsOnly) private var challengeFriendsOnly = false
+    @AppStorage(AppSettingsKey.challengeSourceFriendsOnly) private var challengeFriendsOnly = true
     // Speedys & Well-being
     @AppStorage(AppSettingsKey.speedyReactionWindow) private var reactionWindow = 2.0
     @AppStorage(AppSettingsKey.lookAwayNudges) private var lookAwayNudges = false
-    @AppStorage(AppSettingsKey.hideReactionCounts) private var hideReactionCounts = false
+    @AppStorage(AppSettingsKey.hideReactionCounts) private var hideReactionCounts = true
     @AppStorage(AppSettingsKey.dailyRecordReminder) private var dailyRecordReminder = false
     // Zone
-    @AppStorage(AppSettingsKey.zoneHideIntenseVenues) private var zoneHideIntense = false
+    @AppStorage(AppSettingsKey.zoneHideIntenseVenues) private var zoneHideIntense = true
     // Communication
-    @AppStorage(AppSettingsKey.dmSourceFriendsOnly) private var dmFriendsOnly = false
+    @AppStorage(AppSettingsKey.dmSourceFriendsOnly) private var dmFriendsOnly = true
 
     @State private var username = ""
     @State private var isEditingUsername = false
@@ -74,6 +73,8 @@ public struct SettingsView: View {
     @State private var showSessions = false
     @State private var showBlocked = false
     @State private var showMuted = false
+    @State private var showPrivacyPolicy = false
+    @State private var showTermsOfService = false
 
     private let profileService: any ProfileServing
     private let socialService: any SocialServing
@@ -106,6 +107,7 @@ public struct SettingsView: View {
                     supportCard
                     testingCard
                     dangerCard
+                    versionFooter
                 }
                 .padding(.horizontal, Spindare.Spacing.md)
                 .padding(.vertical, Spindare.Spacing.lg)
@@ -410,8 +412,8 @@ public struct SettingsView: View {
                 navRow("Active sessions",
                        detail: "See and sign out other devices.") { showSessions = true }
                 divider
-                toggleRow("Opt out of usage tracking",
-                          detail: "Stop internal analytics from recording your activity.",
+                toggleRow("Opt out of internal usage analytics",
+                          detail: "Spindare Internal Analytics — Helps our team private bots gather anonymous app performance and feature usage data so we can build better features and FAQs. Never shared with third parties or advertisers.",
                           isOn: $dataTrackingOptOut)
             }
         }
@@ -424,10 +426,6 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: Spindare.Spacing.sm) {
                 sectionTitle("DIAL & CHALLENGES")
 
-                toggleRow("Show dial lines",
-                          detail: "Reveal the category lines before you spin.",
-                          isOn: $showDialLines)
-                divider
                 toggleRow("Challenges from friends only",
                           detail: "Only people you're connected to can send you a challenge.",
                           isOn: $challengeFriendsOnly)
@@ -509,6 +507,43 @@ public struct SettingsView: View {
         }
     }
 
+    // MARK: - Support
+
+    private var supportCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 0) {
+                sectionTitle("SUPPORT")
+                    .padding(.bottom, Spindare.Spacing.sm)
+
+                linkRow("Contact us", url: "mailto:hello@spindare.app")
+                divider
+                navRow("Privacy policy", detail: nil) { showPrivacyPolicy = true }
+                divider
+                navRow("Terms of service", detail: nil) { showTermsOfService = true }
+            }
+        }
+    }
+
+    private var versionFooter: some View {
+        VStack(spacing: 4) {
+            Text("Spindare v1.0.0 (Beta 4)")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.spindarePrimary(scheme).opacity(0.8))
+
+            Text("Build 2026.07.21 • Modern Swift Native")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.spindareSecondary(scheme))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Spindare.Spacing.md)
+        .sheet(isPresented: $showPrivacyPolicy) {
+            PrivacyPolicyView()
+        }
+        .sheet(isPresented: $showTermsOfService) {
+            TermsOfServiceView()
+        }
+    }
+
     // MARK: - Row helpers
 
     private func toggleRow(_ title: String, detail: String?, isOn: Binding<Bool>) -> some View {
@@ -557,23 +592,6 @@ public struct SettingsView: View {
             UIApplication.shared.open(url)
         }
         #endif
-    }
-
-    // MARK: - Support
-
-    private var supportCard: some View {
-        card {
-            VStack(alignment: .leading, spacing: 0) {
-                sectionTitle("SUPPORT")
-                    .padding(.bottom, Spindare.Spacing.sm)
-
-                linkRow("Contact us", url: "mailto:hello@spindare.app")
-                divider
-                linkRow("Privacy policy", url: "https://spindare.app/privacy")
-                divider
-                linkRow("Terms of service", url: "https://spindare.app/terms")
-            }
-        }
     }
 
     private func linkRow(_ title: String, url: String) -> some View {

@@ -510,20 +510,14 @@ struct SpeedyCard: View {
     private func reactionButton(_ type: ReactionType) -> some View {
         let isPicked = picked == type
 
-        return ReactionButton(type: type, isActive: isPicked, onImage: true) {
+        return ReactionButton(
+            type: type,
+            isActive: isPicked,
+            showBlinkingRing: isPicked && !reactionsLocked,
+            onImage: true
+        ) {
             pick(type)
         }
-        .overlay {
-            // A quiet pulse on the picked reaction while the switch window
-            // is still open — enough that you register "I can still change
-            // this," not enough to look like the button is nagging you.
-            if isPicked && !reactionsLocked {
-                BlinkingRing(color: Spindare.Palette.color(for: type))
-            }
-        }
-        // Once the window closes the other two stop responding. Before that,
-        // any of the three — including the one already picked — can still be
-        // tapped to switch.
         .opacity(reactionsLocked && !isPicked ? 0.4 : 1)
         .allowsHitTesting(!reactionsLocked)
     }
@@ -838,7 +832,7 @@ struct SpeedyMedia: View {
                 onDismiss: { closeMenu() }
             )
             .transition(.opacity)
-            .zIndex(10)
+            .zIndex(100)
         }
     }
 
@@ -1046,10 +1040,15 @@ private struct SpeedyActionMenu: View {
             .padding(.vertical, Spindare.Spacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
-                    .fill(.black.opacity(0.9))
+                    .fill(Color(hex: 0x1A1A1E).opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Spindare.Radius.panel, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    }
+                    .spindareElevation(.floating)
             )
-            .padding(.horizontal, Spindare.Spacing.md)
-            .padding(.bottom, 110)
+            .padding(.horizontal, Spindare.Spacing.lg)
+            .padding(.bottom, 100)
             // The whole panel arrives as one unit rather than element-by-element.
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }

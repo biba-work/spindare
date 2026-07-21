@@ -156,6 +156,7 @@ struct ReactionButton: View {
 
     let type: ReactionType
     let isActive: Bool
+    var showBlinkingRing: Bool = false
     /// Floating over a photo, where the treatment must read against anything
     /// and so deliberately ignores light/dark.
     let onImage: Bool
@@ -183,6 +184,13 @@ struct ReactionButton: View {
                     Circle()
                         .fill(background)
                         .overlay { Circle().strokeBorder(border, lineWidth: isActive ? 2 : 1.5) }
+                        .overlay {
+                            if showBlinkingRing {
+                                Circle()
+                                    .stroke(Spindare.Palette.color(for: type).opacity(0.85), lineWidth: 2)
+                                    .frame(width: 44, height: 44)
+                            }
+                        }
                         .frame(width: 38, height: 38)
 
                     ReactionGlyph(type: type, isActive: isActive)

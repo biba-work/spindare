@@ -73,17 +73,19 @@ public final class ChatViewModel {
         withAnimation(Spindare.Motion.enter) { messages.append(pending) }
 
         do {
-            var sent = try await chatService.send(trimmed, in: conversation)
-            // The transport only carries text today; the attachment and the
-            // chosen size live on the local copy, so they're carried across
-            // rather than lost when the confirmed message replaces the pending
-            // one. Wiring a real upload replaces this line, not the call site.
-            sent.payload = payload
-            sent.emphasis = emphasis
+            let sent = try await chatService.send(trimmed, in: conversation, payload: payload, emphasis: emphasis)
             replace(pendingId, with: sent)
         } catch {
             mark(pendingId, as: .failed)
         }
+    }
+
+    /// Unsends an outgoing message if within 1 minute of sending.
+    public func unsend(_ message: Message) async {
+        withAnimation(Spindare.Motion.enter) {
+            messages.removeAll { $0.id == message.id }
+        }
+        try? await chatService.deleteMessage(id: message.id, in: conversation.id)
     }
 
     /// Re-attempts a `.failed` message without retyping it.
@@ -92,7 +94,7 @@ public final class ChatViewModel {
         mark(message.id, as: .sending)
 
         do {
-            let sent = try await chatService.send(message.text, in: conversation)
+            let sent = try await chatService.send(message.text, in: conversation, payload: message.payload, emphasis: message.emphasis)
             replace(message.id, with: sent)
         } catch {
             mark(message.id, as: .failed)

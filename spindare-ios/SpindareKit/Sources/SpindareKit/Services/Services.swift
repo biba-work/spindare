@@ -90,7 +90,8 @@ public protocol SearchServing: Sendable {
 
 public protocol ChatServing: Sendable {
     func messages(in conversation: AppRouter.ConversationRef) async throws -> [Message]
-    func send(_ text: String, in conversation: AppRouter.ConversationRef) async throws -> Message
+    func send(_ text: String, in conversation: AppRouter.ConversationRef, payload: MessagePayload, emphasis: CGFloat?) async throws -> Message
+    func deleteMessage(id: String, in conversationId: String) async throws
 
     /// The main list — everything *except* what's been inboxed. Most-recent-
     /// first ordering left to the caller.
@@ -325,7 +326,16 @@ public struct LiveChatService: ChatServing {
         throw ChatUnavailableError()
     }
 
-    public func send(_ text: String, in conversation: AppRouter.ConversationRef) async throws -> Message {
+    public func send(
+        _ text: String,
+        in conversation: AppRouter.ConversationRef,
+        payload: MessagePayload = .text,
+        emphasis: CGFloat? = nil
+    ) async throws -> Message {
+        throw ChatUnavailableError()
+    }
+
+    public func deleteMessage(id: String, in conversationId: String) async throws {
         throw ChatUnavailableError()
     }
 
@@ -575,10 +585,16 @@ public actor MockBackend {
         // actually said. Without this a thread you just replied to stays
         // wherever it was, showing its old preview line.
         if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
-            conversations[index].lastMessage = message.text
+            let previewText = message.payload == .text ? message.text : (message.payload == .voice(url: URL(fileURLWithPath: ""), duration: 0, samples: []) ? "Voice Memo" : "Attachment")
+            conversations[index].lastMessage = previewText.isEmpty ? "Attachment" : previewText
             conversations[index].lastMessageAt = message.sentAt
             store.upsert(conversations[index], kind: "conversation", id: conversationId)
         }
+    }
+
+    func deleteMessage(_ messageId: String, from conversationId: String) {
+        messagesByConversation[conversationId]?.removeAll { $0.id == messageId }
+        store.delete(kind: "message", id: messageId)
     }
 
     // MARK: Conversations
@@ -904,16 +920,28 @@ public struct MockChatService: ChatServing {
         await backend.messages(in: conversation.id)
     }
 
-    public func send(_ text: String, in conversation: AppRouter.ConversationRef) async throws -> Message {
+    public func send(
+        _ text: String,
+        in conversation: AppRouter.ConversationRef,
+        payload: MessagePayload = .text,
+        emphasis: CGFloat? = nil
+    ) async throws -> Message {
         let message = Message(
             id: UUID().uuidString,
             conversationId: conversation.id,
             senderId: await backend.currentProfile()?.id ?? MockBackend.currentUserSentinel,
             text: text,
-            sentAt: Date()
+            sentAt: Date(),
+            delivery: .sent,
+            payload: payload,
+            emphasis: emphasis
         )
         await backend.appendMessage(message, to: conversation.id)
         return message
+    }
+
+    public func deleteMessage(id: String, in conversationId: String) async throws {
+        await backend.deleteMessage(id, from: conversationId)
     }
 
     public func conversations() async throws -> [Conversation] {
