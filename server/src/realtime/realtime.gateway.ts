@@ -52,4 +52,10 @@ export class RealtimeGateway implements OnGatewayConnection {
     // anon-key Supabase Realtime setup already had.
     this.server?.emit(`notification:${userId}`, notification);
   }
+
+  // Targeted at the recipient, same shape as notificationCreated — a chat
+  // message must not fan out to every connected client.
+  messageCreated(userId: string, message: unknown) {
+    this.server?.emit(`message:${userId}`, message);
+  }
 }

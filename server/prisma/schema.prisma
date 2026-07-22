@@ -161,6 +161,75 @@ model KeptChallenge {
   @@map("kept_challenges")
 }
 
+// --- Chat -------------------------------------------------------------------
+//
+// One-to-one threads only, matching the mobile client's Conversation model
+// (which carries a single "other" participant rather than a member list).
+// The pair is stored normalised — `userAId` is always the lexicographically
+// smaller Clerk id — so a thread between two people can be found (and uniquely
+// constrained) regardless of who opens it first.
+
+model Conversation {
+  id            String   @id @default(uuid())
+  userAId       String   @map("user_a_id")
+  userBId       String   @map("user_b_id")
+  lastMessage   String   @default("") @map("last_message")
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  messages Message[]
+  states   ConversationState[]
+
+  @@unique([userAId, userBId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  text           String   @default("")
+  // Media lives in R2; only the URL and enough metadata to render it are here.
+  // `kind` is "text" | "image" | "voice" — it drives which payload shape the
+  // client decodes, and getting it wrong is what renders media as blank lines.
+  kind           String   @default("text")
+  mediaURL       String?  @map("media_url")
+  // Voice notes only: length and the pre-computed waveform, stored so the
+  // shape is stable instead of being recomputed (differently) on every render.
+  duration       Float?
+  samples        Json?
+  emphasis       Float?
+  // Unsend is a tombstone, not a delete: the row stays so both sides converge
+  // on "this was unsent" rather than one side keeping a copy forever.
+  unsent         Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// Mute/archive/clear are *per participant*, not per thread — muting a thread
+// must not mute it for the other person. Kept in its own row rather than as
+// columns on Conversation, which could only ever express one side's view.
+model ConversationState {
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  userId         String    @map("user_id")
+  isMuted        Boolean   @default(false) @map("is_muted")
+  isArchived     Boolean   @default(false) @map("is_archived")
+  // Set when this user deletes the thread: it disappears for them, and any
+  // messages older than this stay hidden even if the thread revives.
+  clearedAt      DateTime? @map("cleared_at")
+  lastReadAt     DateTime? @map("last_read_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_states")
+}
+
 model SpindChallenge {
   id        String   @id @default(uuid())
   userId    String   @map("userId")
