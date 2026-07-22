@@ -532,15 +532,25 @@ public struct SettingsView: View {
         }
     }
 
+    /// Marketing version (CFBundleShortVersionString) and build (CFBundleVersion).
+    /// `Bundle.main` is the app, not this package, which is what a tester means
+    /// by "what version are you on".
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    private static var buildNumber: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }
+
     private var versionFooter: some View {
         VStack(spacing: 4) {
-            Text("Spindare v1.0.0 (Beta 4)")
+            // Read from the bundle rather than hardcoded: a pinned string here
+            // is wrong the moment the version is bumped, and it's the one place
+            // a tester will quote back when reporting a bug.
+            Text("Spindare v\(Self.appVersion) (\(Self.buildNumber)) Beta")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.spindarePrimary(scheme).opacity(0.8))
-
-            Text("Build 2026.07.21 • Modern Swift Native")
-                .font(.system(size: 11))
-                .foregroundStyle(Color.spindareSecondary(scheme))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spindare.Spacing.md)

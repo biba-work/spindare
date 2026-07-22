@@ -108,6 +108,8 @@ public struct ReactionRow: View {
                     ownerCountsContent
                     Spacer(minLength: 0)
                     Text("\(post.reactions.total) total")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .font(.system(size: 11))
                         .foregroundStyle(Color.spindareSecondary(scheme))
                 }
@@ -128,10 +130,15 @@ public struct ReactionRow: View {
                     .fill(Spindare.Palette.color(for: type))
                     .frame(width: 7, height: 7)
                 Text("\(count(for: type))")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
                     .foregroundStyle(onImage ? .white : Color.spindarePrimary(scheme))
+                    // A four-figure count used to wrap to a second line and
+                    // spill out of the pill. Keep it on one line and let it
+                    // shrink a little instead of breaking the shape.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
             .padding(.vertical, 4)
             .background {
                 RoundedRectangle(cornerRadius: Spindare.Radius.control, style: .continuous)

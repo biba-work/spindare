@@ -287,7 +287,12 @@ public extension Spindare {
 
         /// Full-screen layers arriving and leaving — composer, messages, chat,
         /// saved, another user's profile.
-        public static let layer = Animation.spring(response: 0.3, dampingFraction: 0.95)
+        ///
+        /// A timing curve, not a spring. Even at 0.95 damping a spring keeps a
+        /// settle tail, and on the way *out* of the share sheet that tail reads
+        /// as the Speedys card bouncing and scaling under it. The curve lands
+        /// flat and stops.
+        public static let layer = appleTimingCurve
     }
 }
 

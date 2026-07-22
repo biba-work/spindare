@@ -129,6 +129,10 @@ public struct SpeedysView: View {
                 }
             }
         }
+        // Black behind the whole surface, not just inside the ZStack. During a
+        // layer transition the card scales and the window background showed
+        // through at the edges as white slivers — this is what was leaking.
+        .background(Color.black)
         .toast($toast)
         .task { await load() }
         // A minute is the right cadence for a five-minute gate: fine enough
