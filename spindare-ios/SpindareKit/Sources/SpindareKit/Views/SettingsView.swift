@@ -83,7 +83,7 @@ public struct SettingsView: View {
     public init(
         profileService: any ProfileServing = AppEnvironment.profileService,
         socialService: any SocialServing = AppEnvironment.socialService,
-        chatService: any ChatServing = MockChatService()
+        chatService: any ChatServing = AppEnvironment.chatService
     ) {
         self.profileService = profileService
         self.socialService = socialService

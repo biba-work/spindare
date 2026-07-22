@@ -11,10 +11,8 @@ import ClerkKit
 /// default-argument expression at each call site, so whatever's assigned here at
 /// launch is what every subsequently-constructed view picks up.
 ///
-/// Deliberately no `chatService` / `speedyService` / `zoneService` slot: chat
-/// has no live backend yet (`LiveChatService` throws), and Speedys/Zone have no
-/// `Live` implementation at all. Those stay on their own `Mock*Service()`
-/// defaults untouched.
+/// Chat is live now too. Speedys and Zone still have no `Live` implementation,
+/// so they keep their own `Mock*Service()` defaults and are untouched by this.
 ///
 /// `nonisolated(unsafe)`: these are written exactly once, synchronously, during
 /// app launch before any concurrency exists, then only ever read. The stored
@@ -27,6 +25,7 @@ public enum AppEnvironment {
     nonisolated(unsafe) public static var socialService: any SocialServing = MockSocialService()
     nonisolated(unsafe) public static var notificationService: any NotificationServing = MockNotificationService()
     nonisolated(unsafe) public static var searchService: any SearchServing = MockSearchService()
+    nonisolated(unsafe) public static var chatService: any ChatServing = MockChatService()
 
     /// Uploads media to R2 via the Nest storage endpoints. `nil` in mock mode:
     /// call sites fall back to writing a local file so posting still works
@@ -41,6 +40,7 @@ public enum AppEnvironment {
         socialService = LiveSocialService(api: api)
         notificationService = LiveNotificationService(api: api)
         searchService = LiveSearchService(api: api)
+        chatService = LiveChatService(api: api)
         mediaUploader = MediaUploader(api: api)
     }
 

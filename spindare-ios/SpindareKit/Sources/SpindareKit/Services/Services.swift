@@ -308,59 +308,103 @@ public struct LiveSearchService: SearchServing {
     }
 }
 
-/// The backend has no REST API for sending or listing messages — its only
-/// chat-related route mints a StreamChat token, and the controller's own
-/// comment marks that integration "on hold for now (deprioritized)." Throwing
-/// this from `LiveChatService` documents the gap explicitly rather than the
-/// alternative of silently returning an empty inbox, which would look like a
-/// conversation with no history instead of a feature that isn't wired up yet.
-public struct ChatUnavailableError: Error, Sendable, Equatable {
-    public let reason = "Messaging isn't connected yet — only the mock chat works right now."
-}
-
+/// Chat backed by the Nest API (Postgres), replacing the mock store.
 public struct LiveChatService: ChatServing {
     private let api: APIClient
     public init(api: APIClient) { self.api = api }
 
     public func messages(in conversation: AppRouter.ConversationRef) async throws -> [Message] {
-        throw ChatUnavailableError()
+        try await api.get("/chat/conversations/\(conversation.id)/messages")
     }
 
+    /// Sends a message, uploading any attachment to R2 first.
+    ///
+    /// The payload arrives carrying a *local* file URL (what the picker or the
+    /// recorder produced). Storing that verbatim is why chat media never
+    /// survived — a `file://` path means nothing to the other device, or to
+    /// this one after the temp directory is cleared. Uploading here rather than
+    /// at each call site means every attachment persists no matter which screen
+    /// sent it.
     public func send(
         _ text: String,
         in conversation: AppRouter.ConversationRef,
-        payload: MessagePayload = .text,
-        emphasis: CGFloat? = nil
+        payload: MessagePayload,
+        emphasis: CGFloat?
     ) async throws -> Message {
-        throw ChatUnavailableError()
+        struct Body: Encodable {
+            let text: String
+            let kind: String
+            let mediaURL: String?
+            let duration: TimeInterval?
+            let samples: [CGFloat]?
+            let emphasis: CGFloat?
+        }
+
+        let body: Body
+        switch payload {
+        case .text:
+            body = Body(text: text, kind: "text", mediaURL: nil,
+                        duration: nil, samples: nil, emphasis: emphasis)
+
+        case .image(let url):
+            let remote = try await hosted(url, contentType: "image/jpeg")
+            body = Body(text: text, kind: "image", mediaURL: remote,
+                        duration: nil, samples: nil, emphasis: emphasis)
+
+        case .voice(let url, let duration, let samples):
+            let remote = try await hosted(url, contentType: "audio/m4a")
+            body = Body(text: text, kind: "voice", mediaURL: remote,
+                        duration: duration, samples: samples, emphasis: emphasis)
+        }
+
+        return try await api.post("/chat/conversations/\(conversation.id)/messages", body: body)
     }
 
+    /// Local file → R2. A URL that's already remote is passed through untouched.
+    private func hosted(_ url: URL, contentType: String) async throws -> String {
+        guard url.isFileURL, let uploader = AppEnvironment.mediaUploader else {
+            return url.absoluteString
+        }
+        return try await uploader.uploadFile(at: url, contentType: contentType, folder: "chat")
+    }
+
+    /// Unsend. The server tombstones the row rather than deleting it, so the
+    /// other side converges on "unsent" instead of keeping a copy.
     public func deleteMessage(id: String, in conversationId: String) async throws {
-        throw ChatUnavailableError()
+        try await api.post("/chat/messages/\(id)/unsend")
     }
 
     public func conversations() async throws -> [Conversation] {
-        throw ChatUnavailableError()
+        try await api.get("/chat/conversations")
     }
 
     public func archivedConversations() async throws -> [Conversation] {
-        throw ChatUnavailableError()
+        try await api.get("/chat/conversations/archived")
+    }
+
+    /// Find-or-create the thread with someone, so opening a chat from a profile
+    /// works before either side has sent anything.
+    public func openConversation(with otherUserId: String) async throws -> Conversation {
+        try await api.post("/chat/conversations/with/\(otherUserId)")
     }
 
     public func deleteConversation(id: String) async throws {
-        throw ChatUnavailableError()
+        try await api.delete("/chat/conversations/\(id)")
     }
 
     public func setMuted(_ muted: Bool, conversationId: String) async throws {
-        throw ChatUnavailableError()
+        struct Body: Encodable { let isMuted: Bool }
+        try await api.patch("/chat/conversations/\(conversationId)/mute", body: Body(isMuted: muted))
     }
 
     public func archiveConversation(id: String) async throws {
-        throw ChatUnavailableError()
+        struct Body: Encodable { let isArchived: Bool }
+        try await api.patch("/chat/conversations/\(id)/archive", body: Body(isArchived: true))
     }
 
     public func unarchiveConversation(id: String) async throws {
-        throw ChatUnavailableError()
+        struct Body: Encodable { let isArchived: Bool }
+        try await api.patch("/chat/conversations/\(id)/archive", body: Body(isArchived: false))
     }
 }
 

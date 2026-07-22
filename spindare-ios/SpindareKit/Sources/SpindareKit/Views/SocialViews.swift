@@ -282,7 +282,7 @@ public struct MessagesView: View {
     private let embedded: Bool
 
     public init(
-        chatService: any ChatServing = MockChatService(),
+        chatService: any ChatServing = AppEnvironment.chatService,
         embedded: Bool = false
     ) {
         self.chatService = chatService
@@ -576,7 +576,7 @@ public struct ArchivedMessagesView: View {
 
     private let chatService: any ChatServing
 
-    public init(chatService: any ChatServing = MockChatService()) {
+    public init(chatService: any ChatServing = AppEnvironment.chatService) {
         self.chatService = chatService
     }
 
@@ -784,7 +784,7 @@ public struct ChatView: View {
     @State private var emphasisPreview: CGFloat?
     @State private var toast: Toast?
 
-    public init(conversation: AppRouter.ConversationRef, chatService: any ChatServing = MockChatService()) {
+    public init(conversation: AppRouter.ConversationRef, chatService: any ChatServing = AppEnvironment.chatService) {
         self.conversation = conversation
         _vm = State(initialValue: ChatViewModel(conversation: conversation, chatService: chatService))
     }

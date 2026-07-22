@@ -18,7 +18,7 @@ public final class ChatViewModel {
     private let conversation: AppRouter.ConversationRef
     private let chatService: any ChatServing
 
-    public init(conversation: AppRouter.ConversationRef, chatService: any ChatServing = MockChatService()) {
+    public init(conversation: AppRouter.ConversationRef, chatService: any ChatServing = AppEnvironment.chatService) {
         self.conversation = conversation
         self.chatService = chatService
     }
