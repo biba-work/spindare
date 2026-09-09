@@ -71,8 +71,14 @@ public protocol SpeedyServing: Sendable {
     /// `previous` is the viewer's prior pick, if they're switching within the
     /// short window Speedys allows — nil for a first-ever reaction. Needed so
     /// the backend can move the count rather than double-add it.
-    func setReaction(_ type: ReactionType, replacing previous: ReactionType?, speedyId: String) async throws
-    func toggleFavourite(speedyId: String) async throws -> Bool
+    func setReaction(
+        _ type: ReactionType,
+        replacing previous: ReactionType?,
+        speedyId: String,
+        username: String,
+        avatar: String?
+    ) async throws
+    func toggleFavourite(speedyId: String, challenge: String) async throws -> Bool
     func favourites() async throws -> Set<String>
 }
 
@@ -115,7 +121,8 @@ public struct LiveFeedService: FeedServing {
     public init(api: APIClient) { self.api = api }
 
     public func feed() async throws -> [Post] {
-        try await api.get("/posts")
+        let posts: [Post] = try await api.get("/posts")
+        return FeedRanking.rank(posts)
     }
 
     public func posts(forUser userId: String) async throws -> [Post] {
@@ -157,6 +164,60 @@ public struct LiveFeedService: FeedServing {
             "/posts/\(postId)/reaction",
             body: Body(username: username, avatar: avatar, type: type.rawValue)
         )
+    }
+}
+
+/// Speedys had no live implementation at all — it always ran on
+/// `MockSpeedyService`'s hardcoded demo clips, which is why a real posted
+/// video could never appear here regardless of backend state. This reuses
+/// the existing posts/reactions/kept-challenge endpoints rather than needing
+/// new backend routes: a Speedy is just a video-type `Post` reshaped for the
+/// full-screen card UI (see `Speedy.init(post:)`), `id` is the same post id
+/// throughout, and "favourite" is the same kept-challenge mechanism the
+/// challenge-saving feature already uses server-side, just never called from
+/// the client before now.
+public struct LiveSpeedyService: SpeedyServing {
+    private let api: APIClient
+    public init(api: APIClient) { self.api = api }
+
+    public func speedys() async throws -> [Speedy] {
+        let posts: [Post] = try await api.get("/posts")
+        let videos = posts.filter(\.isVideo).map(Speedy.init(post:))
+        return FeedRanking.rank(videos)
+    }
+
+    public func setReaction(
+        _ type: ReactionType,
+        replacing previous: ReactionType?,
+        speedyId: String,
+        username: String,
+        avatar: String?
+    ) async throws {
+        struct Body: Encodable {
+            let username: String
+            let avatar: String?
+            let type: String
+        }
+        try await api.post(
+            "/posts/\(speedyId)/reaction",
+            body: Body(username: username, avatar: avatar, type: type.rawValue)
+        )
+    }
+
+    public func toggleFavourite(speedyId: String, challenge: String) async throws -> Bool {
+        // The endpoint's own response body is a bare `true`/`false` — true
+        // when the toggle just created a kept row, false when it deleted one.
+        struct Body: Encodable { let postId: String; let challenge: String }
+        return try await api.post(
+            "/challenges/kept/toggle",
+            body: Body(postId: speedyId, challenge: challenge)
+        )
+    }
+
+    public func favourites() async throws -> Set<String> {
+        struct KeptRow: Decodable { let postId: String? }
+        let rows: [KeptRow] = try await api.get("/challenges/kept")
+        return Set(rows.compactMap(\.postId))
     }
 }
 
@@ -914,11 +975,17 @@ public struct MockSpeedyService: SpeedyServing {
         await backend.allSpeedys()
     }
 
-    public func setReaction(_ type: ReactionType, replacing previous: ReactionType?, speedyId: String) async throws {
+    public func setReaction(
+        _ type: ReactionType,
+        replacing previous: ReactionType?,
+        speedyId: String,
+        username: String,
+        avatar: String?
+    ) async throws {
         await backend.setSpeedyReaction(type, replacing: previous, for: speedyId)
     }
 
-    public func toggleFavourite(speedyId: String) async throws -> Bool {
+    public func toggleFavourite(speedyId: String, challenge: String) async throws -> Bool {
         await backend.toggleSpeedyFavourite(speedyId)
     }
 

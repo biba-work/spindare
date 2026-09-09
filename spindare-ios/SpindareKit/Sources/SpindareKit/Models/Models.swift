@@ -113,7 +113,7 @@ public enum ReactionType: String, Codable, Sendable, CaseIterable {
     case intrigued
 }
 
-public struct Post: Codable, Sendable, Identifiable, Hashable {
+public struct Post: Codable, Sendable, Identifiable, Hashable, Rankable {
     public let id: String
     public let userId: String
     /// Denormalised copy of the author's username at post time.
@@ -627,7 +627,7 @@ public struct VenuePost: Codable, Sendable, Identifiable, Hashable {
 /// they can't drift apart — the difference between them is entirely about
 /// *whose* it is (see `ReactionRow`'s `isOwner` split), not about two separate
 /// layouts that happen to look similar.
-public struct Speedy: Codable, Sendable, Identifiable, Hashable {
+public struct Speedy: Codable, Sendable, Identifiable, Hashable, Rankable {
     public let id: String
     public let userId: String
     public var author: String

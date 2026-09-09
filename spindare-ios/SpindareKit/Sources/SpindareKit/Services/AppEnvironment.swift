@@ -11,8 +11,8 @@ import ClerkKit
 /// default-argument expression at each call site, so whatever's assigned here at
 /// launch is what every subsequently-constructed view picks up.
 ///
-/// Chat is live now too. Speedys and Zone still have no `Live` implementation,
-/// so they keep their own `Mock*Service()` defaults and are untouched by this.
+/// Chat and Speedys are live now too. Zone still has no `Live` implementation,
+/// so it keeps its own `Mock*Service()` default and is untouched by this.
 ///
 /// `nonisolated(unsafe)`: these are written exactly once, synchronously, during
 /// app launch before any concurrency exists, then only ever read. The stored
@@ -26,11 +26,20 @@ public enum AppEnvironment {
     nonisolated(unsafe) public static var notificationService: any NotificationServing = MockNotificationService()
     nonisolated(unsafe) public static var searchService: any SearchServing = MockSearchService()
     nonisolated(unsafe) public static var chatService: any ChatServing = MockChatService()
+    nonisolated(unsafe) public static var speedyService: any SpeedyServing = MockSpeedyService()
 
     /// Uploads media to R2 via the Nest storage endpoints. `nil` in mock mode:
     /// call sites fall back to writing a local file so posting still works
     /// entirely offline. Set to a real uploader only when running live.
     nonisolated(unsafe) public static var mediaUploader: MediaUploader?
+
+    /// Tracks the fire-and-forget token-provider registration kicked off by
+    /// `bootstrap`. `restoreSession()` awaits this before making any
+    /// authenticated call — without it, `RootView`'s launch-time `.task` could
+    /// race ahead of the provider being wired, send a request with no
+    /// Authorization header, get a silent 401, and read as "profile not
+    /// found" even though the session was fine.
+    nonisolated(unsafe) private static var tokenProviderTask: Task<Void, Never>?
 
     /// Assigns the live service set. Called from `bootstrap` when a backend
     /// URL is configured.
@@ -41,6 +50,7 @@ public enum AppEnvironment {
         notificationService = LiveNotificationService(api: api)
         searchService = LiveSearchService(api: api)
         chatService = LiveChatService(api: api)
+        speedyService = LiveSpeedyService(api: api)
         mediaUploader = MediaUploader(api: api)
     }
 
@@ -73,7 +83,7 @@ public enum AppEnvironment {
 
         let api = APIClient(baseURL: trimmed)
         useLive(api: api)
-        Task {
+        tokenProviderTask = Task {
             await api.setTokenProvider {
                 try? await Clerk.shared.auth.getToken()
             }
@@ -109,8 +119,25 @@ public enum AppEnvironment {
         // ClerkKit 1.3 restores the persisted session by fetching the client
         // (which carries the current session and user) — the older one-shot
         // `Clerk.load()` was split into refreshClient()/refreshEnvironment().
-        try? await Clerk.shared.refreshClient()
-        guard let user = Clerk.shared.user else { return nil }
+        //
+        // TEMP diagnostics for the "doesn't keep me logged in" report — remove
+        // once we've caught a real repro. The cached-before check tells us
+        // whether Keychain already had a session before we even hit the
+        // network; the refresh-error tells us whether the network refresh
+        // itself is what's clearing it.
+        // Must happen before any authenticated call — see tokenProviderTask's doc.
+        await tokenProviderTask?.value
+
+        let cachedBefore = Clerk.shared.user != nil
+        do {
+            try await Clerk.shared.refreshClient()
+        } catch {
+            print("[AppEnvironment] restoreSession: refreshClient threw — \(error)")
+        }
+        let userAfter = Clerk.shared.user
+        print("[AppEnvironment] restoreSession: cachedBefore=\(cachedBefore) userAfterRefresh=\(userAfter?.id ?? "nil")")
+
+        guard let user = userAfter else { return nil }
 
         let profile = (try? await profileService.currentProfile()) ?? nil
 

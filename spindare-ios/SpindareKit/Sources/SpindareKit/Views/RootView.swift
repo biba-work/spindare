@@ -1,4 +1,5 @@
 import SwiftUI
+import ClerkKit
 
 // Root of the app. Gates between onboarding and the single feed surface.
 //
@@ -31,6 +32,13 @@ public struct RootView: View {
                 switch router.root {
                 case .onboarding:
                     OnboardingView { userId, username, email, avatarURL in
+                        // TEMP diagnostic — pins down whether sign-in itself
+                        // ever establishes a Clerk session (so it CAN persist)
+                        // versus the app reaching .feed off the OAuth
+                        // callback's own data while Clerk never actually
+                        // recorded a session to save to Keychain in the first
+                        // place.
+                        print("[RootView] didSignIn fired — Clerk.shared.session=\(Clerk.shared.session?.id ?? "nil") Clerk.shared.user=\(Clerk.shared.user?.id ?? "nil")")
                         router.didSignIn(
                             userId: userId,
                             username: username,

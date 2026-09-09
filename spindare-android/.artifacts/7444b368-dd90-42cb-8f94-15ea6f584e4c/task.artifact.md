@@ -1,0 +1,27 @@
+# Phase 3: 1:1 MVP Core Features
+
+- `[x]` Design System & Assets
+    - `[x]` Import Spindare logos and wordmarks
+    - `[x]` Implement `CameraPunchBorder`
+    - `[x]` Implement `MorphingPullHandle`
+- `[x]` App Shell & Navigation
+    - `[x]` Finalize horizontal paging (Profile/Feed/Notifications)
+    - `[x]` Implement full Scale & Dim presentation logic
+- `[x]` SPeedys (Vertical Feed)
+    - `[x]` `VerticalPager` implementation
+    - `[x]` Managed ExoPlayer pool
+    - `[x]` Reaction rail and details overlay
+    - `[x]` Double-tap to react
+- `[x]` Zone (Map)
+    - `[x]` OSMDroid integration
+    - `[x]` Spindare custom markers and bottom sheet
+- `[x]` Spin Wheel
+    - `[x]` Canvas-based dial with tick marks
+    - `[x]` Velocity-based physics
+- `[x]` Real-time Chat
+    - `[x]` Conversation list with fluid swipes
+    - `[x]` Chat transcript view with text/media/voice
+    - `[x]` In-app call UI
+- `[ ]` Backend Parity
+    - `[ ]` Connect real SPeedys and Zone services (Backend pending)
+    - `[x]` Ensure all 48 endpoints are mapped in `SpindareApi.kt`

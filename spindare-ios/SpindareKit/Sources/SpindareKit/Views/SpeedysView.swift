@@ -44,7 +44,7 @@ public struct SpeedysView: View {
 
     private let speedyService: any SpeedyServing
 
-    public init(speedyService: any SpeedyServing = MockSpeedyService()) {
+    public init(speedyService: any SpeedyServing = AppEnvironment.speedyService) {
         self.speedyService = speedyService
     }
 
@@ -185,7 +185,13 @@ public struct SpeedysView: View {
 
     private func react(_ type: ReactionType, replacing previous: ReactionType?, on speedy: Speedy) {
         Task {
-            try? await speedyService.setReaction(type, replacing: previous, speedyId: speedy.id)
+            try? await speedyService.setReaction(
+                type,
+                replacing: previous,
+                speedyId: speedy.id,
+                username: router.username ?? "",
+                avatar: router.avatarURL
+            )
         }
     }
 
@@ -207,7 +213,10 @@ public struct SpeedysView: View {
             // on the next tap — which reads exactly as "buggy" with no
             // obvious cause, because the visible state and the real state
             // had already disagreed before you ever tapped it.
-            guard let isNowFavourite = try? await speedyService.toggleFavourite(speedyId: speedy.id) else { return }
+            guard let isNowFavourite = try? await speedyService.toggleFavourite(
+                speedyId: speedy.id,
+                challenge: speedy.challenge
+            ) else { return }
             if isNowFavourite != favourites.contains(speedy.id) {
                 withAnimation(Spindare.Motion.pop) {
                     if isNowFavourite { favourites.insert(speedy.id) } else { favourites.remove(speedy.id) }

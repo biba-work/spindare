@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose supplies the real theme (ui/theme/Theme.kt). This exists only so
+      the launch window before the first frame matches the app background
+      instead of flashing platform white.
+    -->
+    <style name="Theme.Spindare" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/spindare_cream</item>
+    </style>
+</resources>

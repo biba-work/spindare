@@ -175,12 +175,16 @@ public struct PostCardView: View {
             Color.clear
                 .frame(height: 420)
                 .overlay {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure: mediaPlaceholder(icon: "photo")
-                        default: mediaPlaceholder(icon: nil)
+                    if post.isVideo {
+                        VideoThumbnailView(url: url)
+                    } else {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            case .failure: mediaPlaceholder(icon: "photo")
+                            default: mediaPlaceholder(icon: nil)
+                            }
                         }
                     }
                 }

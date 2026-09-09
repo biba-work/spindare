@@ -1,16 +1,22 @@
 import Foundation
 
-// A rough stand-in for what a real ranked feed does: instead of the strict
-// reverse-chronological order the mock backend stores posts in, weigh recency
-// against engagement so a post that's taking off can surface ahead of
-// something merely newer, the way Instagram's feed (recency + predicted
-// interest, engagement as its proxy here) behaves — then run a short pass so
-// the same author doesn't appear twice in a row, which a pure score sort alone
-// doesn't guarantee.
+// A rough stand-in for what a real ranked feed does: instead of strict
+// reverse-chronological order, weigh recency against engagement so a post
+// that's taking off can surface ahead of something merely newer, the way
+// Instagram's feed (recency + predicted interest, engagement as its proxy
+// here) behaves — then run a short pass so the same author doesn't appear
+// twice in a row, which a pure score sort alone doesn't guarantee.
 //
-// This only ever reorders what `MockBackend` already has; it invents nothing
-// and drops nothing; there is still an explicit "mock data" boundary — this is
-// the mock feed's ranking, not a claim about what a real backend would do.
+// Generic over `Rankable` rather than tied to `Post` so the same engine
+// scores Speedys too — a short-video FYP and a photo/text feed both reduce to
+// "how recent, how engaged with, whose content is this," and duplicating the
+// scoring math per surface would just mean the two silently drift out of sync
+// as one gets tuned and the other doesn't.
+public protocol Rankable {
+    var userId: String { get }
+    var reactions: Reactions { get }
+    var createdAt: Date? { get }
+}
 
 public enum FeedRanking {
     /// Hours for the recency component to halve. Long enough that a post from
@@ -33,13 +39,13 @@ public enum FeedRanking {
     /// Higher is more relevant now. Unbounded above, so it composes cleanly
     /// with `sorted(by:)` rather than needing normalisation against the rest
     /// of the feed first.
-    public static func score(for post: Post, now: Date) -> Double {
-        let ageHours = max(0, now.timeIntervalSince(post.createdAt ?? now) / 3600)
+    public static func score(for item: some Rankable, now: Date) -> Double {
+        let ageHours = max(0, now.timeIntervalSince(item.createdAt ?? now) / 3600)
         let recency = exp(-ageHours / recencyHalfLifeHours)
 
-        let weightedReactions = Double(post.reactions.felt) * feltWeight
-            + Double(post.reactions.thought) * thoughtWeight
-            + Double(post.reactions.intrigued) * intriguedWeight
+        let weightedReactions = Double(item.reactions.felt) * feltWeight
+            + Double(item.reactions.thought) * thoughtWeight
+            + Double(item.reactions.intrigued) * intriguedWeight
         // log-compressed so one runaway-popular post doesn't make engagement
         // the only axis that matters — the gap between 10 and 100 reactions
         // should count for more than the gap between 1000 and 1090.
@@ -48,12 +54,12 @@ public enum FeedRanking {
         return recencyWeight * recency + engagementWeight * engagement
     }
 
-    /// Scores every post against `now`, sorts, then de-clusters by author.
+    /// Scores every item against `now`, sorts, then de-clusters by author.
     /// `now` is a parameter rather than read internally so the ordering is
     /// reproducible in a test — the score itself is a function of elapsed
     /// time, so the only way to pin it is to fix what "now" was.
-    public static func rank(_ posts: [Post], now: Date = Date()) -> [Post] {
-        let scored = posts
+    public static func rank<T: Rankable>(_ items: [T], now: Date = Date()) -> [T] {
+        let scored = items
             .enumerated()
             .sorted { a, b in
                 let scoreA = score(for: a.element, now: now)
@@ -70,15 +76,15 @@ public enum FeedRanking {
         return declustered(scored)
     }
 
-    /// Whenever a post's author matches the one directly above it, swaps in
-    /// the nearest upcoming post by a different author, within a short
+    /// Whenever an item's author matches the one directly above it, swaps in
+    /// the nearest upcoming item by a different author, within a short
     /// lookahead. Deliberately a small nudge on top of the score order, not a
     /// second competing sort — swapping across the *whole* remaining feed to
     /// find "the best" alternate author would undo the ranking pass to fix
     /// what is otherwise a one-in-a-row cosmetic issue.
-    static func declustered(_ posts: [Post], lookahead: Int = 4) -> [Post] {
-        guard posts.count > 2 else { return posts }
-        var result = posts
+    static func declustered<T: Rankable>(_ items: [T], lookahead: Int = 4) -> [T] {
+        guard items.count > 2 else { return items }
+        var result = items
 
         for index in 1..<result.count {
             guard result[index].userId == result[index - 1].userId else { continue }

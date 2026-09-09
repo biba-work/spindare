@@ -15,8 +15,8 @@
 /* Begin PBXFileReference section */
 		48D1161D337D494907759290 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6634A59D8B9CFE839587B7A4 /* SpindareApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpindareApp.swift; sourceTree = "<group>"; };
-		9429EA861DB9875160ACC47A /* Spindare.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Spindare.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A9C71DBF7A1B162DA80C556C /* SpindareKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SpindareKit; path = SpindareKit; sourceTree = SOURCE_ROOT; };
+		9429EA861DB9875160ACC47A /* Spindare.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Spindare.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9C71DBF7A1B162DA80C556C /* SpindareKit */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SpindareKit; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -212,6 +212,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = CSDBVCPTM2;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SpindareApp/Info-LocalDev.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Spindare uses your camera to capture proof of a challenge and to share photos in chat.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Spindare uses your location to show sponsored places near you in Zone.";
@@ -220,7 +221,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = "";
-				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -304,6 +305,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = CSDBVCPTM2;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SpindareApp/Info-LocalDev.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Spindare uses your camera to capture proof of a challenge and to share photos in chat.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Spindare uses your location to show sponsored places near you in Zone.";
@@ -312,7 +314,7 @@
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = "";
-				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (

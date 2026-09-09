@@ -298,8 +298,9 @@ public struct ProfileView: View {
             showSpinner = true
         } label: {
             HStack(spacing: Spindare.Spacing.sm) {
-                Image(systemName: "arrow.trianglehead.2.counterclockwise")
-                    .font(.system(size: 15, weight: .bold))
+                LogoImage(.mark, renderingMode: .template)
+                    .foregroundStyle(scheme == .dark ? .black : .white)
+                    .frame(width: 16, height: 16)
                 Text("SPIN WHEEL")
                     .spindareLabel(size: 12, weight: .bold, tracking: 1.5)
             }
@@ -532,10 +533,26 @@ public struct ProfileView: View {
     @ViewBuilder
     private func thumbnail(for post: Post) -> some View {
         if let media = post.media, let url = URL(string: media) {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
+            ZStack {
                 Color.spindareSurface(scheme)
+                if post.isVideo {
+                    VideoThumbnailView(url: url)
+                } else {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color.spindareSurface(scheme)
+                    }
+                }
+                if post.isVideo {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(6)
+                        .background(Circle().fill(.black.opacity(0.4)))
+                        .padding(6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
             }
         } else {
             ZStack {
@@ -558,9 +575,22 @@ public struct ProfileView: View {
     }
 
     private func load() async {
-        guard let userId = router.userId else { return }
-        posts = (try? await feedService.posts(forUser: userId)) ?? []
-        profile = try? await profileService.currentProfile()
+        guard let userId = router.userId else {
+            print("[ProfileView] load: router.userId is nil — cannot load own profile")
+            return
+        }
+        do {
+            posts = try await feedService.posts(forUser: userId)
+        } catch {
+            print("[ProfileView] load: posts(forUser: \(userId)) failed — \(error)")
+            posts = []
+        }
+        do {
+            profile = try await profileService.currentProfile()
+        } catch {
+            print("[ProfileView] load: currentProfile() failed — \(error)")
+            profile = nil
+        }
         isLoading = false
     }
 }

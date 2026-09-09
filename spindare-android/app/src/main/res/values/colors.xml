@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors SpindareColors.Cream in ui/theme/Theme.kt. -->
+    <color name="spindare_cream">#FAF9F6</color>
+    <color name="spindare_accent_deep">#6B8A99</color>
+</resources>

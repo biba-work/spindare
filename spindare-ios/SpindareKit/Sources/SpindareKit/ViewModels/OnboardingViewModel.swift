@@ -110,9 +110,11 @@ public final class OnboardingViewModel {
         Task { @MainActor in
             defer { isSubmitting = false }
             do {
-                _ = try await Clerk.shared.auth.signInWithPassword(
+                let signIn = try await Clerk.shared.auth.signInWithPassword(
                     identifier: trimmedEmail, password: password
                 )
+                print("[OnboardingViewModel] password signIn status=\(signIn.status.rawValue) createdSessionId=\(signIn.createdSessionId ?? "nil")")
+                await activateSessionIfNeeded(signIn.createdSessionId)
                 await completeAuthentication(
                     fallbackUsername: trimmedEmail.components(separatedBy: "@").first ?? "user",
                     fallbackEmail: trimmedEmail
@@ -172,8 +174,10 @@ public final class OnboardingViewModel {
                     password: password,
                     username: username.trimmingCharacters(in: .whitespaces)
                 )
+                print("[OnboardingViewModel] signUp status=\(signUp.status.rawValue) createdSessionId=\(signUp.createdSessionId ?? "nil")")
                 if signUp.status == .complete {
                     // Instance doesn't require email verification — straight in.
+                    await activateSessionIfNeeded(signUp.createdSessionId)
                     await completeAuthentication(fallbackUsername: username, fallbackEmail: email)
                 } else {
                     // Prepare + send the email code, then collect it on .verify.
@@ -225,10 +229,12 @@ public final class OnboardingViewModel {
             }
             do {
                 let verified = try await signUp.verifyEmailCode(verificationCode)
+                print("[OnboardingViewModel] verifyEmailCode status=\(verified.status.rawValue) createdSessionId=\(verified.createdSessionId ?? "nil")")
                 guard verified.status == .complete else {
                     error = "That code didn't work. Double-check and try again."
                     return
                 }
+                await activateSessionIfNeeded(verified.createdSessionId)
                 await completeAuthentication(fallbackUsername: username, fallbackEmail: email)
             } catch {
                 self.error = message(for: error)
@@ -243,7 +249,15 @@ public final class OnboardingViewModel {
         Task { @MainActor in
             defer { isSubmitting = false }
             do {
-                _ = try await Clerk.shared.auth.signInWithOAuth(provider: .google)
+                let result = try await Clerk.shared.auth.signInWithOAuth(provider: .google)
+                switch result {
+                case .signIn(let signIn):
+                    print("[OnboardingViewModel] google OAuth -> .signIn status=\(signIn.status.rawValue) createdSessionId=\(signIn.createdSessionId ?? "nil")")
+                    await activateSessionIfNeeded(signIn.createdSessionId)
+                case .signUp(let signUp):
+                    print("[OnboardingViewModel] google OAuth -> .signUp status=\(signUp.status.rawValue) createdSessionId=\(signUp.createdSessionId ?? "nil")")
+                    await activateSessionIfNeeded(signUp.createdSessionId)
+                }
                 await routeAfterOAuth()
             } catch {
                 self.error = message(for: error)
@@ -263,11 +277,45 @@ public final class OnboardingViewModel {
                 // the Sign In with Apple capability added in Xcode *and* enabled
                 // on the App ID in the Apple Developer portal first; this way
                 // needs neither, just Apple toggled on in Clerk's dashboard.
-                _ = try await Clerk.shared.auth.signInWithOAuth(provider: .apple)
+                let result = try await Clerk.shared.auth.signInWithOAuth(provider: .apple)
+                switch result {
+                case .signIn(let signIn):
+                    print("[OnboardingViewModel] apple OAuth -> .signIn status=\(signIn.status.rawValue) createdSessionId=\(signIn.createdSessionId ?? "nil")")
+                    await activateSessionIfNeeded(signIn.createdSessionId)
+                case .signUp(let signUp):
+                    print("[OnboardingViewModel] apple OAuth -> .signUp status=\(signUp.status.rawValue) createdSessionId=\(signUp.createdSessionId ?? "nil")")
+                    await activateSessionIfNeeded(signUp.createdSessionId)
+                }
                 await routeAfterOAuth()
             } catch {
                 self.error = message(for: error)
             }
+        }
+    }
+
+    /// Root cause of "login doesn't persist": every sign-in/sign-up call in
+    /// this file (`signInWithOAuth`, `signInWithPassword`, `signUp`,
+    /// `verifyEmailCode`) only *creates* a `SignIn`/`SignUp` attempt — per
+    /// ClerkKit's own docs on `TransferFlowResult`, that returning without
+    /// throwing does NOT mean the session is active ("further steps may be
+    /// required to complete the process"). The missing step, confirmed by
+    /// reading ClerkKit's internal `completeMagicLink` (the one call site in
+    /// the SDK itself that does this correctly), is calling
+    /// `Clerk.shared.auth.setActive(sessionId:)` with the attempt's
+    /// `createdSessionId`. Skipping it left `Clerk.shared.session`/`.user`
+    /// nil after every "successful" sign-in — confirmed live on-device via
+    /// console logging — which meant `Client.didSet` never fired, nothing was
+    /// ever persisted to Keychain, and every relaunch found no session to
+    /// restore even though the person was, from the UI's perspective, signed
+    /// in a moment ago.
+    private func activateSessionIfNeeded(_ sessionId: String?) async {
+        print("[OnboardingViewModel] activateSessionIfNeeded: sessionId=\(sessionId ?? "nil") currentSession=\(Clerk.shared.session?.id ?? "nil") lastActiveSessionId=\(Clerk.shared.client?.lastActiveSessionId ?? "nil") clientIsNil=\(Clerk.shared.client == nil)")
+        guard let sessionId, Clerk.shared.session?.id != sessionId else { return }
+        do {
+            try await Clerk.shared.auth.setActive(sessionId: sessionId)
+            print("[OnboardingViewModel] setActive succeeded — session now \(Clerk.shared.session?.id ?? "STILL NIL")")
+        } catch {
+            print("[OnboardingViewModel] setActive THREW — \(error)")
         }
     }
 
@@ -281,6 +329,8 @@ public final class OnboardingViewModel {
     /// clean new-vs-returning signal — and because `createProfile` is a
     /// server-side upsert, a returning user's row is never clobbered.
     private func routeAfterOAuth() async {
+        try? await Clerk.shared.refreshClient()
+
         if let profile = (try? await profileService.currentProfile()) ?? nil {
             finish(
                 userId: profile.id,
@@ -355,6 +405,14 @@ public final class OnboardingViewModel {
     /// row can't be created the user stays on this screen with an error instead
     /// of being dropped into a broken app.
     private func completeAuthentication(fallbackUsername: String, fallbackEmail: String?) async {
+        // Same reasoning as `routeAfterOAuth` — the sign-in/sign-up call that
+        // got us here discarded its result, which doesn't guarantee Clerk's
+        // local session state actually reflects a completed sign-in. Without
+        // this, a "successful" login could still leave `Clerk.shared.client`
+        // nil, so nothing gets persisted to Keychain and the session doesn't
+        // survive a relaunch even though the user is looking at the feed.
+        try? await Clerk.shared.refreshClient()
+
         let user = Clerk.shared.user
         let userId = currentUserId
         let resolvedUsername = user?.username ?? fallbackUsername

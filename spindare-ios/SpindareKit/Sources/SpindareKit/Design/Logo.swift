@@ -42,14 +42,22 @@ public enum SpindareLogo: Sendable {
 
 public struct LogoImage: View {
     let logo: SpindareLogo
+    /// `.original` (default) keeps the source art's own colours — the blue
+    /// spiral. Pass `.template` to instead use the art as a solid mask, so a
+    /// `.foregroundStyle` applied by the caller recolours it — needed to make
+    /// the mark legible against a background its own blue doesn't contrast
+    /// with, e.g. tinted white/black to follow system appearance.
+    let renderingMode: Image.TemplateRenderingMode
 
-    public init(_ logo: SpindareLogo) {
+    public init(_ logo: SpindareLogo, renderingMode: Image.TemplateRenderingMode = .original) {
         self.logo = logo
+        self.renderingMode = renderingMode
     }
 
     public var body: some View {
         if let image = Self.load(logo) {
             image
+                .renderingMode(renderingMode)
                 .resizable()
                 .scaledToFit()
         } else {
